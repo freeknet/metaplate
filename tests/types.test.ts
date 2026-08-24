@@ -3,6 +3,14 @@ import type { ResvgRenderOptions as UpstreamResvgRenderOptions } from "@resvg/re
 import type { SatoriOptions as UpstreamSatoriOptions } from "satori";
 import type { ResvgRenderOptions } from "../src/node.js";
 import type { SatoriNode, SatoriOptions } from "../src/render.js";
+import {
+  socialImageMetadata,
+  type SocialImageMetadata,
+  type TwitterCard,
+  type TwitterImageOptions,
+  type XCard,
+  type XImageOptions,
+} from "../src/index.js";
 
 // Satori's TwConfig is an interface with named properties and no string index
 // signature, so a `Record<string, unknown>` mirror would reject it. The local
@@ -24,6 +32,21 @@ void bigintNode;
 // object typed by the upstream renderer.
 const resvgOptions: ResvgRenderOptions = {} as UpstreamResvgRenderOptions;
 void resvgOptions;
+
+// The additive X Card option must not widen the original default call's
+// literal return type, while a configured card preserves its own literal.
+const defaultMetadata: SocialImageMetadata = socialImageMetadata("/", "card");
+const defaultCard: "summary_large_image" = defaultMetadata.twitter.card;
+const summaryCard: "summary" = socialImageMetadata("/", "card", {
+  twitter: { card: "summary" },
+}).twitter.card;
+const xCardAlias: XCard = "summary_large_image";
+const twitterCardAlias: TwitterCard = xCardAlias;
+const xOptions: XImageOptions = { card: twitterCardAlias };
+const twitterOptions: TwitterImageOptions = xOptions;
+void defaultCard;
+void summaryCard;
+void twitterOptions;
 
 describe("React-free type mirror", () => {
   it("is exercised by the type-level assertions above", () => {

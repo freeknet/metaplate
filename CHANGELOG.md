@@ -11,6 +11,43 @@ All notable changes to Metaplate are documented in this file. The project uses
   expansion, `PackageFont` preserves an optional `lang` tag for Satori font
   selection, and `metaplate --help` / `--version` are successful discovery
   commands.
+- `socialImageMetadata` now supports ordered Open Graph image descriptors,
+  an independent X image, `summary` or `summary_large_image`, and X
+  site/creator names and IDs while preserving the existing shared-image
+  default. Override descriptors are copied so later source mutation cannot
+  desynchronize the channels.
+- Export X-first `XCard` and `XImageOptions` names while retaining
+  `TwitterCard` and `TwitterImageOptions` as wire-format-compatible aliases.
+  Documentation now maps the Open Graph and X channels to the platforms that
+  consume them so the `twitter` metadata key is not mistaken for the only
+  supported target.
+- `socialImageCompatibility` provides side-effect-free universal, Open Graph,
+  Facebook, X, LinkedIn, Slack, Mastodon, Discord, and Instagram profiles with
+  explicit error, warning, and unknown verdicts.
+- Node and Next plates expose `handlerFrom`, a framework-neutral sync/async
+  resolver that forwards every route argument for dynamic copy.
+
+### Changed
+
+- **Breaking:** Satori, Resvg, and React are required peer dependencies again,
+  so `npm install metaplate` supplies the complete framework-neutral renderer
+  stack without a separate install command. Next remains optional and
+  application-supplied. This favors a one-command setup over the smaller
+  metadata-only install introduced in 0.2.0.
+- **Breaking:** `metaplate/next` now declares Next `>=16.3.2 <17`. The
+  previously open-ended `>=15` claim included untested future majors, while
+  the remaining Next 15 line fails the release audit through high-severity
+  transitive advisories.
+- **Breaking:** dimension-changing Resvg `fitTo` settings and all `crop`
+  settings are rejected. Set the intended plate `size` instead so rendered
+  pixels, metadata, and `plate.size` remain one contract.
+- Cap the Satori, Resvg, React, and Next peer ranges at their next breaking
+  boundary rather than claiming compatibility with unknown majors.
+- Cross-reference every documented framework recipe with the corresponding
+  official routing, metadata, static-export, adapter, or response API instead
+  of leaving Metaplate's examples disconnected from upstream contracts. The
+  pull-request and release templates now require those references for future
+  framework-specific changes.
 
 ### Fixed
 
@@ -21,6 +58,9 @@ All notable changes to Metaplate are documented in this file. The project uses
   bounds, required animation controls, frame bounds, RIFF padding bytes, and
   lossy VP8 first-partition lengths that overrun their declared chunk payload.
 - Reject JPEG frames whose encoded width or height is zero.
+- Assert the native renderer's actual width and height before returning pixels
+  or encoding output, preventing renderer options or upstream changes from
+  desynchronizing advertised metadata.
 
 ### Documentation
 
@@ -29,6 +69,17 @@ All notable changes to Metaplate are documented in this file. The project uses
 - Package verification now proves the documented Next adapter through a real,
   network-free static export of the exact packed artifact with lockfile-pinned
   local peers.
+- Package verification now also builds a real Astro 7 static endpoint and
+  page from the packed artifact, then serves the packed renderer through an
+  ephemeral Express 5 server and verifies headers, bytes, and dimensions.
+- A React Router 7 framework-mode fixture now generates route types,
+  typechecks, builds, serves, and fetches a dynamic resource `loader` from the
+  exact packed artifact. SvelteKit remains a documented Node-adapter recipe
+  rather than a certified fixture while its stable dependency graph retains
+  an upstream Cookie advisory.
+- Document Node-versus-edge runtime boundaries, dynamic-route resource and
+  SSRF controls, channel-specific metadata, social compatibility profiles,
+  and framework certification status.
 - Add reviewed, versioned GitHub release notes, a reusable highlights-first
   template, a draft-release workflow, and publish-time validation so a bare
   generated pull-request list cannot become the release landing page again.

@@ -190,6 +190,82 @@ it("reuses one descriptor for Open Graph and Twitter metadata", () => {
   expect(metadata.twitter.images[0]).toEqual(metadata.openGraph.images[0]);
 });
 
+it("supports ordered Open Graph images and independent Twitter settings", () => {
+  const landscape = {
+    url: "https://example.com/landscape.png",
+    width: 1200,
+    height: 630,
+    alt: "Landscape card",
+    type: "image/png",
+  };
+  const square = {
+    url: "https://example.com/square.jpg",
+    width: 1080,
+    height: 1080,
+    alt: "Square card",
+    type: "image/jpeg",
+  };
+  const twitter = {
+    url: "https://example.com/x.png",
+    width: 1200,
+    height: 630,
+    alt: "X card",
+    type: "image/png",
+  };
+
+  const metadata = socialImageMetadata("/", "Default", {
+    openGraph: { images: [landscape, square] },
+    twitter: {
+      card: "summary",
+      image: twitter,
+      site: "@example",
+      siteId: "123",
+      creator: "@author",
+      creatorId: "456",
+    },
+  });
+
+  expect(metadata.openGraph.images).toEqual([landscape, square]);
+  expect(metadata.twitter).toEqual({
+    card: "summary",
+    images: [twitter],
+    site: "@example",
+    siteId: "123",
+    creator: "@author",
+    creatorId: "456",
+  });
+});
+
+it("copies channel overrides so source mutation cannot desynchronize them", () => {
+  const source = {
+    url: "https://example.com/card.png",
+    width: 1200,
+    height: 630,
+    alt: "Original",
+    type: "image/png",
+  };
+  const metadata = socialImageMetadata("/", "Default", {
+    openGraph: { images: [source] },
+    twitter: { image: source },
+  });
+
+  source.alt = "Mutated";
+  expect(metadata.openGraph.images[0]?.alt).toBe("Original");
+  expect(metadata.twitter.images[0]?.alt).toBe("Original");
+  expect(metadata.openGraph.images[0]).not.toBe(metadata.twitter.images[0]);
+});
+
+it("rejects invalid channel image overrides", () => {
+  expect(() =>
+    socialImageMetadata("/", "Default", { openGraph: { images: [] } }),
+  ).toThrow(/Open Graph images must not be empty/);
+  expect(() =>
+    socialImageMetadata("/", "Default", {
+      twitter: { image: { url: "", alt: "card", width: 1200, height: 630 } },
+    }),
+  ).toThrow(/Twitter image URL/);
+});
+
 describe("size validation", () => {
   it.each([
     { width: 0, height: 630 },

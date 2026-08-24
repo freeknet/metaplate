@@ -22,15 +22,46 @@ export type SocialImageDescriptor = ImageSize & {
   type?: string;
 };
 
-export type SocialImageMetadata = {
+/** X Card presentation. The emitted HTML protocol still uses `twitter:*`. */
+export type XCard = "summary" | "summary_large_image";
+
+/** Wire-format alias retained for Next.js and existing consumers. */
+export type TwitterCard = XCard;
+
+export type SocialImageMetadata<
+  Card extends XCard = "summary_large_image",
+> = {
   openGraph: { images: SocialImageDescriptor[] };
   twitter: {
-    card: "summary_large_image";
+    card: Card;
     images: SocialImageDescriptor[];
+    site?: string;
+    siteId?: string;
+    creator?: string;
+    creatorId?: string;
   };
 };
 
-export type SocialImageOptions = {
+export type OpenGraphImageOptions = {
+  /** Ordered descriptors. Open Graph consumers prefer the first image. */
+  images: readonly SocialImageDescriptor[];
+};
+
+export type XImageOptions<Card extends XCard = XCard> = {
+  card?: Card;
+  /** A channel-specific image. Omit it to reuse the default social image. */
+  image?: SocialImageDescriptor;
+  site?: string;
+  siteId?: string;
+  creator?: string;
+  creatorId?: string;
+};
+
+/** Wire-format alias retained for Next.js and existing consumers. */
+export type TwitterImageOptions<Card extends XCard = XCard> =
+  XImageOptions<Card>;
+
+export type SocialImageOptions<Card extends XCard = XCard> = {
   size?: ImageSize;
   imagePath?: string;
   /** Deployment prefix such as a GitHub Pages repository path. */
@@ -42,6 +73,10 @@ export type SocialImageOptions = {
   origin?: string;
   /** Media type of the image, carried into `og:image:type` where used. */
   type?: string;
+  /** Replaces the default Open Graph image while preserving caller order. */
+  openGraph?: OpenGraphImageOptions;
+  /** Overrides X Card image, card style, and account identity. */
+  twitter?: XImageOptions<Card>;
 };
 
 /** Enforces the image-dimension contract at every public boundary. */
@@ -179,15 +214,48 @@ export function socialImage(
   };
 }
 
-/** Builds matching Open Graph and large-card Twitter metadata. */
-export function socialImageMetadata(
+function copyDescriptor(image: SocialImageDescriptor, label: string): SocialImageDescriptor {
+  assertImageSize(image);
+  if (!image.url) throw new Error(`${label} image URL must not be empty`);
+  if (!image.alt) throw new Error(`${label} image alt text must not be empty`);
+  return { ...image };
+}
+
+function copyImages(
+  images: readonly SocialImageDescriptor[],
+  label: string,
+): SocialImageDescriptor[] {
+  if (images.length === 0) throw new Error(`${label} images must not be empty`);
+  return images.map((image) => copyDescriptor(image, label));
+}
+
+/**
+ * Builds Open Graph and X Card image metadata. With no overrides it preserves
+ * the original one-image, large-card behavior; channel overrides are copied
+ * so later caller mutation cannot change the generated metadata.
+ */
+export function socialImageMetadata<
+  Card extends XCard = "summary_large_image",
+>(
   route: string,
   alt: string,
-  options: SocialImageOptions = {},
-): SocialImageMetadata {
+  options: SocialImageOptions<Card> = {},
+): SocialImageMetadata<Card> {
   const image = socialImage(route, alt, options);
+  const openGraphImages = options.openGraph
+    ? copyImages(options.openGraph.images, "Open Graph")
+    : [copyDescriptor(image, "Open Graph")];
+  const twitterImage = options.twitter?.image ?? image;
+  const twitter = options.twitter;
   return {
-    openGraph: { images: [image] },
-    twitter: { card: "summary_large_image", images: [image] },
+    openGraph: { images: openGraphImages },
+    twitter: {
+      card: (twitter?.card ?? "summary_large_image") as Card,
+      images: [copyDescriptor(twitterImage, "Twitter")],
+      ...(twitter?.site ? { site: twitter.site } : {}),
+      ...(twitter?.siteId ? { siteId: twitter.siteId } : {}),
+      ...(twitter?.creator ? { creator: twitter.creator } : {}),
+      ...(twitter?.creatorId ? { creatorId: twitter.creatorId } : {}),
+    },
   };
 }

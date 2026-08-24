@@ -13,7 +13,9 @@ Explain the two or three user problems this release solves. This is the executiv
 ### User-facing capability
 
 - Describe the benefit and the workflow it unlocks.
-- Link the relevant documentation or issue when useful.
+- Link the relevant Metaplate section and the exact official upstream framework
+  reference when the capability maps to framework routing, metadata, build, or
+  deployment behavior.
 
 ### Reliability and safety
 
@@ -29,7 +31,10 @@ State migrations explicitly. If there are none, write: `None.`
 npm install metaplate@X.Y.Z
 ```
 
-Include optional-peer commands when the release changes installation or renderer requirements.
+The command above must remain sufficient for the framework-neutral renderer.
+Explain any peer-range or install-footprint change here; only show a separate
+framework install when that framework remains application-supplied (for
+example, Next.js).
 
 ## Verification
 
@@ -39,6 +44,7 @@ Include optional-peer commands when the release changes installation or renderer
 ## Documentation and support
 
 - [README](https://github.com/lnorton89/metaplate#readme)
+- Add direct links to official framework documentation used by this release.
 - [npm package](https://www.npmjs.com/package/metaplate)
 - [Report a problem](https://github.com/lnorton89/metaplate/issues/new/choose)
 
@@ -46,4 +52,3 @@ Include optional-peer commands when the release changes installation or renderer
 
 - [Compare vPREVIOUS...vX.Y.Z](https://github.com/lnorton89/metaplate/compare/vPREVIOUS...vX.Y.Z)
 - [Detailed changelog](https://github.com/lnorton89/metaplate/blob/vX.Y.Z/CHANGELOG.md)
-

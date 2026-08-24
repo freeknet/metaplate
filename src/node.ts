@@ -100,6 +100,29 @@ export type NodeOgDefinition<Copy> = SvgOgDefinition<Copy> & {
   output?: OutputEncoder;
 };
 
+function assertDimensionPreservingResvgOptions(
+  options: ResvgRenderOptions | undefined,
+  size: { width: number; height: number },
+): void {
+  const fit = options?.fitTo;
+  const preservesSize =
+    fit === undefined ||
+    fit.mode === "original" ||
+    (fit.mode === "width" && fit.value === size.width) ||
+    (fit.mode === "height" && fit.value === size.height) ||
+    (fit.mode === "zoom" && fit.value === 1);
+  if (!preservesSize) {
+    throw new Error(
+      `resvg.fitTo must preserve the plate's ${size.width}x${size.height} dimensions`,
+    );
+  }
+  if (options?.crop) {
+    throw new Error(
+      "resvg.crop is not supported because rendered pixels and advertised metadata must have identical dimensions",
+    );
+  }
+}
+
 function outputContentType(output: OutputEncoder | undefined): string {
   if (!output) return OG_CONTENT_TYPE;
   return "format" in output ? imageContentType(output.format) : output.contentType;
@@ -111,6 +134,7 @@ function outputContentType(output: OutputEncoder | undefined): string {
  */
 export function createNodeOg<Copy>(definition: NodeOgDefinition<Copy>) {
   const svg = createSvgOg(definition);
+  assertDimensionPreservingResvgOptions(definition.resvg, svg.size);
   const contentType = outputContentType(definition.output);
   const imagePath = definition.imagePath ?? "og-image";
   const basePath = definition.basePath ?? "";
@@ -121,7 +145,14 @@ export function createNodeOg<Copy>(definition: NodeOgDefinition<Copy>) {
     // to add both, rather than reporting them one run at a time.
     const [, Resvg] = await loadPeerPair(loadSatori, loadResvg, "metaplate/node");
     const source = await svg.renderSvg(copy);
-    return new Resvg(source, definition.resvg).render();
+    const image = new Resvg(source, definition.resvg).render();
+    if (image.width !== svg.size.width || image.height !== svg.size.height) {
+      throw new Error(
+        `Renderer dimension mismatch: expected ${svg.size.width}x${svg.size.height}, ` +
+          `received ${image.width}x${image.height}`,
+      );
+    }
+    return image;
   }
 
   async function encode(image: Awaited<ReturnType<typeof rasterize>>) {
@@ -188,6 +219,10 @@ export function createNodeOg<Copy>(definition: NodeOgDefinition<Copy>) {
     renderPixels,
     response,
     handler: (copy: Copy) => () => response(copy),
+    handlerFrom: <Arguments extends unknown[]>(
+      resolve: (...arguments_: Arguments) => Copy | Promise<Copy>,
+    ) =>
+      async (...arguments_: Arguments) => response(await resolve(...arguments_)),
     // The plate advertises the output it actually serves, not the SVG it
     // rasterizes, so metadata built from it carries the served media type.
     image: (route: string, copy: Copy) =>
