@@ -95,6 +95,27 @@ function anmfChunk(
   ]);
 }
 
+// A complete baseline JPEG shell with one component, one scan, one
+// entropy-coded byte, and EOI. Its pixel data is intentionally synthetic: the
+// structural reader only needs an otherwise valid path to exercise SOF rules.
+function completeJpeg(width: number, height: number): Uint8Array {
+  return Uint8Array.from([
+    0xff, 0xd8, // SOI
+    0xff, 0xc0, // SOF0
+    0x00, 0x0b, // length 11 (Nf=1)
+    0x08,
+    (height >>> 8) & 0xff, height & 0xff,
+    (width >>> 8) & 0xff, width & 0xff,
+    0x01, // one component
+    0x01, 0x11, 0x00, // component id, sampling factors, quantization table
+    0xff, 0xda, // SOS
+    0x00, 0x08, // length 8 (Ns=1)
+    0x01, 0x01, 0x00, 0x00, 0x3f, 0x00,
+    0x01, // entropy-coded data
+    0xff, 0xd9, // EOI
+  ]);
+}
+
 describe("imageDimensions", () => {
   it.each([
     ["card.jpg", 1200, 630, "jpeg"],
@@ -164,6 +185,15 @@ describe("imageDimensions", () => {
     const truncated = bytes.subarray(0, 500);
     expect(() => imageDimensions(truncated)).toThrow(/missing EOI/);
   });
+
+  it.each([[0, 630], [1200, 0]])(
+    "rejects a JPEG SOF with a zero dimension (%ix%i)",
+    (width, height) => {
+      expect(() => imageDimensions(completeJpeg(width, height))).toThrow(
+        /frame dimensions must be nonzero/,
+      );
+    },
+  );
 
   it("rejects a WebP truncated before its declared RIFF size", () => {
     const bytes = fixture("card-lossy.webp");

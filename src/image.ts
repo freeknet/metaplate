@@ -189,6 +189,12 @@ function jpegSize(bytes: Uint8Array): ImageDimensions {
       sawFrame = true;
       height = uint16(bytes, offset + 5);
       width = uint16(bytes, offset + 7);
+      // A zero SOF dimension is not a decodable frame. JPEG can defer a zero
+      // height to a later DNL marker, but this structural verifier deliberately
+      // does not implement DNL, so accepting it would return an unusable size.
+      if (width === 0 || height === 0) {
+        throw new Error("Not a JPEG: frame dimensions must be nonzero");
+      }
     }
 
     offset += 2 + length;
