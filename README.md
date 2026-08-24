@@ -8,10 +8,10 @@
 Composable, framework-neutral Open Graph image tooling for TypeScript.
 
 Metaplate turns one branded JSX plate into a consistent image system: SVG and
-PNG rendering, Fetch API responses, predictable image URLs, matching Open Graph
-and Twitter metadata, package-based font loading, and PNG verification. It
-works with plain Node, Astro, SvelteKit, Remix, Express, static build scripts,
-and Next.js.
+raster rendering (PNG by default, any format an encoder produces), Fetch API
+responses, predictable image URLs, matching Open Graph and Twitter metadata,
+package-based font loading, and image verification. It works with plain Node,
+Astro, SvelteKit, Remix, Express, static build scripts, and Next.js.
 
 ## Contents
 
@@ -58,6 +58,11 @@ For SVG-only rendering with `metaplate/render`, Resvg is unnecessary:
 ```sh
 npm install metaplate satori react
 ```
+
+React is needed only for JSX authoring. A plate can also be written as a
+plain `{ type, props }` object tree — see
+[Authoring without a JSX toolchain](#authoring-without-a-jsx-toolchain) —
+which needs no React at all, its types or the package.
 
 ### Optional peers
 
@@ -159,8 +164,9 @@ at quality 80. Across a per-item card set that difference decides whether the
 set is publishable at all.
 
 Metaplate ships no image encoder. Declare one and the plate carries the format
-end to end — `render` returns the encoded bytes, and `response` and `handler`
-serve the media type that was declared with it:
+end to end — `render` returns the encoded bytes, `response` and `handler` serve
+the media type that follows from it, and the metadata points at the declared
+`imagePath`:
 
 ```ts
 import sharp from "sharp";
@@ -171,7 +177,7 @@ export const og = createNodeOg<Copy>({
   component,
   imagePath: "og-image.jpg",
   output: {
-    contentType: "image/jpeg",
+    format: "jpeg",
     encode: ({ pixels, width, height }) =>
       sharp(pixels, { raw: { width, height, channels: 4 } })
         .jpeg({ quality: 80 })
@@ -181,9 +187,23 @@ export const og = createNodeOg<Copy>({
 ```
 
 The encoder receives row-major RGBA, `width * height * 4` long — the shape
-`sharp`, `@jsquash/jpeg`, and `@jsquash/webp` all accept. `contentType` and
-`encode` are declared together so the bytes and the media type cannot
-disagree.
+`sharp`, `@jsquash/jpeg`, and `@jsquash/webp` all accept. `format` names the
+bytes the encoder produces: `contentType` (and `og:image:type`) derive from
+it, and every render verifies the encoded bytes' signature against it, so a
+plate cannot report one format while emitting another. A JPEG encoder that
+starts returning WebP bytes fails the render it was changed in, rather than
+silently mislabelling the card on the site.
+
+For a format Metaplate does not recognize, keep `contentType` and opt out of
+the check explicitly:
+
+```ts
+output: {
+  contentType: "image/avif",
+  checkSignature: false,
+  encode: ({ pixels, width, height }) => avifEncoder(pixels, width, height),
+}
+```
 
 For a build script that writes files rather than serving them, `renderPixels`
 hands back the same pixmap without going through an encoder at all:
@@ -213,14 +233,15 @@ Web `Response`.
 
 ### Express and build scripts
 
-Express can send the raw PNG returned by `render`. Static generators can write
-the same bytes into `public/` during a build:
+Express can send the bytes returned by `render` — PNG by default, or whatever
+`output` encodes. Static generators can write the same bytes into `public/`
+during a build:
 
 ```ts
 import { writeFile } from "node:fs/promises";
 import { og } from "./og.js";
 
-await writeFile("public/og.png", await og.render(copy));
+await writeFile("public/og-image.jpg", await og.render(copy));
 ```
 
 ### Authoring without a JSX toolchain
@@ -287,6 +308,12 @@ that element an explicit `display`.
 
 The same tree can be written as plain `{ type, props }` objects when React is
 not installed at all, which is what the standalone package verification does.
+That path is typed, not just runtime-supported: `createSvgOg` and
+`createNodeOg` declare `component` as returning a local `SatoriNode` element
+tree rather than React's `ReactNode`, so a TypeScript consumer of
+`metaplate/render` or `metaplate/node` does not need React — its types or the
+package — to author a plain-object plate. The Next adapter keeps React's own
+types because Next itself is intrinsic to it.
 
 ### SVG-only rendering
 
@@ -414,6 +441,13 @@ That convention assumes a root-deployed app; see
 [Next.js static export and `basePath`](#nextjs-static-export-and-basepath)
 before using it behind a deployment prefix.
 
+A plate renders exactly one size. `plate.size` is both the definition size and
+the size `render`/`renderSvg`/`response` use, so the bytes Metaplate produces
+and the dimensions it advertises (`og:image:width`/`height`) can never
+disagree. Size values must be integers between 1 and 65535; `socialImage`,
+`socialImageMetadata`, and every plate definition reject anything else at the
+boundary.
+
 ## Metadata without a renderer
 
 The root `metaplate` entry has no framework dependency. It can describe a
@@ -427,6 +461,24 @@ const metadata = socialImageMetadata("/", "Project home card", {
   size: { width: 1200, height: 630 },
 });
 ```
+
+Relative paths are the default because Next's Metadata API resolves them against
+`metadataBase`. A framework-neutral consumer that writes tags directly can pass
+an `origin` for crawler-ready absolute URLs; `basePath`, route, and `imagePath`
+compose beneath it:
+
+```ts
+const metadata = socialImageMetadata("/docs", "Docs card", {
+  origin: "https://example.com",
+  basePath: "/project",
+  imagePath: "og-image.jpg",
+});
+// https://example.com/project/docs/og-image.jpg
+```
+
+Metadata helpers accept `route`/`basePath`/`imagePath` as pathnames only:
+query strings, fragments, and `.`/`..` segments are rejected rather than
+silently producing a URL that normalizes somewhere else.
 
 ### Next.js static export and `basePath`
 
@@ -476,9 +528,28 @@ exported HTML to confirm its social tags carry the deployment prefix.
 ## Fonts
 
 Satori needs real font bytes and accepts TTF, OTF, and WOFF, but not WOFF2.
-`packageFontLoader` reads faces from installed packages and walks upward through
-`node_modules`, so hoisted workspace dependencies work. It memoizes the bytes
-for repeated development requests.
+`packageFontLoader` resolves faces from installed packages — through the
+active runtime resolver first (so npm, Yarn classic, and pnpm layouts work,
+including hoisted workspaces), falling back to an upward `node_modules` walk.
+It memoizes the bytes for repeated development requests, and a failed load is
+retried on the next call rather than poisoning the loader.
+
+Install layouts without a physical `node_modules` — Yarn Plug'n'Play — cannot
+be read by path at all. Supply a `resolvePackage` hook that maps a package
+name to a readable directory (an unplugged path, or a zipfs-backed view of
+the archive):
+
+```ts
+import { packageFontLoader } from "metaplate/fonts";
+
+const fonts = packageFontLoader([
+  { name: "Inter", package: "@fontsource/inter", file: "files/inter-latin-700-normal.woff", weight: 700 },
+], {
+  resolvePackage: (name) => zipfsResolveToReadableDir(name),
+});
+```
+
+Return `undefined` to fall back to the default resolution.
 
 ## Plate constraints
 
@@ -502,8 +573,9 @@ differences bite in practice:
 ## Static hosts
 
 Extension-free route-handler output may be served as a generic download by a
-static host. Set `Content-Type: image/png` explicitly for `/og-image` and
-`/*/og-image`. For Netlify:
+static host. Set the `Content-Type` explicitly for `/og-image` and `/*/og-image`
+— `image/png` by default, or the `plate.contentType` of a custom-output plate
+(`image/jpeg`, `image/webp`, …). For Netlify, a PNG plate:
 
 ```toml
 [[headers]]
@@ -517,10 +589,16 @@ for = "/*/og-image"
   Content-Type = "image/png"
 ```
 
+A JPEG plate uses `Content-Type = "image/jpeg"` for the same two paths.
+
 ## Verify generated files
 
-Metaplate reads dimensions straight from the container header — PNG, JPEG, or
-WebP — without decoding the image:
+`metaplate verify` reads dimensions from the container header — PNG, JPEG, or
+WebP — and runs a structural/truncation check: the chunk stream is walked
+through image data to its terminator, and obvious header shells are rejected,
+so a truncated or partially written file fails even when its dimension header
+survives. It is not a full decode — a file whose headers are intact but whose
+payload cannot decode is outside its scope:
 
 ```sh
 npx metaplate verify --size 1200x630 public/og.png
@@ -535,10 +613,19 @@ npx metaplate verify \
   --size 512x512 public/icon-512.png
 ```
 
-Mixed formats work in one invocation, since the format is detected per file:
+Mixed formats work in one invocation, since the format is detected per file,
+and every target is checked even when earlier ones fail — the command reports
+the full failing set and exits non-zero once:
 
 ```sh
-npx metaplate verify   --size 1200x630 public/og-image.jpg out/og-image.jpg   --size 512x512 public/icon.webp
+npx metaplate verify --size 1200x630 public/og-image.jpg out/og-image.jpg --size 512x512 public/icon.webp
+```
+
+When a declared format must also hold — for example a `.jpg` file that must
+really contain JPEG — pass `--format`:
+
+```sh
+npx metaplate verify --format jpeg --size 1200x630 out/og-image.jpg
 ```
 
 Or import `verifyImage` from `metaplate/image` in a test, which returns the

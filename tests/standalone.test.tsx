@@ -1,6 +1,7 @@
 import { createElement } from "react";
 import { expect, it } from "vitest";
 import { packageFontLoader } from "../src/fonts.js";
+import { createNextOg } from "../src/next.js";
 import { createNodeOg, type RenderedPixels } from "../src/node.js";
 import { verifyPng } from "../src/png.js";
 import { createSvgOg } from "../src/render.js";
@@ -74,6 +75,36 @@ it("returns a Web Response usable by route-based frameworks", async () => {
 
 // The README documents `createElement` as the build-script authoring form for
 // projects without a JSX toolchain, including its lone-string-child rule.
+it("types and renders a React-free plain object tree", async () => {
+  // No `createElement`, no JSX: the tree is exactly the `{ type, props }`
+  // shape the README promises works when React is not installed at all.
+  const plate = createSvgOg({
+    ...definition,
+    component: () => ({
+      type: "div",
+      props: {
+        style: {
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "Inter",
+          fontSize: 48,
+        },
+        children: "Plain tree",
+      },
+    }),
+  });
+
+  const svg = await plate.renderSvg({ title: "Plain" });
+  expect(svg).toMatch(/^<svg/);
+  // Satori outlines text into paths rather than keeping text nodes, so the
+  // assertion proves the tree rendered (glyph paths exist for the heading).
+  expect(svg).toContain("<path");
+  expect(svg).toMatch(/width="1200"/);
+});
+
 it("renders an element tree authored without JSX", async () => {
   const plate = createSvgOg({
     ...definition,
@@ -104,6 +135,44 @@ it("requires at least one font", async () => {
 
   await expect(plate.renderSvg({ title: "No fonts" })).rejects.toThrow(
     /at least one font/,
+  );
+});
+
+it("renders the defined size and only that size", async () => {
+  const plate = createSvgOg({ ...definition, size: { width: 600, height: 315 } });
+
+  expect(plate.size).toEqual({ width: 600, height: 315 });
+  const svg = await plate.renderSvg({ title: "Small" });
+  expect(svg).toContain('width="600"');
+  expect(svg).toContain('height="315"');
+  expect(plate.metadata("/", { title: "Small" }).openGraph.images[0]?.width).toBe(600);
+});
+
+it("rejects invalid definition sizes at plate creation", () => {
+  const invalid = (size: { width: number; height: number }) =>
+    () => createSvgOg({ ...definition, size });
+  expect(invalid({ width: 0, height: 630 })).toThrow(/Invalid size: width/);
+  expect(invalid({ width: 1200.5, height: 630 })).toThrow(/Invalid size: width/);
+  expect(invalid({ width: 1200, height: Number.NaN })).toThrow(/Invalid size: height/);
+
+  const invalidNext = (size: { width: number; height: number }) =>
+    createNextOg({
+      alt: () => "card",
+      size,
+      component: () => <div style={{ display: "flex" }}>Card</div>,
+    });
+  expect(() => invalidNext({ width: 0, height: 630 })).toThrow(/Invalid size: width/);
+});
+
+it("builds absolute metadata URLs from a plate origin", () => {
+  const plate = createSvgOg({ ...definition, origin: "https://example.com" });
+  expect(plate.metadata("/docs", { title: "Docs" }).openGraph.images[0]?.url).toBe(
+    "https://example.com/docs/og-image",
+  );
+
+  const node = createNodeOg({ ...definition, origin: "https://example.com" });
+  expect(node.image("/docs", { title: "Docs" }).url).toBe(
+    "https://example.com/docs/og-image",
   );
 });
 
@@ -151,7 +220,7 @@ it(
     const plate = createNodeOg({
       ...definition,
       output: {
-        contentType: "image/jpeg",
+        format: "jpeg",
         encode: (image) => {
           seen.push(image);
           return encoded;
@@ -217,7 +286,7 @@ it(
 
     const plate = createNodeOg({
       ...definition,
-      output: { contentType: "image/jpeg", encode: () => encoded },
+      output: { format: "jpeg", encode: () => encoded },
     });
 
     const response = await plate.response({ title: "Pooled" });
@@ -259,7 +328,7 @@ it.each([
   const plate = createNodeOg({
     ...definition,
     output: {
-      contentType: "image/jpeg",
+      format: "jpeg",
       encode: () => value as unknown as Uint8Array,
     },
   });
@@ -268,3 +337,58 @@ it.each([
     `output.encode must return a Uint8Array; received ${described}`,
   );
 }, 20_000);
+
+it(
+  "rejects encoded bytes that do not match the declared format",
+  async () => {
+    // Declared JPEG, but the bytes are really WebP (RIFF....WEBPVP8X...).
+    const webp = Uint8Array.from([
+      0x52, 0x49, 0x46, 0x46, 0x2a, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50,
+      0x56, 0x50, 0x38, 0x58, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    ]);
+    const plate = createNodeOg({
+      ...definition,
+      output: { format: "jpeg", encode: () => webp },
+    });
+
+    await expect(plate.render({ title: "Mismatch" })).rejects.toThrow(
+      /output.encode produced webp bytes, not the declared jpeg format/,
+    );
+  },
+  20_000,
+);
+
+it(
+  "serves a declared custom format through the escape hatch",
+  async () => {
+    const bytes = Uint8Array.of(1, 2, 3, 4);
+    const plate = createNodeOg({
+      ...definition,
+      output: {
+        contentType: "image/avif",
+        checkSignature: false,
+        encode: () => bytes,
+      },
+    });
+
+    expect(plate.contentType).toBe("image/avif");
+    expect(await plate.render({ title: "Custom" })).toEqual(bytes);
+  },
+  20_000,
+);
+
+it("advertises the output content type in metadata", async () => {
+  const plate = createNodeOg({
+    ...definition,
+    imagePath: "og-image.jpg",
+    output: { format: "jpeg", encode: () => Uint8Array.of(0xff, 0xd8, 0xff, 0xe0) },
+  });
+
+  expect(plate.image("/docs", { title: "Docs" }).type).toBe("image/jpeg");
+  expect(plate.metadata("/docs", { title: "Docs" }).openGraph.images[0]?.type).toBe(
+    "image/jpeg",
+  );
+  expect(plate.image("/docs", { title: "Docs" }).url).toBe("/docs/og-image.jpg");
+});

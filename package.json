@@ -1,6 +1,6 @@
 {
   "name": "metaplate",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Composable, framework-neutral Open Graph image tooling for TypeScript.",
   "keywords": [
     "open-graph",

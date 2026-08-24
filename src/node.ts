@@ -1,17 +1,27 @@
-import type { ResvgRenderOptions } from "@resvg/resvg-js";
-import { OG_CONTENT_TYPE } from "./core.js";
+import {
+  OG_CONTENT_TYPE,
+  socialImage,
+  socialImageMetadata,
+} from "./core.js";
+import { detectFormat, imageContentType, type ImageFormat, type OutputFormat } from "./image.js";
 import { loadPeerPair } from "./optional-peer.js";
 import { loadResvg, loadSatori } from "./peers.js";
 import {
   createSvgOg,
   type SvgOgDefinition,
-  type SvgRenderOptions,
 } from "./render.js";
+
+/** Raster formats whose bytes Metaplate can recognise after encoding. */
+export type EncoderFormat = ImageFormat;
 
 function describe(value: unknown): string {
   if (value === null) return "null";
   if (typeof value !== "object") return typeof value;
   return value.constructor?.name ?? "an object";
+}
+
+function describeFormat(format: OutputFormat | undefined): string {
+  return format ?? "unrecognized";
 }
 
 /** Raw RGBA output, ready for an encoder such as sharp or @jsquash/jpeg. */
@@ -23,14 +33,63 @@ export type RenderedPixels = {
 };
 
 /**
- * Replaces PNG output. Metaplate ships no image encoder, so the encoder and
- * the media type it produces are declared together and cannot disagree.
+ * Resvg rendering controls mirrored structurally so importing
+ * `metaplate/node` does not pull Resvg's Node-dependent declarations into a
+ * consumer that has not installed the optional renderer peer yet.
  */
-export type OutputEncoder = {
-  /** Media type of the encoded bytes, such as `image/jpeg`. */
-  contentType: string;
-  encode: (image: RenderedPixels) => Promise<Uint8Array> | Uint8Array;
+export type ResvgRenderOptions = {
+  font?: {
+    loadSystemFonts?: boolean;
+    fontFiles?: string[];
+    fontDirs?: string[];
+    defaultFontSize?: number;
+    defaultFontFamily?: string;
+    serifFamily?: string;
+    sansSerifFamily?: string;
+    cursiveFamily?: string;
+    fantasyFamily?: string;
+    monospaceFamily?: string;
+  };
+  dpi?: number;
+  languages?: string[];
+  shapeRendering?: 0 | 1 | 2;
+  textRendering?: 0 | 1 | 2;
+  imageRendering?: 0 | 1;
+  fitTo?:
+    | { mode: "original" }
+    | { mode: "width"; value: number }
+    | { mode: "height"; value: number }
+    | { mode: "zoom"; value: number };
+  background?: string;
+  crop?: {
+    left: number;
+    top: number;
+    right?: number;
+    bottom?: number;
+  };
+  logLevel?: "off" | "error" | "warn" | "info" | "debug" | "trace";
 };
+
+/**
+ * Encodes something other than PNG. `format` names the bytes the encoder
+ * produces; `contentType` always follows from it, and the encoded bytes are
+ * signature-checked against it so a plate cannot report one format while
+ * emitting another. For a format Metaplate does not recognize, keep
+ * `contentType` and set `checkSignature: false`.
+ */
+export type OutputEncoder =
+  | {
+      /** Known format: derives `contentType` and enables the signature check. */
+      format: EncoderFormat;
+      encode: (image: RenderedPixels) => Promise<Uint8Array> | Uint8Array;
+    }
+  | {
+      /** Media type of the encoded bytes for a format Metaplate does not know. */
+      contentType: string;
+      /** Skips the signature check that is impossible for unknown formats. */
+      checkSignature: false;
+      encode: (image: RenderedPixels) => Promise<Uint8Array> | Uint8Array;
+    };
 
 export type NodeOgDefinition<Copy> = SvgOgDefinition<Copy> & {
   /** Resvg rendering controls such as background and font configuration. */
@@ -41,24 +100,31 @@ export type NodeOgDefinition<Copy> = SvgOgDefinition<Copy> & {
   output?: OutputEncoder;
 };
 
+function outputContentType(output: OutputEncoder | undefined): string {
+  if (!output) return OG_CONTENT_TYPE;
+  return "format" in output ? imageContentType(output.format) : output.contentType;
+}
+
 /**
- * Defines a Node renderer that emits PNG bytes and Fetch API Responses for
+ * Defines a Node renderer that emits image bytes and Fetch API Responses for
  * Astro, SvelteKit, Remix, Express adapters, build scripts, and other runtimes.
  */
 export function createNodeOg<Copy>(definition: NodeOgDefinition<Copy>) {
   const svg = createSvgOg(definition);
-  const contentType = definition.output?.contentType ?? OG_CONTENT_TYPE;
+  const contentType = outputContentType(definition.output);
+  const imagePath = definition.imagePath ?? "og-image";
+  const basePath = definition.basePath ?? "";
+  const origin = definition.origin ?? "";
 
-  async function rasterize(copy: Copy, options: SvgRenderOptions) {
+  async function rasterize(copy: Copy) {
     // Both peers resolve before rendering so an install missing both is told
     // to add both, rather than reporting them one run at a time.
     const [, Resvg] = await loadPeerPair(loadSatori, loadResvg, "metaplate/node");
-    const source = await svg.renderSvg(copy, options);
+    const source = await svg.renderSvg(copy);
     return new Resvg(source, definition.resvg).render();
   }
 
-  async function render(copy: Copy, options: SvgRenderOptions = {}): Promise<Uint8Array> {
-    const image = await rasterize(copy, options);
+  async function encode(image: Awaited<ReturnType<typeof rasterize>>) {
     if (!definition.output) return image.asPng();
 
     const encoded = await definition.output.encode({
@@ -76,7 +142,22 @@ export function createNodeOg<Copy>(definition: NodeOgDefinition<Copy>) {
       );
     }
 
+    // A JPEG encoder that returns WebP bytes makes every downstream consumer
+    // serve one format while advertising another; the agreement is declared
+    // here so the mismatch is reported where it is created.
+    if ("format" in definition.output && detectFormat(encoded) !== definition.output.format) {
+      throw new Error(
+        `output.encode produced ${describeFormat(detectFormat(encoded))} bytes, not the declared ` +
+          `${definition.output.format} format`,
+      );
+    }
+
     return encoded;
+  }
+
+  async function render(copy: Copy): Promise<Uint8Array> {
+    const image = await rasterize(copy);
+    return encode(image);
   }
 
   /**
@@ -84,18 +165,15 @@ export function createNodeOg<Copy>(definition: NodeOgDefinition<Copy>) {
    * encodes far smaller as JPEG or WebP, and returning the pixmap keeps an
    * image encoder out of this package.
    */
-  async function renderPixels(
-    copy: Copy,
-    options: SvgRenderOptions = {},
-  ): Promise<RenderedPixels> {
-    const image = await rasterize(copy, options);
+  async function renderPixels(copy: Copy): Promise<RenderedPixels> {
+    const image = await rasterize(copy);
     return { pixels: image.pixels, width: image.width, height: image.height };
   }
 
-  async function response(copy: Copy, options: SvgRenderOptions = {}) {
+  async function response(copy: Copy) {
     const headers = new Headers(definition.headers);
     headers.set("Content-Type", contentType);
-    const bytes = await render(copy, options);
+    const bytes = await render(copy);
     const body = bytes.buffer.slice(
       bytes.byteOffset,
       bytes.byteOffset + bytes.byteLength,
@@ -110,7 +188,23 @@ export function createNodeOg<Copy>(definition: NodeOgDefinition<Copy>) {
     renderPixels,
     response,
     handler: (copy: Copy) => () => response(copy),
+    // The plate advertises the output it actually serves, not the SVG it
+    // rasterizes, so metadata built from it carries the served media type.
+    image: (route: string, copy: Copy) =>
+      socialImage(route, definition.alt(copy), {
+        size: svg.size,
+        imagePath,
+        basePath,
+        origin,
+        type: contentType,
+      }),
+    metadata: (route: string, copy: Copy) =>
+      socialImageMetadata(route, definition.alt(copy), {
+        size: svg.size,
+        imagePath,
+        basePath,
+        origin,
+        type: contentType,
+      }),
   });
 }
-
-export type { ResvgRenderOptions } from "@resvg/resvg-js";

@@ -57,3 +57,26 @@ it("returns a route handler bound to one copy", async () => {
   expect(response.headers.get("content-type")).toBe("image/png");
   verifyPng(await response.arrayBuffer(), plate.size);
 });
+
+it("rejects a size outside the supported range at definition", () => {
+  expect(() =>
+    createNextOg({
+      alt: () => "card",
+      size: { width: 0, height: 100 },
+      component: () => <div style={{ display: "flex" }}>Card</div>,
+    }),
+  ).toThrow(/Invalid size: width/);
+});
+
+it("advertises an origin URL when one is configured", () => {
+  const plate = createNextOg({
+    alt: () => "card",
+    origin: "https://example.com",
+    component: () => <div style={{ display: "flex" }}>Card</div>,
+  });
+
+  expect(plate.metadata("/docs", {}).openGraph.images[0]?.url).toBe(
+    "https://example.com/docs/og-image",
+  );
+  expect(plate.metadata("/docs", {}).openGraph.images[0]?.type).toBe("image/png");
+});

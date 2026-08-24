@@ -3,8 +3,10 @@ import {
   copyFileSync,
   existsSync,
   mkdtempSync,
+  mkdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -16,7 +18,9 @@ const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const temporary = mkdtempSync(join(tmpdir(), "metaplate-package-"));
 const consumer = join(temporary, "consumer");
 const standalone = join(temporary, "standalone");
+const bare = join(temporary, "bare");
 const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+const lockfile = JSON.parse(readFileSync(join(root, "package-lock.json"), "utf8"));
 const npmCli = process.env.npm_execpath;
 
 if (!npmCli) {
@@ -40,6 +44,7 @@ function install(directory, specifiers) {
       "--prefix",
       directory,
       "--ignore-scripts",
+      "--offline",
       "--no-audit",
       "--no-fund",
     ],
@@ -54,11 +59,20 @@ function runModule(source, cwd) {
   });
 }
 
-/** Installs the peer version this repository already pins and tests against. */
-function peerSpecifier(name) {
-  const range = manifest.devDependencies[name];
-  if (!range) throw new Error(`No pinned range available to install ${name}.`);
-  return `${name}@${range}`;
+/** Links exactly the dependency tree npm ci verified from package-lock.json. */
+function linkLockedDependency(directory, name) {
+  const entry = lockfile.packages[`node_modules/${name}`];
+  if (!entry?.version) throw new Error(`No locked version available for ${name}.`);
+  const source = join(root, "node_modules", ...name.split("/"));
+  const installed = JSON.parse(readFileSync(join(source, "package.json"), "utf8"));
+  if (installed.version !== entry.version) {
+    throw new Error(
+      `${name} installation ${installed.version} does not match lockfile ${entry.version}.`,
+    );
+  }
+  const destination = join(directory, "node_modules", ...name.split("/"));
+  mkdirSync(resolve(destination, ".."), { recursive: true });
+  symlinkSync(source, destination, process.platform === "win32" ? "junction" : "dir");
 }
 
 try {
@@ -162,7 +176,7 @@ try {
   `;
   runModule(nodeGuidance, consumer);
 
-  const resolverSmoke = `
+  const requireSmoke = `
     require.resolve("metaplate");
     require.resolve("metaplate/render");
     require.resolve("metaplate/node");
@@ -173,7 +187,7 @@ try {
   `;
   execFileSync(
     process.execPath,
-    ["--input-type=commonjs", "--eval", resolverSmoke],
+    ["--input-type=commonjs", "--eval", requireSmoke],
     { cwd: consumer, stdio: "inherit" },
   );
 
@@ -231,14 +245,63 @@ try {
     throw new Error("Installed CLI did not report a dimension mismatch.");
   }
 
+  const formatCheck = spawnSync(
+    process.execPath,
+    [cliPath, "verify", "--format", "jpeg", "--size", "1200x630", "card-lossy.webp"],
+    { cwd: consumer, encoding: "utf8" },
+  );
+  if (
+    formatCheck.status !== 1 ||
+    !formatCheck.stderr.includes("Expected jpeg 1200x630, received webp")
+  ) {
+    throw new Error("Installed CLI did not reject a format mismatch.");
+  }
+
+  // Issue #55: one bad file must not hide the rest. A truncated WebP plus a
+  // good JPEG in one run has to report both outcomes in one invocation.
+  const truncated = readFileSync(join(root, "tests", "fixtures", "card-lossy.webp")).subarray(
+    0,
+    250,
+  );
+  writeFileSync(join(consumer, "truncated.webp"), truncated);
+  const aggregate = spawnSync(
+    process.execPath,
+    [
+      cliPath,
+      "verify",
+      "--size",
+      "1200x630",
+      "truncated.webp",
+      "card.jpg",
+      "does-not-exist.webp",
+    ],
+    { cwd: consumer, encoding: "utf8" },
+  );
+  const report = `${aggregate.stdout}${aggregate.stderr}`;
+  if (
+    aggregate.status !== 1 ||
+    !report.includes("✓ card.jpg 1200x630") ||
+    !report.includes("✗ truncated.webp") ||
+    !report.includes("✗ does-not-exist.webp") ||
+    !report.includes("2 of 3 files failed verification")
+  ) {
+    throw new Error(
+      `Installed CLI did not aggregate failures across targets: ${report}`,
+    );
+  }
+
   // Shape two: the standalone consumer, which opts in to the renderer peers
   // and has to produce real PNG bytes from the packed tarball.
-  install(standalone, [
-    archive,
-    peerSpecifier("satori"),
-    peerSpecifier("@resvg/resvg-js"),
-    peerSpecifier("@fontsource/inter"),
-  ]);
+  install(standalone, [archive]);
+  for (const dependency of [
+    "satori",
+    "@resvg/resvg-js",
+    "@fontsource/inter",
+    "typescript",
+    "@types/node",
+  ]) {
+    linkLockedDependency(standalone, dependency);
+  }
 
   const standaloneSmoke = `
     const { packageFontLoader } = await import("metaplate/fonts");
@@ -274,8 +337,233 @@ try {
   `;
   runModule(standaloneSmoke, standalone);
 
+  // Issue #59: the README promises plain `{ type, props }` authoring with no
+  // React at all. Compile a TypeScript consumer against the packed package
+  // with no React/@types/react installed and a plain-object component; the
+  // type surface must carry it. `skipLibCheck` is deliberately off so that a
+  // React dependency hiding in any declaration is a hard error rather than a
+  // suppressed one.
+  writeFileSync(
+    join(standalone, "tsconfig.json"),
+    JSON.stringify({
+      compilerOptions: {
+        strict: true,
+        noEmit: true,
+        module: "nodenext",
+        moduleResolution: "nodenext",
+        types: ["node"],
+      },
+      include: ["react-free.tsx"],
+    }),
+  );
+  writeFileSync(
+    join(standalone, "react-free.tsx"),
+    `
+    import {
+      createSvgOg,
+      type SatoriFont,
+      type SatoriLayoutNode,
+      type SatoriNode,
+    } from "metaplate/render";
+    import { socialImageMetadata } from "metaplate";
+
+    const plain: SatoriNode = {
+      type: "div",
+      props: {
+        style: { display: "flex", width: "100%", height: "100%" },
+        children: "card",
+      },
+    };
+
+    // Exercise the React-free type surface: a Buffer-backed font (Node typed
+    // fonts were valid through Satori's re-export), the layout node passed to
+    // onNodeDetected, and the async loadAdditionalAsset callback.
+    const font: SatoriFont = {
+      name: "Inter",
+      data: Buffer.from("font bytes"),
+      weight: 700,
+    };
+    let detected: SatoriLayoutNode | undefined;
+
+    // A plain-object component must satisfy the definition without React.
+    const plate = createSvgOg({
+      component: () => plain,
+      alt: () => "card",
+      fonts: () => [font],
+      satori: {
+        onNodeDetected: (node) => {
+          detected = node;
+        },
+        loadAdditionalAsset: (lang, segment) => Promise.resolve(segment + lang),
+      },
+    });
+
+    export const metadata = socialImageMetadata("/", "card");
+    export default plate;
+  `,
+  );
+  const tsc = execFileSync(
+    process.execPath,
+    [join(standalone, "node_modules", "typescript", "bin", "tsc"), "-p", join(standalone, "tsconfig.json")],
+    { cwd: standalone, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] },
+  ).toString();
+  if (tsc.includes("error")) {
+    throw new Error(`TypeScript consumer failed to compile: ${tsc}`);
+  }
+
+  // Issue #59, round two: the React-free surface must not trade the React
+  // type leak for a Node one. `SatoriFont.data` is declared as
+  // `ArrayBuffer | Uint8Array` (never Node's bare `Buffer` global), so a
+  // consumer with no @types/node and no React types installed can load both
+  // `metaplate/render` and `metaplate/node`, author a plain-object plate, and
+  // use the public pixel/Resvg option shapes without installing Resvg yet.
+  // Compile that second consumer here — only TypeScript and the renderer peer
+  // installed, `skipLibCheck` off, so a hidden Node or React dependency in any
+  // declaration is a hard error rather than a suppressed one.
+  install(bare, [archive]);
+  for (const dependency of ["satori", "typescript"]) {
+    linkLockedDependency(bare, dependency);
+  }
+
+  // Make the smoke airtight: `types: []` stops TypeScript from auto-including
+  // any @types package that might arrive transitively, and the explicit
+  // absence checks fail the run if react, @types/react, or @types/node are
+  // ever pulled in by the install (for example as a new peer).
+  for (const forbidden of ["react", "@types/react", "@types/node"]) {
+    if (existsSync(join(bare, "node_modules", forbidden))) {
+      throw new Error(`The isomorphic consumer pulled ${forbidden}.`);
+    }
+  }
+
+  writeFileSync(
+    join(bare, "tsconfig.json"),
+    JSON.stringify({
+      compilerOptions: {
+        strict: true,
+        noEmit: true,
+        module: "nodenext",
+        moduleResolution: "nodenext",
+        types: [],
+      },
+      include: ["isomorphic.tsx"],
+    }),
+  );
+  writeFileSync(
+    join(bare, "isomorphic.tsx"),
+    `
+    import {
+      createSvgOg,
+      type SatoriFont,
+      type SatoriLayoutNode,
+    } from "metaplate/render";
+    import {
+      createNodeOg,
+      type RenderedPixels,
+      type ResvgRenderOptions,
+    } from "metaplate/node";
+
+    // An ArrayBuffer-backed font must type-check where Node's Buffer global
+    // is unavailable; a Uint8Array would also satisfy the union.
+    const font: SatoriFont = {
+      name: "Inter",
+      data: new ArrayBuffer(8),
+      weight: 700,
+    };
+    let detected: SatoriLayoutNode | undefined;
+
+    const plate = createSvgOg({
+      component: () => ({
+        type: "div",
+        props: {
+          style: { display: "flex", width: "100%", height: "100%" },
+          children: "card",
+        },
+      }),
+      alt: () => "card",
+      fonts: () => [font],
+      satori: {
+        onNodeDetected: (node) => {
+          detected = node;
+        },
+        loadAdditionalAsset: (lang, segment) => Promise.resolve(segment + lang),
+      },
+    });
+
+    const resvg: ResvgRenderOptions = {
+      background: "transparent",
+      fitTo: { mode: "width", value: 1200 },
+    };
+    const nodePlate = createNodeOg({
+      component: () => ({ type: "div", props: { children: "card" } }),
+      alt: () => "card",
+      fonts: () => [font],
+      resvg,
+    });
+    type PixelResult = Awaited<ReturnType<typeof nodePlate.renderPixels>>;
+    const acceptsPixels = (pixels: RenderedPixels): PixelResult => pixels;
+    void acceptsPixels;
+
+    export { nodePlate };
+    export default plate;
+  `,
+  );
+  const bareTsc = execFileSync(
+    process.execPath,
+    [join(bare, "node_modules", "typescript", "bin", "tsc"), "-p", join(bare, "tsconfig.json")],
+    { cwd: bare, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] },
+  ).toString();
+  if (bareTsc.includes("error")) {
+    throw new Error(`Isomorphic TypeScript consumer failed to compile: ${bareTsc}`);
+  }
+
+  // Issue #58: a resolver-injection smoke — a font resolved through a
+  // supplied `resolvePackage` hook rather than node_modules.
+  const resolverSmoke = `
+    const { createRequire } = await import("node:module");
+    const { packageFontLoader } = await import("metaplate/fonts");
+    const { createNodeOg } = await import("metaplate/node");
+    const requireFrom = createRequire(import.meta.url);
+
+    const loader = packageFontLoader(
+      [{
+        name: "Inter",
+        package: "@fontsource/inter",
+        file: "files/inter-latin-700-normal.woff",
+        weight: 700,
+      }],
+      {
+        resolvePackage: () =>
+          requireFrom.resolve("@fontsource/inter/package.json").replace(
+            /[\\\\/]package\\.json$/,
+            "",
+          ),
+      },
+    );
+
+    const plate = createNodeOg({
+      alt: () => "card",
+      fonts: loader,
+      component: () => ({
+        type: "div",
+        props: {
+          style: {
+            width: "100%",
+            height: "100%",
+            display: "flex",
+            fontFamily: "Inter",
+            fontSize: 64,
+          },
+          children: "Resolver",
+        },
+      }),
+    });
+
+    await plate.render({ title: "Resolver" });
+  `;
+  runModule(resolverSmoke, standalone);
+
   process.stdout.write(
-    `Verified ${packed[0].filename} exports, CLI, and both consumer installs.\n`,
+    `Verified ${packed[0].filename} exports, CLI, and all consumer installs.\n`,
   );
 } finally {
   rmSync(temporary, { recursive: true, force: true });

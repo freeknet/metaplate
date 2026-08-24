@@ -2,6 +2,7 @@ import type { ReactElement } from "react";
 import {
   OG_CONTENT_TYPE,
   OG_SIZE,
+  assertImageSize,
   socialImage,
   socialImageMetadata,
   type ImageSize,
@@ -28,15 +29,14 @@ export type NextOgDefinition<Copy> = {
   component: (copy: Copy) => ReactElement;
   /** Derives accessible alternative text from the same page-owned copy. */
   alt: (copy: Copy) => string;
+  /** One plate renders one size; `plate.size` is the size every render uses. */
   size?: ImageSize;
   imagePath?: string;
   basePath?: string;
+  /** Scheme and host for absolute image URLs, such as `https://example.com`. */
+  origin?: string;
   fonts?: FontLoader;
   response?: Omit<ImageResponseOptions, "width" | "height" | "fonts">;
-};
-
-export type RenderOptions = {
-  size?: ImageSize;
 };
 
 /**
@@ -45,16 +45,17 @@ export type RenderOptions = {
  */
 export function createNextOg<Copy>(definition: NextOgDefinition<Copy>) {
   const size = Object.freeze({ ...(definition.size ?? OG_SIZE) });
+  assertImageSize(size);
   const imagePath = definition.imagePath ?? "og-image";
   const basePath = definition.basePath ?? "";
+  const origin = definition.origin ?? "";
 
-  async function render(copy: Copy, options: RenderOptions = {}) {
-    const renderSize = options.size ?? size;
+  async function render(copy: Copy) {
     const fonts = definition.fonts ? await definition.fonts() : undefined;
     const responseOptions: ImageResponseOptions = {
       ...definition.response,
-      width: renderSize.width,
-      height: renderSize.height,
+      width: size.width,
+      height: size.height,
       ...(fonts ? { fonts: [...fonts] } : {}),
     };
 
@@ -68,8 +69,20 @@ export function createNextOg<Copy>(definition: NextOgDefinition<Copy>) {
     render,
     handler: (copy: Copy) => () => render(copy),
     image: (route: string, copy: Copy) =>
-      socialImage(route, definition.alt(copy), { size, imagePath, basePath }),
+      socialImage(route, definition.alt(copy), {
+        size,
+        imagePath,
+        basePath,
+        origin,
+        type: OG_CONTENT_TYPE,
+      }),
     metadata: (route: string, copy: Copy) =>
-      socialImageMetadata(route, definition.alt(copy), { size, imagePath, basePath }),
+      socialImageMetadata(route, definition.alt(copy), {
+        size,
+        imagePath,
+        basePath,
+        origin,
+        type: OG_CONTENT_TYPE,
+      }),
   });
 }

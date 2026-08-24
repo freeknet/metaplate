@@ -1,6 +1,8 @@
 export {
+  MAX_IMAGE_DIMENSION,
   OG_CONTENT_TYPE,
   OG_SIZE,
+  assertImageSize,
   socialImage,
   socialImageMetadata,
   socialImagePath,
