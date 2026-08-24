@@ -229,7 +229,23 @@ function anmfHasImageData(
   bytes: Uint8Array,
   frameOffset: number,
   frameLength: number,
+  canvas: Pick<ImageDimensions, "width" | "height">,
 ): boolean {
+  if (frameLength < 16) {
+    throw new Error("Not a WebP: ANMF frame is too short");
+  }
+
+  // Frame X and Y are stored in two-pixel units. Frame dimensions are
+  // one-based. Do this arithmetic with JavaScript numbers rather than bitwise
+  // operations so values near WebP's 24-bit maximum do not wrap signed.
+  const x = uint24LE(bytes, frameOffset) * 2;
+  const y = uint24LE(bytes, frameOffset + 3) * 2;
+  const width = uint24LE(bytes, frameOffset + 6) + 1;
+  const height = uint24LE(bytes, frameOffset + 9) + 1;
+  if (x + width > canvas.width || y + height > canvas.height) {
+    throw new Error("Not a WebP: ANMF frame extends outside the VP8X canvas");
+  }
+
   const end = frameOffset + frameLength;
   let offset = frameOffset + 16;
   let sawImage = false;
@@ -238,8 +254,17 @@ function anmfHasImageData(
   while (offset + 8 <= end) {
     const child = ascii(bytes, offset, 4);
     const length = uint32LE(bytes, offset + 4);
-    if (offset + 8 + length > end) {
+    const payloadEnd = offset + 8 + length;
+    if (payloadEnd > end) {
       throw new Error("Not a WebP: ANMF frame chunk is truncated");
+    }
+    if (length % 2 !== 0) {
+      if (payloadEnd === end) {
+        throw new Error("Not a WebP: ANMF frame chunk is missing RIFF padding");
+      }
+      if (bytes[payloadEnd] !== 0) {
+        throw new Error("Not a WebP: ANMF frame chunk has nonzero RIFF padding");
+      }
     }
     // WebP frame data is optional ALPH plus one VP8/VP8L bitstream and
     // optional unknown chunks; animation frames never nest.
@@ -264,7 +289,7 @@ function anmfHasImageData(
     if (imageChunkHasData(bytes, offset, length, "in ANMF frame")) {
       sawImage = true;
     }
-    offset += 8 + length + (length % 2);
+    offset = payloadEnd + (length % 2);
   }
   if (offset !== end) {
     throw new Error("Not a WebP: malformed ANMF frame layout");
@@ -282,6 +307,7 @@ function imageChunkHasData(
   chunkOffset: number,
   length: number,
   where: string,
+  canvas?: Pick<ImageDimensions, "width" | "height">,
 ): boolean {
   const child = ascii(bytes, chunkOffset, 4);
   const payloadOffset = chunkOffset + 8;
@@ -300,8 +326,10 @@ function imageChunkHasData(
     return true;
   }
   if (child === "ANMF") {
-    if (length < 16) return false;
-    return anmfHasImageData(bytes, payloadOffset, length);
+    if (!canvas) {
+      throw new Error("Not a WebP: ANMF frame requires a VP8X canvas");
+    }
+    return anmfHasImageData(bytes, payloadOffset, length, canvas);
   }
   return false;
 }
@@ -364,6 +392,9 @@ function webpSize(bytes: Uint8Array): ImageDimensions {
       height: uint24LE(bytes, 27) + 1,
       format: "webp",
     };
+    if (dimensions.width * dimensions.height > 0xffffffff) {
+      throw new Error("Not a WebP: VP8X canvas area exceeds 2^32 - 1 pixels");
+    }
   } else {
     throw new Error(`Not a WebP: unsupported chunk ${chunk}`);
   }
@@ -372,26 +403,60 @@ function webpSize(bytes: Uint8Array): ImageDimensions {
   // payload: a structurally complete RIFF holding only the origin/size header
   // reports dimensions yet no usable pixels, so it must not verify.
   const needsPayload = chunk === "VP8X";
+  const animationFlag = needsPayload && (bytes[20]! & 0x02) !== 0;
   let sawPayload = false;
+  let sawAnim = false;
+  let sawAnimationFrame = false;
 
   // Walk the container so a chunk truncated against the declared RIFF size
   // (for example a missing ALPH or ANIM payload) is caught.
   let offset = 12;
   while (offset + 8 <= expectedEnd) {
     const length = uint32LE(bytes, offset + 4);
-    if (offset + 8 + length > expectedEnd) {
+    const child = ascii(bytes, offset, 4);
+    const payloadEnd = offset + 8 + length;
+    if (payloadEnd > expectedEnd) {
       throw new Error("Not a WebP: chunk is truncated");
     }
-    if (needsPayload && imageChunkHasData(bytes, offset, length, "in VP8X container")) {
+    if (length % 2 !== 0) {
+      if (payloadEnd === expectedEnd) {
+        throw new Error("Not a WebP: chunk is missing RIFF padding");
+      }
+      if (bytes[payloadEnd] !== 0) {
+        throw new Error("Not a WebP: chunk has nonzero RIFF padding");
+      }
+    }
+
+    if (child === "ANIM") {
+      if (sawAnim) throw new Error("Not a WebP: multiple ANIM chunks");
+      if (length !== 6) throw new Error("Not a WebP: ANIM chunk must be six bytes");
+      sawAnim = true;
+    }
+    if (child === "ANMF") {
+      if (animationFlag && !sawAnim) {
+        throw new Error("Not a WebP: ANMF frame must follow the ANIM chunk");
+      }
+      sawAnimationFrame = true;
+    }
+    if (
+      needsPayload &&
+      imageChunkHasData(bytes, offset, length, "in VP8X container", dimensions)
+    ) {
       sawPayload = true;
     }
-    offset += 8 + length + (length % 2);
+    offset = payloadEnd + (length % 2);
   }
   if (offset !== expectedEnd) {
     throw new Error("Not a WebP: malformed chunk layout");
   }
   if (needsPayload && !sawPayload) {
     throw new Error("Not a WebP: VP8X container has no image or animation data");
+  }
+  if (animationFlag && !sawAnim) {
+    throw new Error("Not a WebP: animation flag requires an ANIM chunk");
+  }
+  if (animationFlag && !sawAnimationFrame) {
+    throw new Error("Not a WebP: animation flag requires an ANMF frame");
   }
 
   return dimensions;
