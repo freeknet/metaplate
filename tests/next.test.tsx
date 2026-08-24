@@ -58,6 +58,29 @@ it("returns a route handler bound to one copy", async () => {
   verifyPng(await response.arrayBuffer(), plate.size);
 });
 
+it("resolves dynamic copy from promised Next route params", async () => {
+  const plate = createNextOg<{ title: string; alt: string }>({
+    alt: (copy) => copy.alt,
+    component: (copy) => (
+      <div style={{ width: "100%", height: "100%", display: "flex", fontSize: 48 }}>
+        {copy.title}
+      </div>
+    ),
+  });
+  const GET = plate.handlerFrom(
+    async (_request: Request, context: { params: Promise<{ slug: string }> }) => {
+      const { slug } = await context.params;
+      return { title: slug, alt: `${slug} card` };
+    },
+  );
+  const response = await GET(new Request("https://example.com/card"), {
+    params: Promise.resolve({ slug: "Dynamic" }),
+  });
+
+  expect(response.headers.get("content-type")).toBe("image/png");
+  verifyPng(await response.arrayBuffer(), plate.size);
+});
+
 it("rejects a size outside the supported range at definition", () => {
   expect(() =>
     createNextOg({

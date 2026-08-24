@@ -326,6 +326,46 @@ it(
   20_000,
 );
 
+it(
+  "resolves dynamic copy from all framework handler arguments",
+  async () => {
+    const plate = createNodeOg(definition);
+    const GET = plate.handlerFrom(
+      async (request: Request, context: { params: { slug: string } }) => ({
+        title: `${context.params.slug}:${new URL(request.url).pathname}`,
+      }),
+    );
+    const response = await GET(new Request("https://example.com/cards/guide"), {
+      params: { slug: "guide" },
+    });
+
+    expect(response.headers.get("content-type")).toBe("image/png");
+    verifyPng(await response.arrayBuffer(), plate.size);
+  },
+  20_000,
+);
+
+it("rejects Resvg settings that can desynchronize rendered dimensions", () => {
+  expect(() =>
+    createNodeOg({
+      ...definition,
+      resvg: { fitTo: { mode: "width", value: 600 } },
+    }),
+  ).toThrow(/must preserve.*1200x630/);
+  expect(() =>
+    createNodeOg({
+      ...definition,
+      resvg: { crop: { left: 0, top: 0, right: 600, bottom: 315 } },
+    }),
+  ).toThrow(/crop is not supported/);
+  expect(() =>
+    createNodeOg({
+      ...definition,
+      resvg: { fitTo: { mode: "width", value: 1200 } },
+    }),
+  ).not.toThrow();
+});
+
 // TypeScript covers the encoder contract for typed consumers; plain JavaScript
 // build scripts are exactly the case this API was added for, and there the
 // wrong return type has to say which side is wrong.

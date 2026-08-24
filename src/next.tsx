@@ -68,6 +68,10 @@ export function createNextOg<Copy>(definition: NextOgDefinition<Copy>) {
     contentType: OG_CONTENT_TYPE,
     render,
     handler: (copy: Copy) => () => render(copy),
+    handlerFrom: <Arguments extends unknown[]>(
+      resolve: (...arguments_: Arguments) => Copy | Promise<Copy>,
+    ) =>
+      async (...arguments_: Arguments) => render(await resolve(...arguments_)),
     image: (route: string, copy: Copy) =>
       socialImage(route, definition.alt(copy), {
         size,
