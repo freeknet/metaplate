@@ -1,7 +1,12 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { imageDimensions, verifyImage } from "../src/image.js";
+import {
+  detectFormat,
+  imageContentType,
+  imageDimensions,
+  verifyImage,
+} from "../src/image.js";
 
 // The checked-in fixtures (card.jpg, icon.jpg, the .webp files, card.png) are
 // real encoder output rather than hand-built headers, so a misreading of a
@@ -117,6 +122,32 @@ function completeJpeg(width: number, height: number): Uint8Array {
 }
 
 describe("imageDimensions", () => {
+  it("reads a Satori-compatible SVG with an XML declaration", () => {
+    const svg = new TextEncoder().encode(
+      '<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630"><path d="M0 0h1v1H0z"/></svg>',
+    );
+
+    expect(detectFormat(svg)).toBe("svg");
+    expect(imageDimensions(svg)).toEqual({ width: 1200, height: 630, format: "svg" });
+    expect(verifyImage(svg, { width: 1200, height: 630 }, "svg")).toEqual({
+      width: 1200,
+      height: 630,
+      format: "svg",
+    });
+    expect(imageContentType("svg")).toBe("image/svg+xml");
+  });
+
+  it.each([
+    '<svg width="1200" height="630">',
+    '<svg width="0" height="630"></svg>',
+    '<svg width="100%" height="630"></svg>',
+    '<svg width="1200"></svg>',
+    '<!DOCTYPE svg><svg width="1200" height="630"></svg>',
+    '<!ENTITY card "unsafe"><svg width="1200" height="630"></svg>',
+  ])("rejects unsafe or structurally incomplete SVG: %s", (source) => {
+    expect(() => imageDimensions(new TextEncoder().encode(source))).toThrow(/Not an SVG/);
+  });
+
   it.each([
     ["card.jpg", 1200, 630, "jpeg"],
     ["icon.jpg", 512, 512, "jpeg"],

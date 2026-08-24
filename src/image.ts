@@ -3,8 +3,8 @@ import { pngDimensions } from "./png.js";
 /** One of the formats the verifier can recognize by signature. */
 export type OutputFormat = "svg" | "png" | "jpeg" | "webp";
 
-/** Structurally recognized raster formats. */
-export type ImageFormat = "png" | "jpeg" | "webp";
+/** Structurally recognized formats. */
+export type ImageFormat = "svg" | "png" | "jpeg" | "webp";
 
 export type ImageDimensions = {
   width: number;
@@ -14,6 +14,8 @@ export type ImageDimensions = {
 
 export function imageContentType(format: ImageFormat): string {
   switch (format) {
+    case "svg":
+      return "image/svg+xml";
     case "png":
       return "image/png";
     case "jpeg":
@@ -53,6 +55,108 @@ function matches(bytes: Uint8Array, signature: readonly number[]): boolean {
 }
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] as const;
+
+const XML_WHITESPACE = /^[\t\n\r ]*/;
+const SVG_DIMENSION = /^(?:\d+(?:\.\d*)?|\.\d+)(?:px)?$/i;
+
+/**
+ * Decodes a UTF-8 SVG as text without invoking an XML parser. This verifier
+ * intentionally treats entity declarations as unsafe input: it needs only a
+ * root element and its concrete pixel dimensions, never entity expansion,
+ * external resources, or arbitrary XML features.
+ */
+function svgText(bytes: Uint8Array): string {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    throw new Error("Not an SVG: document is not valid UTF-8");
+  }
+}
+
+function skipSvgPreamble(text: string): number | undefined {
+  let offset = text.charCodeAt(0) === 0xfeff ? 1 : 0;
+  offset += text.slice(offset).match(XML_WHITESPACE)?.[0].length ?? 0;
+
+  if (text.startsWith("<?xml", offset)) {
+    const declarationEnd = text.indexOf("?>", offset + 5);
+    if (declarationEnd === -1) return undefined;
+    offset = declarationEnd + 2;
+    offset += text.slice(offset).match(XML_WHITESPACE)?.[0].length ?? 0;
+  }
+
+  return offset;
+}
+
+/** Returns the first unquoted `>` in an element opening tag. */
+function svgOpeningTagEnd(text: string, offset: number): number | undefined {
+  let quote: string | undefined;
+  for (let index = offset; index < text.length; index += 1) {
+    const character = text[index]!;
+    if (quote) {
+      if (character === quote) quote = undefined;
+    } else if (character === "\"" || character === "'") {
+      quote = character;
+    } else if (character === ">") {
+      return index;
+    }
+  }
+  return undefined;
+}
+
+/** Locates an SVG root opening tag after an optional UTF-8 XML preamble. */
+function svgRootOpeningTag(text: string): { offset: number; end: number } | undefined {
+  const offset = skipSvgPreamble(text);
+  if (offset === undefined || !text.startsWith("<svg", offset)) return undefined;
+  const boundary = text[offset + 4];
+  if (boundary !== ">" && boundary !== "/" && !/[\t\n\r ]/.test(boundary ?? "")) {
+    return undefined;
+  }
+  const end = svgOpeningTagEnd(text, offset + 4);
+  return end === undefined ? undefined : { offset, end };
+}
+
+function svgDimension(openingTag: string, name: "width" | "height"): number {
+  const matches = [...openingTag.matchAll(new RegExp(`(?:^|\\s)${name}\\s*=\\s*(["'])([^"']*)\\1`, "g"))];
+  if (matches.length !== 1) {
+    throw new Error(`Not an SVG: root must declare exactly one ${name} attribute`);
+  }
+  const value = matches[0]![2]!.trim();
+  if (!SVG_DIMENSION.test(value)) {
+    throw new Error(`Not an SVG: ${name} must be a positive pixel dimension`);
+  }
+  const dimension = Number.parseFloat(value);
+  if (!Number.isFinite(dimension) || dimension <= 0) {
+    throw new Error(`Not an SVG: ${name} must be a positive pixel dimension`);
+  }
+  return dimension;
+}
+
+/** Reads concrete root dimensions from a safe, non-expanding subset of SVG. */
+function svgSize(bytes: Uint8Array): ImageDimensions {
+  const text = svgText(bytes);
+  if (/<!\s*(?:doctype|entity)\b/i.test(text)) {
+    throw new Error("Not an SVG: DOCTYPE and entity declarations are not supported");
+  }
+  const root = svgRootOpeningTag(text);
+  if (!root) throw new Error("Not an SVG: missing or truncated root element");
+
+  const openingTag = text.slice(root.offset, root.end + 1);
+  const width = svgDimension(openingTag, "width");
+  const height = svgDimension(openingTag, "height");
+  const selfClosing = /\/\s*>$/.test(openingTag);
+  if (selfClosing) {
+    if (text.slice(root.end + 1).trim()) {
+      throw new Error("Not an SVG: trailing data after self-closing root element");
+    }
+  } else {
+    const close = text.lastIndexOf("</svg>");
+    if (close < root.end || !/^<\/svg>\s*$/.test(text.slice(close))) {
+      throw new Error("Not an SVG: missing or malformed closing root element");
+    }
+  }
+
+  return { width, height, format: "svg" };
+}
 
 /**
  * PNG dimensions plus structural completeness. Delegates to the shared
@@ -468,16 +572,21 @@ function webpSize(bytes: Uint8Array): ImageDimensions {
   return dimensions;
 }
 
-/** Reads dimensions from a PNG, JPEG, or WebP without decoding the image. */
+/** Reads dimensions from an SVG, PNG, JPEG, or WebP without decoding pixels. */
 export function imageDimensions(input: ArrayBuffer | Uint8Array): ImageDimensions {
   const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
-  if (bytes.byteLength < 16) throw new Error("Unrecognized image: file is too short");
+  if (bytes.byteLength === 0) throw new Error("Unrecognized image: file is too short");
+  const isSvg = looksLikeSvg(bytes);
+  if (bytes.byteLength < 16 && !isSvg) {
+    throw new Error("Unrecognized image: file is too short");
+  }
 
   if (matches(bytes, PNG_SIGNATURE)) return pngSize(bytes);
   if (bytes[0] === 0xff && bytes[1] === 0xd8) return jpegSize(bytes);
   if (ascii(bytes, 0, 4) === "RIFF" && ascii(bytes, 8, 4) === "WEBP") return webpSize(bytes);
+  if (isSvg) return svgSize(bytes);
 
-  throw new Error("Unrecognized image: expected a PNG, JPEG, or WebP signature");
+  throw new Error("Unrecognized image: expected an SVG, PNG, JPEG, or WebP signature");
 }
 
 /** Throws when an image does not have the expected dimensions or format. */
@@ -513,6 +622,19 @@ export function detectFormat(input: ArrayBuffer | Uint8Array): OutputFormat | un
   ) {
     return "webp";
   }
-  if (bytes.byteLength >= 4 && ascii(bytes, 0, 4) === "<svg") return "svg";
+  if (looksLikeSvg(bytes)) return "svg";
   return undefined;
+}
+
+/** A safe SVG signature accepts XML declarations and whitespace, but no XML parsing. */
+function looksLikeSvg(bytes: Uint8Array): boolean {
+  try {
+    const text = svgText(bytes);
+    if (svgRootOpeningTag(text) !== undefined) return true;
+    // Keep dangerous declarations inside the SVG verification path so callers
+    // receive the specific safety error rather than a generic signature miss.
+    return /<!\s*(?:doctype|entity)\b/i.test(text) && /<svg(?=[\t\n\r />])/.test(text);
+  } catch {
+    return false;
+  }
 }
