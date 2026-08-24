@@ -29,6 +29,9 @@ All notable changes to Metaplate are documented in this file. The project uses
 - Package verification now proves the documented Next adapter through a real,
   network-free static export of the exact packed artifact with lockfile-pinned
   local peers.
+- Add reviewed, versioned GitHub release notes, a reusable highlights-first
+  template, a draft-release workflow, and publish-time validation so a bare
+  generated pull-request list cannot become the release landing page again.
 
 ## [0.5.0] - 2026-08-24
 

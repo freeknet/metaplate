@@ -1,0 +1,74 @@
+name: Prepare Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Semver release tag (for example, v0.6.0)
+        required: true
+      target:
+        description: Branch or commit to tag when the draft is published
+        required: true
+        default: main
+
+permissions:
+  contents: write
+
+jobs:
+  draft:
+    name: Create validated draft release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.target }}
+
+      - name: Resolve and validate release
+        id: release
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::release tag must be a semver tag beginning with v"
+            exit 1
+          fi
+          version="${RELEASE_TAG#v}"
+          package_version=$(node -p "require('./package.json').version")
+          if [[ "$package_version" != "$version" ]]; then
+            echo "::error::tag $RELEASE_TAG does not match package.json version $package_version"
+            exit 1
+          fi
+          notes=".github/releases/$RELEASE_TAG.md"
+          node scripts/validate-release-notes.mjs "$notes" "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "notes=$notes" >> "$GITHUB_OUTPUT"
+
+      - name: Create or refresh draft
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          TARGET: ${{ inputs.target }}
+          NOTES: ${{ steps.release.outputs.notes }}
+        run: |
+          set -euo pipefail
+          if release=$(gh release view "$RELEASE_TAG" --json isDraft 2>/dev/null); then
+            if [[ "$(jq -r .isDraft <<<"$release")" != "true" ]]; then
+              echo "::error::$RELEASE_TAG already exists as a published release"
+              exit 1
+            fi
+            gh release edit "$RELEASE_TAG" \
+              --title "Metaplate $RELEASE_TAG" \
+              --notes-file "$NOTES" \
+              --draft
+          else
+            gh release create "$RELEASE_TAG" \
+              --target "$TARGET" \
+              --title "Metaplate $RELEASE_TAG" \
+              --notes-file "$NOTES" \
+              --draft
+          fi
+

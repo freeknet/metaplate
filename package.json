@@ -67,8 +67,9 @@
   },
   "scripts": {
     "build": "tsup",
-    "check": "npm run lint && npm run typecheck && npm run typecheck:examples && npm test && npm run build && npm pack --dry-run",
+    "check": "npm run lint && npm run check:release-notes && npm run typecheck && npm run typecheck:examples && npm test && npm run build && npm pack --dry-run",
     "check:package": "node scripts/verify-package.mjs",
+    "check:release-notes": "node scripts/validate-release-notes.mjs",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
