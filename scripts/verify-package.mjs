@@ -23,6 +23,9 @@ const consumer = join(temporary, "consumer");
 const standalone = join(temporary, "standalone");
 const bare = join(temporary, "bare");
 const nextApp = join(temporary, "next-app");
+const astroApp = join(temporary, "astro-app");
+const expressApp = join(temporary, "express-app");
+const routerApp = join(temporary, "router-app");
 const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const lockfile = JSON.parse(readFileSync(join(root, "package-lock.json"), "utf8"));
 const npmCli = process.env.npm_execpath;
@@ -156,7 +159,7 @@ try {
   // the standalone renderer or its native binaries.
   install(consumer, [archive]);
 
-  for (const peer of ["satori", "@resvg/resvg-js", "next"]) {
+  for (const peer of ["satori", "@resvg/resvg-js", "next", "react"]) {
     if (existsSync(join(consumer, "node_modules", peer))) {
       throw new Error(`A lean install pulled the optional peer ${peer}.`);
     }
@@ -327,6 +330,377 @@ export default function Image() {
       }
     `,
     nextApp,
+  );
+
+  // Build an actual Astro static site from the packed artifact. This proves
+  // the APIRoute handler contract, production bundling of the optional native
+  // renderer boundary, emitted image path, bytes, dimensions, and page tags.
+  install(astroApp, [archive]);
+  for (const dependency of [
+    "astro",
+    "satori",
+    "@resvg/resvg-js",
+    "@fontsource/inter",
+  ]) {
+    linkLockedDependency(astroApp, dependency);
+  }
+  mkdirSync(join(astroApp, "src", "lib"), { recursive: true });
+  mkdirSync(join(astroApp, "src", "pages"), { recursive: true });
+  writeFileSync(join(astroApp, "astro.config.mjs"), "export default {};\n");
+  writeFileSync(
+    join(astroApp, "src", "lib", "og.ts"),
+    `import { packageFontLoader } from "metaplate/fonts";
+import { createNodeOg } from "metaplate/node";
+
+export const og = createNodeOg({
+  alt: (copy: { title: string }) => \`${"${copy.title}"} social card\`,
+  fonts: packageFontLoader([{
+    name: "Inter",
+    package: "@fontsource/inter",
+    file: "files/inter-latin-700-normal.woff",
+    weight: 700,
+  }]),
+  imagePath: "og-image.png",
+  origin: "https://example.com",
+  component: (copy: { title: string }) => ({
+    type: "div",
+    props: {
+      style: {
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        alignItems: "center",
+        background: "#111827",
+        color: "#ffffff",
+        fontFamily: "Inter",
+        fontSize: 64,
+      },
+      children: copy.title,
+    },
+  }),
+});
+`,
+  );
+  writeFileSync(
+    join(astroApp, "src", "pages", "og-image.png.ts"),
+    `import type { APIRoute } from "astro";
+import { og } from "../lib/og";
+
+export const prerender = true;
+export const GET = og.handler({ title: "Metaplate Astro smoke" }) satisfies APIRoute;
+`,
+  );
+  writeFileSync(
+    join(astroApp, "src", "pages", "index.astro"),
+    `---
+import { socialImageMetadata } from "metaplate";
+const social = socialImageMetadata("/", "Metaplate Astro smoke card", {
+  origin: "https://example.com",
+  imagePath: "og-image.png",
+  type: "image/png",
+});
+const image = social.openGraph.images[0];
+---
+<html><head>
+  <meta property="og:image" content={image.url} />
+  <meta property="og:image:width" content={String(image.width)} />
+  <meta property="og:image:height" content={String(image.height)} />
+  <meta property="og:image:type" content={image.type} />
+  <meta property="og:image:alt" content={image.alt} />
+  <meta name="twitter:card" content={social.twitter.card} />
+  <meta name="twitter:image" content={social.twitter.images[0].url} />
+</head><body>Metaplate Astro fixture</body></html>
+`,
+  );
+  const astroCli = join(astroApp, "node_modules", "astro", "bin", "astro.mjs");
+  try {
+    execFileSync(process.execPath, [astroCli, "build"], {
+      cwd: astroApp,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, ASTRO_TELEMETRY_DISABLED: "1" },
+    });
+  } catch (error) {
+    const details = error instanceof Error && "stderr" in error ? error.stderr : error;
+    throw new Error(`Packed-package Astro static build failed: ${details}`, { cause: error });
+  }
+  const astroImage = join(astroApp, "dist", "og-image.png");
+  const astroIndex = readFileSync(join(astroApp, "dist", "index.html"), "utf8");
+  if (
+    !astroIndex.includes('content="https://example.com/og-image.png"') ||
+    !astroIndex.includes('content="1200"') ||
+    !astroIndex.includes('content="630"') ||
+    !astroIndex.includes('content="image/png"')
+  ) {
+    throw new Error("Astro static build did not emit the expected absolute social metadata.");
+  }
+  runModule(
+    `
+      import { readFile } from "node:fs/promises";
+      import { verifyImage } from "metaplate/image";
+      const result = verifyImage(
+        await readFile(${JSON.stringify(astroImage)}),
+        { width: 1200, height: 630 },
+        "png",
+      );
+      if (result.format !== "png") throw new Error("Astro endpoint did not emit PNG bytes.");
+    `,
+    astroApp,
+  );
+
+  // Exercise the documented raw-byte bridge through a real Express 5 server,
+  // including its async error boundary and externally observed headers.
+  install(expressApp, [archive]);
+  for (const dependency of [
+    "express",
+    "satori",
+    "@resvg/resvg-js",
+    "@fontsource/inter",
+  ]) {
+    linkLockedDependency(expressApp, dependency);
+  }
+  runModule(
+    `
+      import express from "express";
+      import { packageFontLoader } from "metaplate/fonts";
+      import { verifyImage } from "metaplate/image";
+      import { createNodeOg } from "metaplate/node";
+
+      const og = createNodeOg({
+        alt: () => "Express smoke card",
+        fonts: packageFontLoader([{
+          name: "Inter",
+          package: "@fontsource/inter",
+          file: "files/inter-latin-700-normal.woff",
+          weight: 700,
+        }]),
+        component: () => ({
+          type: "div",
+          props: {
+            style: {
+              width: "100%",
+              height: "100%",
+              display: "flex",
+              alignItems: "center",
+              background: "#111827",
+              color: "#ffffff",
+              fontFamily: "Inter",
+              fontSize: 64,
+            },
+            children: "Metaplate Express smoke",
+          },
+        }),
+      });
+      const app = express();
+      app.get("/og-image.png", async (_request, response, next) => {
+        try {
+          response.type(og.contentType);
+          response.set("Cache-Control", "public, max-age=86400");
+          response.send(Buffer.from(await og.render({})));
+        } catch (error) {
+          next(error);
+        }
+      });
+      const server = await new Promise((resolve) => {
+        const listening = app.listen(0, "127.0.0.1", () => resolve(listening));
+      });
+      try {
+        const address = server.address();
+        if (!address || typeof address === "string") throw new Error("Express did not bind TCP.");
+        const response = await fetch(\`http://127.0.0.1:\${address.port}/og-image.png\`);
+        if (!response.ok) throw new Error(\`Express returned \${response.status}.\`);
+        if (response.headers.get("content-type") !== "image/png") {
+          throw new Error("Express returned the wrong image content type.");
+        }
+        if (response.headers.get("cache-control") !== "public, max-age=86400") {
+          throw new Error("Express returned the wrong cache policy.");
+        }
+        verifyImage(new Uint8Array(await response.arrayBuffer()), { width: 1200, height: 630 }, "png");
+      } finally {
+        await new Promise((resolve, reject) =>
+          server.close((error) => error ? reject(error) : resolve()),
+        );
+      }
+    `,
+    expressApp,
+  );
+
+  // Build and serve a current React Router framework-mode resource route.
+  // This verifies its loader(args) convention and generated route types from
+  // the tarball instead of treating it as an old Remix-style GET handler.
+  install(routerApp, [archive]);
+  const routerDependencies = [
+    "@react-router/dev",
+    "@react-router/node",
+    "@react-router/serve",
+    "@react-router/express",
+    "react-router",
+    "react",
+    "react-dom",
+    "express",
+    "vite",
+    "typescript",
+    "@types/node",
+    "@types/react",
+    "satori",
+    "@resvg/resvg-js",
+    "@fontsource/inter",
+    "isbot",
+  ];
+  for (const dependency of routerDependencies) {
+    linkLockedDependency(routerApp, dependency);
+  }
+  writeFileSync(
+    join(routerApp, "package.json"),
+    JSON.stringify({
+      private: true,
+      type: "module",
+      dependencies: {
+        metaplate: manifest.version,
+        ...Object.fromEntries(
+          routerDependencies.map((dependency) => [
+            dependency,
+            lockfile.packages[`node_modules/${dependency}`].version,
+          ]),
+        ),
+      },
+    }),
+  );
+  mkdirSync(join(routerApp, "app", "lib"), { recursive: true });
+  mkdirSync(join(routerApp, "app", "routes"), { recursive: true });
+  writeFileSync(
+    join(routerApp, "react-router.config.ts"),
+    `import type { Config } from "@react-router/dev/config";
+export default { ssr: true } satisfies Config;
+`,
+  );
+  writeFileSync(
+    join(routerApp, "vite.config.ts"),
+    `import { reactRouter } from "@react-router/dev/vite";
+import { defineConfig } from "vite";
+export default defineConfig({ plugins: [reactRouter()] });
+`,
+  );
+  writeFileSync(
+    join(routerApp, "tsconfig.json"),
+    JSON.stringify({
+      include: ["**/*", ".react-router/types/**/*"],
+      compilerOptions: {
+        strict: true,
+        target: "ES2022",
+        lib: ["DOM", "DOM.Iterable", "ES2022"],
+        jsx: "react-jsx",
+        module: "ESNext",
+        moduleResolution: "Bundler",
+        noEmit: true,
+        rootDirs: [".", "./.react-router/types"],
+        types: ["node"],
+      },
+    }),
+  );
+  writeFileSync(
+    join(routerApp, "app", "routes.ts"),
+    `import { type RouteConfig, index, route } from "@react-router/dev/routes";
+export default [
+  index("routes/home.tsx"),
+  route(":slug/og-image.png", "routes/og-image.ts"),
+] satisfies RouteConfig;
+`,
+  );
+  writeFileSync(
+    join(routerApp, "app", "root.tsx"),
+    `import { Links, Meta, Outlet, Scripts, ScrollRestoration } from "react-router";
+export function Layout({ children }: { children: React.ReactNode }) {
+  return <html lang="en"><head><Meta /><Links /></head><body>{children}<ScrollRestoration /><Scripts /></body></html>;
+}
+export default function Root() { return <Outlet />; }
+`,
+  );
+  writeFileSync(
+    join(routerApp, "app", "routes", "home.tsx"),
+    `import type { MetaFunction } from "react-router";
+import { socialImageMetadata } from "metaplate";
+const social = socialImageMetadata("/guide", "Guide card", {
+  origin: "https://example.com", imagePath: "og-image.png", type: "image/png",
+});
+const image = social.openGraph.images[0];
+export const meta: MetaFunction = () => [
+  { property: "og:image", content: image.url },
+  { property: "og:image:width", content: String(image.width) },
+  { property: "og:image:height", content: String(image.height) },
+  { name: "twitter:card", content: social.twitter.card },
+];
+export default function Home() { return <main>Metaplate React Router fixture</main>; }
+`,
+  );
+  writeFileSync(
+    join(routerApp, "app", "lib", "og.ts"),
+    `import { packageFontLoader } from "metaplate/fonts";
+import { createNodeOg } from "metaplate/node";
+export const og = createNodeOg({
+  alt: (copy: { title: string }) => \`${"${copy.title}"} social card\`,
+  fonts: packageFontLoader([{
+    name: "Inter", package: "@fontsource/inter",
+    file: "files/inter-latin-700-normal.woff", weight: 700,
+  }]),
+  component: (copy: { title: string }) => ({
+    type: "div",
+    props: {
+      style: { width: "100%", height: "100%", display: "flex", fontFamily: "Inter", fontSize: 64 },
+      children: copy.title,
+    },
+  }),
+});
+`,
+  );
+  writeFileSync(
+    join(routerApp, "app", "routes", "og-image.ts"),
+    `import type { Route } from "./+types/og-image";
+import { og } from "../lib/og";
+export const loader = og.handlerFrom(({ params }: Route.LoaderArgs) => ({
+  title: (params.slug ?? "missing").slice(0, 80),
+}));
+`,
+  );
+  const routerCli = join(routerApp, "node_modules", "@react-router", "dev", "bin.js");
+  execFileSync(process.execPath, [routerCli, "typegen"], { cwd: routerApp, stdio: "inherit" });
+  const routerTsc = join(routerApp, "node_modules", "typescript", "bin", "tsc");
+  execFileSync(process.execPath, [routerTsc, "--noEmit"], { cwd: routerApp, stdio: "inherit" });
+  execFileSync(process.execPath, [routerCli, "build"], {
+    cwd: routerApp,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  runModule(
+    `
+      import express from "express";
+      import { createRequestHandler } from "@react-router/express";
+      import { verifyImage } from "metaplate/image";
+      import * as build from "./build/server/index.js";
+      const app = express();
+      app.use(express.static("build/client"));
+      app.use(createRequestHandler({ build, mode: "production" }));
+      const server = await new Promise((resolve) => {
+        const listening = app.listen(0, "127.0.0.1", () => resolve(listening));
+      });
+      try {
+        const address = server.address();
+        if (!address || typeof address === "string") throw new Error("React Router did not bind TCP.");
+        const base = \`http://127.0.0.1:\${address.port}\`;
+        const page = await fetch(base);
+        const html = await page.text();
+        if (!html.includes("https://example.com/guide/og-image.png")) {
+          throw new Error("React Router page did not emit absolute social metadata.");
+        }
+        const response = await fetch(base + "/guide/og-image.png");
+        if (!response.ok || response.headers.get("content-type") !== "image/png") {
+          throw new Error("React Router resource route returned the wrong status or content type.");
+        }
+        verifyImage(new Uint8Array(await response.arrayBuffer()), { width: 1200, height: 630 }, "png");
+      } finally {
+        await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+      }
+    `,
+    routerApp,
   );
 
   const nodeGuidance = `
