@@ -10,9 +10,10 @@ Composable, framework-neutral Open Graph image tooling for TypeScript.
 
 Metaplate turns one branded JSX plate into a consistent image system: SVG and
 raster rendering (PNG by default, any format an encoder produces), Fetch API
-responses, predictable image URLs, matching Open Graph and Twitter metadata,
+responses, predictable image URLs, configurable Open Graph and X metadata,
 package-based font loading, and image verification. It works with plain Node,
-Astro, SvelteKit, Remix, Express, static build scripts, and Next.js.
+Node-compatible framework adapters, static build scripts, and Next.js. Runtime
+compatibility depends on both the framework and its deployment adapter.
 
 ## Contents
 
@@ -20,12 +21,15 @@ Astro, SvelteKit, Remix, Express, static build scripts, and Next.js.
   - [Optional peers](#optional-peers)
 - [Framework-neutral renderer](#framework-neutral-renderer)
   - [Other output formats](#other-output-formats)
-  - [Astro, SvelteKit, Remix, and other Fetch-based routes](#astro-sveltekit-remix-and-other-fetch-based-routes)
+  - [Fetch-based framework routes](#fetch-based-framework-routes)
   - [Express and build scripts](#express-and-build-scripts)
+  - [Runtime and dynamic-route safety](#runtime-and-dynamic-route-safety)
   - [Authoring without a JSX toolchain](#authoring-without-a-jsx-toolchain)
   - [SVG-only rendering](#svg-only-rendering)
 - [Next.js adapter](#nextjs-adapter)
 - [Metadata without a renderer](#metadata-without-a-renderer)
+  - [Channel-specific images and X Cards](#channel-specific-images-and-x-cards)
+  - [Social compatibility profiles](#social-compatibility-profiles)
   - [Next.js static export and `basePath`](#nextjs-static-export-and-basepath)
 - [Fonts](#fonts)
 - [Plate constraints](#plate-constraints)
@@ -217,26 +221,70 @@ Point `imagePath` at the extension actually written, so `socialImage` and
 `socialImageMetadata` describe the real file. `metaplate verify` reads PNG,
 JPEG, and WebP, so the build check follows the card whichever format it takes.
 
-### Astro, SvelteKit, Remix, and other Fetch-based routes
+### Fetch-based framework routes
 
-`handler` returns a standard Fetch API handler. For an Astro endpoint:
+`handler` returns a zero-argument Fetch API handler for fixed copy. This Astro
+static endpoint is typechecked as an `APIRoute`:
 
 ```ts
 // src/pages/og-image.png.ts
+import type { APIRoute } from "astro";
 import { og } from "../lib/og";
 
 export const prerender = true;
-export const GET = og.handler({ title: "An Astro site", alt: "Astro card" });
+export const GET = og.handler({
+  title: "An Astro site",
+  alt: "Astro card",
+}) satisfies APIRoute;
 ```
 
-The same handler shape works in SvelteKit and other route systems that return a
-Web `Response`.
+For dynamic copy, `handlerFrom` forwards every framework argument to a sync or
+async resolver. For example, a SvelteKit `adapter-node` route can use its typed
+params without a wrapper around every plate:
+
+```ts
+import type { RequestHandler } from "./$types";
+import { og } from "$lib/og";
+
+export const GET: RequestHandler = og.handlerFrom(({ params }) => ({
+  title: titleFor(params.slug),
+  alt: `${params.slug} card`,
+}));
+```
+
+Current React Router framework-mode resource routes use `loader(args)`, not a
+`GET` export. Return the same Web `Response` from a resolver:
+
+```ts
+export const loader = og.handlerFrom(({ params }: Route.LoaderArgs) => ({
+  title: titleFor(params.slug),
+  alt: `${params.slug} card`,
+}));
+```
+
+These routes require a Node-compatible deployment adapter because
+`metaplate/node` loads Resvg's native Node binding. A framework implementing
+Web `Response` does not by itself make its edge runtime compatible.
 
 ### Express and build scripts
 
 Express can send the bytes returned by `render` — PNG by default, or whatever
-`output` encodes. Static generators can write the same bytes into `public/`
-during a build:
+`output` encodes. Convert the `Uint8Array` to a `Buffer`, set the plate's exact
+media type, and preserve Express error handling:
+
+```ts
+app.get("/og-image.png", async (_request, response, next) => {
+  try {
+    response.type(og.contentType);
+    response.set("Cache-Control", "public, max-age=86400");
+    response.send(Buffer.from(await og.render(copy)));
+  } catch (error) {
+    next(error);
+  }
+});
+```
+
+Static generators can write the same bytes into `public/` during a build:
 
 ```ts
 import { writeFile } from "node:fs/promises";
@@ -244,6 +292,24 @@ import { og } from "./og.js";
 
 await writeFile("public/og-image.jpg", await og.render(copy));
 ```
+
+### Runtime and dynamic-route safety
+
+| Integration | Supported runtime | Release evidence |
+| --- | --- | --- |
+| `metaplate/next` | Next.js 16.3.2–16.x Node/build pipeline | Exact packed artifact is built through a real Next static export in the release gate. Next 15 is not claimed because its remaining dependency advisories fail this project's release audit. |
+| Astro static endpoints | Astro 7 build on Node 24 | Exact packed artifact produces the endpoint, PNG bytes, dimensions, and absolute page metadata. |
+| React Router resource routes | React Router 7 framework mode on Node | Exact packed artifact is type-generated, typechecked, built, served, and fetched through a dynamic `loader(args)` route. |
+| SvelteKit | Node-compatible adapters | `handlerFrom` follows its `RequestHandler` contract, but certification is deferred while the latest stable Kit line retains an upstream Cookie advisory. |
+| Express | Express 5 on Node | Exact packed artifact is served over an ephemeral HTTP server and checked for headers, bytes, and dimensions. |
+| Workers, Deno, and other edge runtimes | Not supported by `metaplate/node` | Native Resvg cannot be inferred from Web `Response` support. Use a compatible renderer instead. |
+
+Public dynamic image routes are CPU- and memory-intensive. Bound copy length
+and component complexity, use stable path params rather than arbitrary query
+strings, set an explicit cache policy, and apply deployment-level concurrency
+and timeout limits. Never pass a request-controlled remote image URL into a
+Satori component: allowlist asset origins so server-side rendering cannot be
+used to reach private or link-local services.
 
 ### Authoring without a JSX toolchain
 
@@ -481,6 +547,61 @@ Metadata helpers accept `route`/`basePath`/`imagePath` as pathnames only:
 query strings, fragments, and `.`/`..` segments are rejected rather than
 silently producing a URL that normalizes somewhere else.
 
+### Channel-specific images and X Cards
+
+The one-image call remains unchanged. When a landscape Open Graph image, a
+square fallback, and an X-specific composition differ, override only those
+channels. Open Graph ordering is preserved and the first descriptor remains
+the preferred image:
+
+```ts
+const metadata = socialImageMetadata("/docs", "Docs card", {
+  origin: "https://example.com",
+  imagePath: "og-image.png",
+  openGraph: { images: [landscape, square] },
+  twitter: {
+    card: "summary",
+    image: xCard,
+    site: "@example",
+    creator: "@author",
+  },
+});
+```
+
+Supported X identity fields are `site`, `siteId`, `creator`, and `creatorId`.
+Overrides are copied into independent descriptors, so mutating a source object
+later cannot silently change or desynchronize the two channels. Metaplate does
+not generate fictional `discord:*` or `instagram:*` tags; those consumers use
+Open Graph or undocumented heuristics rather than a separate page schema.
+
+### Social compatibility profiles
+
+`socialImageCompatibility` checks local descriptor facts without making
+network requests. The conservative `universal` profile requires an absolute
+HTTPS URL and PNG/JPEG media type; named profiles add documented checks,
+including LinkedIn's dimensions and optional 5 MB limit:
+
+```ts
+import { socialImageCompatibility } from "metaplate";
+
+const report = socialImageCompatibility(metadata.openGraph.images[0], {
+  targets: ["universal", "facebook", "linkedin", "slack"],
+  fileSize: generatedBytes.byteLength,
+});
+
+if (!report.compatible) throw new Error(JSON.stringify(report.issues));
+```
+
+Issues are `error`, `warning`, or `unknown`. Discord and Instagram checks are
+reported as unknown because neither publishes a stable webpage image-tag
+contract. SVG remains useful as renderer output, but it is not a universal
+social delivery format; use PNG or JPEG for broad crawler compatibility.
+
+This local report cannot prove public fetchability, redirects, response MIME,
+robots/WAF behavior, or crawler caches. Those require checking the deployed
+page and image; use Meta Sharing Debugger, LinkedIn Post Inspector, and the
+relevant client debugger after deployment.
+
 ### Next.js static export and `basePath`
 
 Next's special `app/opengraph-image.tsx` file suits a root-deployed app: set
@@ -554,7 +675,7 @@ Return `undefined` to fall back to the default resolution.
 
 ## Plate constraints
 
-A plate is a Satori layout that rasterises to an image, not a DOM tree. Three
+A plate is a Satori layout that rasterises to an image, not a DOM tree. Four
 differences bite in practice:
 
 - **Inline SVG `<title>` renders as visible text.** Satori supports a subset of
@@ -570,6 +691,10 @@ differences bite in practice:
   child need an explicit `display`, as does any element whose `children` is an
   array; see
   [Authoring without a JSX toolchain](#authoring-without-a-jsx-toolchain).
+- **Resvg may not resize the raster behind the plate's back.** Dimension-changing
+  `fitTo` values and `crop` are rejected because metadata, `plate.size`, raw
+  pixels, and encoded output must agree. Define the intended `size` on the
+  plate instead.
 
 ## Static hosts
 
