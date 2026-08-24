@@ -38,7 +38,7 @@ node .planning/spikes/002-malformed-inputs/run.mjs
 
 ## What to Expect
 
-By default, the harness reports truncation coverage, runtime, and every specification-invalid container that 0.5.0 nevertheless accepts; it exits successfully when it reproduces that audited behavior. With `METAPLATE_EXPECT_HARDENED=1`, it instead requires all 14 invalid containers to fail with format-specific errors, requires the CLI reproduction to exit nonzero, and retains the same truncation and performance assertions. Output names the installed package spec, installed version, and expectation mode.
+By default, the harness reports truncation coverage, runtime, and every specification-invalid container that 0.5.0 nevertheless accepts; it exits successfully when it reproduces that audited behavior. With `METAPLATE_EXPECT_HARDENED=1`, it instead requires all 15 invalid containers to fail with format-specific errors, requires the CLI reproduction to exit nonzero, and retains the same truncation and performance assertions. Output names the installed package spec, installed version, and expectation mode.
 
 ## Investigation Trail
 
