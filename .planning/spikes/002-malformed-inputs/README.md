@@ -20,7 +20,7 @@ The published verifier terminates promptly, rejects truncated containers, and en
 - [RFC 9649](https://datatracker.ietf.org/doc/html/rfc9649) defines WebP RIFF padding, extended-canvas limits, animation control requirements, and frame containment.
 - [ITU-T T.81](https://www.itu.int/rec/T-REC-T.81) is the normative JPEG-1 definition.
 
-The chosen approach uses exact 0.5.0 APIs and CLI from a clean npm install. It generates valid checksummed PNG chunks, minimal JPEG/WebP headers, exhaustive truncation samples from real encoder fixtures, and malformed length shells. FFmpeg's `ffprobe` and Node's zlib provide secondary decoder signals, while the specifications decide header/container conformance.
+The chosen approach defaults to exact 0.5.0 APIs and CLI from a clean npm install. It can also test a local packed artifact in hardened mode. It generates valid checksummed PNG chunks, minimal JPEG/WebP headers, exhaustive truncation samples from real encoder fixtures, and malformed length shells. FFmpeg's `ffprobe` and Node's zlib provide secondary decoder signals, while the specifications decide header/container conformance.
 
 ## How to Run
 
@@ -28,9 +28,17 @@ The chosen approach uses exact 0.5.0 APIs and CLI from a clean npm install. It g
 node .planning/spikes/002-malformed-inputs/run.mjs
 ```
 
+To test a packed hardened build without changing the historical baseline:
+
+```sh
+METAPLATE_PACKAGE_SPEC=/absolute/path/metaplate-0.6.0.tgz \
+METAPLATE_EXPECT_HARDENED=1 \
+node .planning/spikes/002-malformed-inputs/run.mjs
+```
+
 ## What to Expect
 
-The harness reports truncation coverage, runtime, and every specification-invalid container that 0.5.0 nevertheless accepts. The script exits successfully when it reproduces the audited 0.5.0 behavior.
+By default, the harness reports truncation coverage, runtime, and every specification-invalid container that 0.5.0 nevertheless accepts; it exits successfully when it reproduces that audited behavior. With `METAPLATE_EXPECT_HARDENED=1`, it instead requires all 14 invalid containers to fail with format-specific errors, requires the CLI reproduction to exit nonzero, and retains the same truncation and performance assertions. Output names the installed package spec, installed version, and expectation mode.
 
 ## Investigation Trail
 

@@ -11,6 +11,10 @@ import { deflateSync, inflateSync } from "node:zlib";
 
 const root = resolve(import.meta.dirname, "../../..");
 const consumer = mkdtempSync(join(tmpdir(), "metaplate-050-malformed-"));
+const packageSpec = process.env.METAPLATE_PACKAGE_SPEC ?? "0.5.0";
+const expectingHardened = process.env.METAPLATE_EXPECT_HARDENED === "1";
+const expectationMode = expectingHardened ? "hardened" : "baseline-0.5.0";
+const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 
 function run(command, args, options = {}) {
   return execFileSync(command, args, {
@@ -24,9 +28,13 @@ function run(command, args, options = {}) {
 
 writeFileSync(
   join(consumer, "package.json"),
-  JSON.stringify({ private: true, type: "module", dependencies: { metaplate: "0.5.0" } }),
+  JSON.stringify({ private: true, type: "module", dependencies: { metaplate: packageSpec } }),
 );
-run("npm.cmd", ["install", "--ignore-scripts", "--omit=optional", "--no-audit", "--no-fund"]);
+run(npmCommand, ["install", "--ignore-scripts", "--omit=optional", "--no-audit", "--no-fund"]);
+
+const installedManifest = JSON.parse(
+  readFileSync(join(consumer, "node_modules", "metaplate", "package.json"), "utf8"),
+);
 
 const imageModule = await import(
   pathToFileURL(join(consumer, "node_modules/metaplate/dist/image.js")).href
@@ -222,7 +230,24 @@ for (const testCase of cases) {
   testCase.result = { metaplate, ffprobe };
 }
 
-assert.deepEqual(accepted, cases.map(testCase => testCase.name));
+if (expectingHardened) {
+  assert.deepEqual(accepted, []);
+  for (const testCase of cases) {
+    const format = testCase.name.startsWith("png")
+      ? "PNG"
+      : testCase.name.startsWith("jpeg")
+        ? "JPEG"
+        : "WebP";
+    assert.equal(testCase.result.metaplate.accepted, false, `${testCase.name} was accepted`);
+    assert.match(
+      testCase.result.metaplate.error,
+      new RegExp(format, "i"),
+      `${testCase.name} did not report a format-specific error`,
+    );
+  }
+} else {
+  assert.deepEqual(accepted, cases.map(testCase => testCase.name));
+}
 
 const fixtures = ["card.png", "card.jpg", "card-lossy.webp", "card-lossless.webp", "card-alpha.webp"];
 let truncations = 0;
@@ -264,20 +289,30 @@ try {
 } catch (error) {
   cliExitCode = error.status;
 }
-assert.equal(cliCase.result.metaplate.accepted, true);
-assert.equal(cliExitCode, 0);
+if (expectingHardened) {
+  assert.equal(cliCase.result.metaplate.accepted, false);
+  assert.match(cliCase.result.metaplate.error, /PNG/i);
+  assert.notEqual(cliExitCode, 0);
+} else {
+  assert.equal(cliCase.result.metaplate.accepted, true);
+  assert.equal(cliExitCode, 0);
+}
 
 console.log(
   JSON.stringify(
     {
       consumer,
-      publishedVersion: "0.5.0",
+      packageSpec,
+      installedVersion: installedManifest.version,
+      expectationMode,
       invalidContainersAccepted: cases.map(testCase => ({
         name: testCase.name,
         ...testCase.result,
       })),
       truncationSweep: { samples: truncations, accepted: acceptedTruncations, durationMs },
-      cliReproduction: "accepted a PNG whose IHDR declares unsupported compression method 1",
+      cliReproduction: expectingHardened
+        ? "rejected a PNG whose IHDR declares unsupported compression method 1"
+        : "accepted a PNG whose IHDR declares unsupported compression method 1",
     },
     null,
     2,

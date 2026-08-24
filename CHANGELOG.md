@@ -3,6 +3,32 @@
 All notable changes to Metaplate are documented in this file. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] - 2026-08-24
+
+### Added
+
+- `metaplate verify` now safely verifies SVG root dimensions without XML entity
+  expansion, `PackageFont` preserves an optional `lang` tag for Satori font
+  selection, and `metaplate --help` / `--version` are successful discovery
+  commands.
+
+### Fixed
+
+- Harden PNG structural validation: unsupported color/bit-depth combinations,
+  invalid IHDR methods, oversized zlib windows, invalid indexed palettes, and
+  unknown critical chunks now fail verification.
+- Validate WebP extended-container animation structure, including canvas-area
+  bounds, required animation controls, frame bounds, and RIFF padding bytes.
+- Reject JPEG frames whose encoded width or height is zero.
+
+### Documentation
+
+- Add a Socket badge for the audited published `0.5.0` artifact and record the
+  0.6 verifier-hardening audit context.
+- Package verification now proves the documented Next adapter through a real,
+  network-free static export of the exact packed artifact with lockfile-pinned
+  local peers.
+
 ## [0.5.0] - 2026-08-24
 
 ### Added
@@ -251,7 +277,8 @@ reflects that `render` may return any consumer-encoded format ([#54]).
 - Typed package exports for framework-neutral, rendering, Node.js, Next.js,
   font, and PNG entry points.
 
-[Unreleased]: https://github.com/lnorton89/metaplate/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/lnorton89/metaplate/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/lnorton89/metaplate/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/lnorton89/metaplate/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/lnorton89/metaplate/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/lnorton89/metaplate/compare/v0.3.0...v0.4.0
