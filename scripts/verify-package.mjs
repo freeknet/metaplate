@@ -155,14 +155,17 @@ try {
     JSON.stringify({ private: true, type: "module" }),
   );
 
-  // Shape one: metadata-only and Next.js consumers, which must never resolve
-  // the standalone renderer or its native binaries.
+  // One package install must provide the complete framework-neutral renderer
+  // stack. Next stays optional because only Next applications need it.
   install(consumer, [archive]);
 
-  for (const peer of ["satori", "@resvg/resvg-js", "next", "react"]) {
-    if (existsSync(join(consumer, "node_modules", peer))) {
-      throw new Error(`A lean install pulled the optional peer ${peer}.`);
+  for (const peer of ["satori", "@resvg/resvg-js", "react"]) {
+    if (!existsSync(join(consumer, "node_modules", ...peer.split("/")))) {
+      throw new Error(`The one-command install did not provide required peer ${peer}.`);
     }
+  }
+  if (existsSync(join(consumer, "node_modules", "next"))) {
+    throw new Error("The one-command install pulled optional framework peer next.");
   }
 
   const smoke = `
@@ -175,27 +178,6 @@ try {
     await import("metaplate/image");
   `;
   runModule(smoke, consumer);
-
-  // Standalone entry points load without their peers; only rendering needs
-  // them, and it has to say which package to install.
-  const guidance = `
-    const { createSvgOg } = await import("metaplate/render");
-    const plate = createSvgOg({
-      component: () => null,
-      alt: () => "card",
-      fonts: () => [],
-    });
-
-    try {
-      await plate.renderSvg({});
-    } catch (error) {
-      if (!error.message.includes("npm install satori")) throw error;
-      process.exit(0);
-    }
-
-    throw new Error("metaplate/render rendered without its satori peer.");
-  `;
-  runModule(guidance, consumer);
 
   const nextGuidance = `
     const { createNextOg } = await import("metaplate/next");
@@ -220,7 +202,7 @@ try {
   // outside its workspace root.
   install(nextApp, [archive]);
   const copiedNextPackages = new Set();
-  for (const dependency of ["next", "react", "react-dom"]) {
+  for (const dependency of ["next", "react-dom"]) {
     copyLockedDependencyTree(nextApp, dependency, copiedNextPackages);
   }
   const nextManifest = JSON.parse(
@@ -338,8 +320,6 @@ export default function Image() {
   install(astroApp, [archive]);
   for (const dependency of [
     "astro",
-    "satori",
-    "@resvg/resvg-js",
     "@fontsource/inter",
   ]) {
     linkLockedDependency(astroApp, dependency);
@@ -453,8 +433,6 @@ const image = social.openGraph.images[0];
   install(expressApp, [archive]);
   for (const dependency of [
     "express",
-    "satori",
-    "@resvg/resvg-js",
     "@fontsource/inter",
   ]) {
     linkLockedDependency(expressApp, dependency);
@@ -535,15 +513,12 @@ const image = social.openGraph.images[0];
     "@react-router/serve",
     "@react-router/express",
     "react-router",
-    "react",
     "react-dom",
     "express",
     "vite",
     "typescript",
     "@types/node",
     "@types/react",
-    "satori",
-    "@resvg/resvg-js",
     "@fontsource/inter",
     "isbot",
   ];
@@ -703,25 +678,6 @@ export const loader = og.handlerFrom(({ params }: Route.LoaderArgs) => ({
     routerApp,
   );
 
-  const nodeGuidance = `
-    const { createNodeOg } = await import("metaplate/node");
-    const plate = createNodeOg({
-      component: () => null,
-      alt: () => "card",
-      fonts: () => [],
-    });
-
-    try {
-      await plate.render({});
-    } catch (error) {
-      if (!error.message.includes("npm install satori @resvg/resvg-js")) throw error;
-      process.exit(0);
-    }
-
-    throw new Error("metaplate/node rendered without its renderer peers.");
-  `;
-  runModule(nodeGuidance, consumer);
-
   const requireSmoke = `
     require.resolve("metaplate");
     require.resolve("metaplate/render");
@@ -836,12 +792,10 @@ export const loader = og.handlerFrom(({ params }: Route.LoaderArgs) => ({
     );
   }
 
-  // Shape two: the standalone consumer, which opts in to the renderer peers
-  // and has to produce real PNG bytes from the packed tarball.
+  // Shape two proves the one-command install can produce real PNG bytes from
+  // the packed tarball; only the fixture font and compiler are test tooling.
   install(standalone, [archive]);
   for (const dependency of [
-    "satori",
-    "@resvg/resvg-js",
     "@fontsource/inter",
     "typescript",
     "@types/node",
@@ -883,12 +837,9 @@ export const loader = og.handlerFrom(({ params }: Route.LoaderArgs) => ({
   `;
   runModule(standaloneSmoke, standalone);
 
-  // Issue #59: the README promises plain `{ type, props }` authoring with no
-  // React at all. Compile a TypeScript consumer against the packed package
-  // with no React/@types/react installed and a plain-object component; the
-  // type surface must carry it. `skipLibCheck` is deliberately off so that a
-  // React dependency hiding in any declaration is a hard error rather than a
-  // suppressed one.
+  // Plain-object authoring still has no React type dependency even though the
+  // batteries-included install now supplies the React runtime for JSX users.
+  // `skipLibCheck` is deliberately off so a declaration leak remains visible.
   writeFileSync(
     join(standalone, "tsconfig.json"),
     JSON.stringify({
@@ -960,22 +911,20 @@ export const loader = og.handlerFrom(({ params }: Route.LoaderArgs) => ({
   // Issue #59, round two: the React-free surface must not trade the React
   // type leak for a Node one. `SatoriFont.data` is declared as
   // `ArrayBuffer | Uint8Array` (never Node's bare `Buffer` global), so a
-  // consumer with no @types/node and no React types installed can load both
+  // consumer with no @types/node or React types can load both
   // `metaplate/render` and `metaplate/node`, author a plain-object plate, and
   // use the public pixel/Resvg option shapes without installing Resvg yet.
-  // Compile that second consumer here — only TypeScript and the renderer peer
-  // installed, `skipLibCheck` off, so a hidden Node or React dependency in any
-  // declaration is a hard error rather than a suppressed one.
+  // Compile that second consumer here with `skipLibCheck` off, so a hidden
+  // Node or React type dependency is a hard error rather than a suppressed one.
   install(bare, [archive]);
-  for (const dependency of ["satori", "typescript"]) {
+  for (const dependency of ["typescript"]) {
     linkLockedDependency(bare, dependency);
   }
 
   // Make the smoke airtight: `types: []` stops TypeScript from auto-including
   // any @types package that might arrive transitively, and the explicit
-  // absence checks fail the run if react, @types/react, or @types/node are
-  // ever pulled in by the install (for example as a new peer).
-  for (const forbidden of ["react", "@types/react", "@types/node"]) {
+  // absence checks fail the run if React or Node declarations are pulled in.
+  for (const forbidden of ["@types/react", "@types/node"]) {
     if (existsSync(join(bare, "node_modules", forbidden))) {
       throw new Error(`The isomorphic consumer pulled ${forbidden}.`);
     }

@@ -24,6 +24,11 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Changed
 
+- **Breaking:** Satori, Resvg, and React are required peer dependencies again,
+  so `npm install metaplate` supplies the complete framework-neutral renderer
+  stack without a separate install command. Next remains optional and
+  application-supplied. This favors a one-command setup over the smaller
+  metadata-only install introduced in 0.2.0.
 - **Breaking:** `metaplate/next` now declares Next `>=16.3.2 <17`. The
   previously open-ended `>=15` claim included untested future majors, while
   the remaining Next 15 line fails the release audit through high-severity
@@ -31,8 +36,8 @@ All notable changes to Metaplate are documented in this file. The project uses
 - **Breaking:** dimension-changing Resvg `fitTo` settings and all `crop`
   settings are rejected. Set the intended plate `size` instead so rendered
   pixels, metadata, and `plate.size` remain one contract.
-- Cap the optional Satori, Resvg, React, and Next peer ranges at their next
-  breaking boundary rather than claiming compatibility with unknown majors.
+- Cap the Satori, Resvg, React, and Next peer ranges at their next breaking
+  boundary rather than claiming compatibility with unknown majors.
 
 ### Fixed
 

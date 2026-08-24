@@ -83,16 +83,7 @@
     "satori": ">=0.33.3 <0.34"
   },
   "peerDependenciesMeta": {
-    "@resvg/resvg-js": {
-      "optional": true
-    },
     "next": {
-      "optional": true
-    },
-    "react": {
-      "optional": true
-    },
-    "satori": {
       "optional": true
     }
   },

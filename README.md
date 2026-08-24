@@ -18,7 +18,7 @@ compatibility depends on both the framework and its deployment adapter.
 ## Contents
 
 - [Install](#install)
-  - [Optional peers](#optional-peers)
+  - [Dependency behavior](#dependency-behavior)
 - [Framework-neutral renderer](#framework-neutral-renderer)
   - [Other output formats](#other-output-formats)
   - [Fetch-based framework routes](#fetch-based-framework-routes)
@@ -41,50 +41,28 @@ compatibility depends on both the framework and its deployment adapter.
 
 ## Install
 
-Metaplate has no runtime dependencies of its own. Each entry point declares the
-peers it needs, so metadata-only and Next.js projects never download Satori or
-Resvg's platform-specific binaries.
-
-For metadata, or for Next.js where `next` and `react` are already supplied by
-the application:
+One command installs Metaplate's complete framework-neutral renderer stack:
 
 ```sh
 npm install metaplate
 ```
 
-For framework-neutral PNG rendering with `metaplate/node`:
+That installs compatible versions of `satori`, `@resvg/resvg-js`, and `react`
+automatically. You do not need to discover or install renderer packages
+separately. npm deduplicates these peer dependencies against compatible
+versions already present in an application.
 
-```sh
-npm install metaplate satori @resvg/resvg-js react
-```
+### Dependency behavior
 
-For SVG-only rendering with `metaplate/render`, Resvg is unnecessary:
+`next` remains the only optional peer: Next applications already own their
+framework version, and non-Next applications should not download it. The
+renderer peers are bounded to the release-tested major/minor lines instead of
+silently accepting unknown breaking releases.
 
-```sh
-npm install metaplate satori react
-```
-
-React is needed only for JSX authoring. A plate can also be written as a
-plain `{ type, props }` object tree — see
-[Authoring without a JSX toolchain](#authoring-without-a-jsx-toolchain) —
-which needs no React at all, its types or the package.
-
-### Optional peers
-
-Every peer — `satori`, `@resvg/resvg-js`, and `next` — loads on the first
-render rather than at import time, so each entry point imports cleanly in an
-install that lacks it. A render without the peer reports the package to
-install:
-
-```
-Cannot find satori, required by metaplate/render and metaplate/node.
-Install it with: npm install satori
-```
-
-Through 0.1.x Satori and Resvg were ordinary dependencies. Standalone consumers
-upgrading from those versions should add them to their own `package.json`;
-nothing changes for metadata-only consumers, and Next.js applications already
-supply `next` themselves.
+Dependencies load only when their entry point renders, so importing metadata
+helpers does not initialize Satori or Resvg's native binding. Plain
+`{ type, props }` authoring also remains independent of React APIs and React
+types; the React runtime is included by the install so JSX works immediately.
 
 `metaplate/next` no longer re-exports `ImageResponse`. Import it from `next/og`
 directly if a plate needs it:
@@ -92,19 +70,6 @@ directly if a plate needs it:
 ```ts
 import { ImageResponse } from "next/og";
 ```
-
-Upgrading in place does not reclaim the disk. An already-installed `satori` or
-`@resvg/resvg-js` satisfies the now-optional peer, so npm considers the tree
-valid and leaves both packages where they are; `npm prune` makes it worse,
-proposing Resvg's entire platform matrix rather than removing anything.
-Reinstall from scratch to shed them:
-
-```sh
-rm -rf node_modules package-lock.json && npm install
-```
-
-Measured on a metadata-only consumer: 19 MB retained after an in-place upgrade
-from 0.1.2, against 164 KB after a clean reinstall.
 
 ## Framework-neutral renderer
 
@@ -373,19 +338,18 @@ to fix is the leaf holding the array. Scripts that build children
 programmatically should either spread the array into `createElement` or give
 that element an explicit `display`.
 
-The same tree can be written as plain `{ type, props }` objects when React is
-not installed at all, which is what the standalone package verification does.
-That path is typed, not just runtime-supported: `createSvgOg` and
+The same tree can be written as plain `{ type, props }` objects without
+importing React or relying on its types. That path is typed, not just
+runtime-supported: `createSvgOg` and
 `createNodeOg` declare `component` as returning a local `SatoriNode` element
-tree rather than React's `ReactNode`, so a TypeScript consumer of
-`metaplate/render` or `metaplate/node` does not need React — its types or the
-package — to author a plain-object plate. The Next adapter keeps React's own
+tree rather than React's `ReactNode`, so a TypeScript consumer does not need
+React types to author a plain-object plate. The Next adapter keeps React's own
 types because Next itself is intrinsic to it.
 
 ### SVG-only rendering
 
-Use `createSvgOg` from `metaplate/render` when the consumer only needs SVG and
-should not install Resvg's native Node binding.
+Use `createSvgOg` from `metaplate/render` when the consumer only needs SVG. It
+does not load or execute Resvg's native Node binding.
 
 ## Next.js adapter
 
@@ -761,10 +725,12 @@ for PNG-only checks.
 
 ## Entry points
 
-- `metaplate` — framework-free paths, dimensions, and metadata. No peers.
-- `metaplate/render` — Satori-based SVG generation. Needs `satori`.
+- `metaplate` — framework-free paths, dimensions, and metadata.
+- `metaplate/render` — Satori-based SVG generation. Satori is installed
+  automatically.
 - `metaplate/node` — SVG, PNG, raw pixels, and any format a supplied encoder
-  produces, plus Fetch API responses. Needs `satori` and `@resvg/resvg-js`.
+  produces, plus Fetch API responses. Satori and Resvg are installed
+  automatically.
 - `metaplate/next` — native Next.js `ImageResponse` adapter. Needs `next`.
 - `metaplate/fonts` — hoist-safe package font loading and memoization. No peers.
 - `metaplate/png` — PNG header inspection and dimension verification. No peers.
