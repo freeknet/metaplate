@@ -189,7 +189,8 @@ JPEG, and WebP, so the build check follows the card whichever format it takes.
 ### Fetch-based framework routes
 
 `handler` returns a zero-argument Fetch API handler for fixed copy. This Astro
-static endpoint is typechecked as an `APIRoute`:
+[static endpoint](https://docs.astro.build/en/guides/endpoints/#static-file-endpoints)
+is typechecked as an `APIRoute`; Astro calls its `GET` export during the build:
 
 ```ts
 // src/pages/og-image.png.ts
@@ -204,8 +205,10 @@ export const GET = og.handler({
 ```
 
 For dynamic copy, `handlerFrom` forwards every framework argument to a sync or
-async resolver. For example, a SvelteKit `adapter-node` route can use its typed
-params without a wrapper around every plate:
+async resolver. For example, a SvelteKit
+[`+server` route](https://svelte.dev/docs/kit/routing#server) deployed with the
+official [Node adapter](https://svelte.dev/docs/kit/adapter-node) can use its
+typed params without a wrapper around every plate:
 
 ```ts
 import type { RequestHandler } from "./$types";
@@ -217,8 +220,10 @@ export const GET: RequestHandler = og.handlerFrom(({ params }) => ({
 }));
 ```
 
-Current React Router framework-mode resource routes use `loader(args)`, not a
-`GET` export. Return the same Web `Response` from a resolver:
+Current React Router framework-mode
+[resource routes](https://reactrouter.com/how-to/resource-routes) use
+`loader(args)`, not a `GET` export. Return the same Web `Response` from a
+resolver:
 
 ```ts
 export const loader = og.handlerFrom(({ params }: Route.LoaderArgs) => ({
@@ -235,7 +240,9 @@ Web `Response` does not by itself make its edge runtime compatible.
 
 Express can send the bytes returned by `render` — PNG by default, or whatever
 `output` encodes. Convert the `Uint8Array` to a `Buffer`, set the plate's exact
-media type, and preserve Express error handling:
+media type with [`res.type`](https://expressjs.com/en/5x/api/#res.type), send it
+with [`res.send`](https://expressjs.com/en/5x/api/#res.send), and preserve
+Express error handling:
 
 ```ts
 app.get("/og-image.png", async (_request, response, next) => {
@@ -260,14 +267,18 @@ await writeFile("public/og-image.jpg", await og.render(copy));
 
 ### Runtime and dynamic-route safety
 
-| Integration | Supported runtime | Release evidence |
-| --- | --- | --- |
-| `metaplate/next` | Next.js 16.3.2–16.x Node/build pipeline | Exact packed artifact is built through a real Next static export in the release gate. Next 15 is not claimed because its remaining dependency advisories fail this project's release audit. |
-| Astro static endpoints | Astro 7 build on Node 24 | Exact packed artifact produces the endpoint, PNG bytes, dimensions, and absolute page metadata. |
-| React Router resource routes | React Router 7 framework mode on Node | Exact packed artifact is type-generated, typechecked, built, served, and fetched through a dynamic `loader(args)` route. |
-| SvelteKit | Node-compatible adapters | `handlerFrom` follows its `RequestHandler` contract, but certification is deferred while the latest stable Kit line retains an upstream Cookie advisory. |
-| Express | Express 5 on Node | Exact packed artifact is served over an ephemeral HTTP server and checked for headers, bytes, and dimensions. |
-| Workers, Deno, and other edge runtimes | Not supported by `metaplate/node` | Native Resvg cannot be inferred from Web `Response` support. Use a compatible renderer instead. |
+The upstream links below define each framework's routing and deployment
+contract; this guide documents the Metaplate-specific mapping and the narrower
+set actually exercised by the release gate.
+
+| Integration | Official framework reference | Supported runtime | Release evidence |
+| --- | --- | --- | --- |
+| `metaplate/next` | [Metadata and OG images](https://nextjs.org/docs/app/getting-started/metadata-and-og-images), [metadata files](https://nextjs.org/docs/app/api-reference/file-conventions/metadata/opengraph-image), and [static exports](https://nextjs.org/docs/app/guides/static-exports) | Next.js 16.3.2–16.x Node/build pipeline | Exact packed artifact is built through a real Next static export in the release gate. Next 15 is not claimed because its remaining dependency advisories fail this project's release audit. |
+| Astro static endpoints | [Static and server endpoints](https://docs.astro.build/en/guides/endpoints/) | Astro 7 build on Node 24 | Exact packed artifact produces the endpoint, PNG bytes, dimensions, and absolute page metadata. |
+| React Router resource routes | [Resource routes](https://reactrouter.com/how-to/resource-routes) | React Router 7 framework mode on Node | Exact packed artifact is type-generated, typechecked, built, served, and fetched through a dynamic `loader(args)` route. |
+| SvelteKit | [`+server` routing](https://svelte.dev/docs/kit/routing#server) and [`adapter-node`](https://svelte.dev/docs/kit/adapter-node) | Node-compatible adapters | `handlerFrom` follows its `RequestHandler` contract, but certification is deferred while the latest stable Kit line retains an upstream Cookie advisory. |
+| Express | [Express 5 response API](https://expressjs.com/en/5x/api/#res.send) | Express 5 on Node | Exact packed artifact is served over an ephemeral HTTP server and checked for headers, bytes, and dimensions. |
+| Workers, Deno, and other edge runtimes | Consult the framework's adapter/runtime documentation | Not supported by `metaplate/node` | Native Resvg cannot be inferred from Web `Response` support. Use a compatible renderer instead. |
 
 Public dynamic image routes are CPU- and memory-intensive. Bound copy length
 and component complexity, use stable path params rather than arbitrary query
@@ -354,7 +365,10 @@ does not load or execute Resvg's native Node binding.
 ## Next.js adapter
 
 Next applications can use the native `next/og` pipeline while keeping the same
-route and metadata pattern:
+route and metadata pattern. Read this alongside Next's official
+[Metadata and OG images](https://nextjs.org/docs/app/getting-started/metadata-and-og-images)
+and
+[`opengraph-image` file convention](https://nextjs.org/docs/app/api-reference/file-conventions/metadata/opengraph-image):
 
 ```tsx
 // src/lib/og.tsx
@@ -386,8 +400,9 @@ export const og = createNextOg<OgCopy>({
 });
 ```
 
-Next shallow-merges metadata: a page that sets `openGraph` **replaces** the
-root layout's rather than extending it. Spreading `og.metadata()` straight into
+Next [shallow-merges metadata](https://nextjs.org/docs/app/api-reference/functions/generate-metadata):
+a page that sets `openGraph` **replaces** the root layout's rather than extending
+it. Spreading `og.metadata()` straight into
 a page therefore drops every other Open Graph field the layout contributed —
 `siteName`, `type`, `locale`, `url` — from that page's tags. Nothing errors and
 the build stays green; the loss shows only in the emitted HTML.
@@ -570,7 +585,8 @@ relevant client debugger after deployment.
 
 Next's special `app/opengraph-image.tsx` file suits a root-deployed app: set
 `dynamic = "force-static"` and Next prerenders the `ImageResponse` during
-`next build` with `output: "export"` enabled.
+`next build` with [`output: "export"`](https://nextjs.org/docs/app/guides/static-exports)
+enabled.
 
 Under a deployment `basePath`, that file still prerenders and the build still
 reports success, but the card is unusable for two independent reasons:

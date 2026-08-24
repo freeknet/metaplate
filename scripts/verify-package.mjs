@@ -43,7 +43,7 @@ function run(args, options = {}) {
   });
 }
 
-function install(directory, specifiers) {
+function install(directory, specifiers, { offline = true } = {}) {
   run(
     [
       "install",
@@ -51,7 +51,7 @@ function install(directory, specifiers) {
       "--prefix",
       directory,
       "--ignore-scripts",
-      "--offline",
+      ...(offline ? ["--offline"] : []),
       "--no-audit",
       "--no-fund",
     ],
@@ -157,11 +157,24 @@ try {
 
   // One package install must provide the complete framework-neutral renderer
   // stack. Next stays optional because only Next applications need it.
-  install(consumer, [archive]);
+  // This is intentionally the verifier's one online install: it proves npm's
+  // normal peer auto-install behavior from exactly the tarball users receive.
+  // It also primes npm's cache so every framework fixture below stays offline.
+  install(consumer, [archive], { offline: false });
 
   for (const peer of ["satori", "@resvg/resvg-js", "react"]) {
-    if (!existsSync(join(consumer, "node_modules", ...peer.split("/")))) {
+    const peerDirectory = join(consumer, "node_modules", ...peer.split("/"));
+    if (!existsSync(peerDirectory)) {
       throw new Error(`The one-command install did not provide required peer ${peer}.`);
+    }
+    const installed = JSON.parse(
+      readFileSync(join(peerDirectory, "package.json"), "utf8"),
+    );
+    const locked = lockfile.packages[`node_modules/${peer}`];
+    if (installed.version !== locked?.version) {
+      throw new Error(
+        `The one-command install selected ${peer} ${installed.version}; expected audited ${locked?.version}.`,
+      );
     }
   }
   if (existsSync(join(consumer, "node_modules", "next"))) {

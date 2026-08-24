@@ -7,8 +7,11 @@ GitHub Releases are the user-facing home for each version. They must explain why
 1. Update `package.json`, `package-lock.json`, `src/version.ts`, and `CHANGELOG.md` to the same version.
 2. Copy `.github/RELEASE_TEMPLATE.md` to `.github/releases/vX.Y.Z.md`.
 3. Replace every placeholder with user-facing copy. Summarize outcomes rather than commit titles.
-4. Include explicit upgrade advice and write `None.` under breaking changes when there is no migration.
-5. Run the complete local gate:
+4. For every framework-specific claim, link the exact official upstream page
+   that defines the routing, metadata, build, adapter, or deployment behavior.
+   Keep Metaplate's tested runtime/version boundary next to that link.
+5. Include explicit upgrade advice and write `None.` under breaking changes when there is no migration.
+6. Run the complete local gate:
 
    ```sh
    npm run check
@@ -38,4 +41,3 @@ After publication:
 2. run the published-package smoke against the exact registry artifact;
 3. update version-specific badges when applicable;
 4. verify the GitHub release remains the best single overview of the version.
-

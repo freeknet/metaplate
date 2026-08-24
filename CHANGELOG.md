@@ -38,6 +38,11 @@ All notable changes to Metaplate are documented in this file. The project uses
   pixels, metadata, and `plate.size` remain one contract.
 - Cap the Satori, Resvg, React, and Next peer ranges at their next breaking
   boundary rather than claiming compatibility with unknown majors.
+- Cross-reference every documented framework recipe with the corresponding
+  official routing, metadata, static-export, adapter, or response API instead
+  of leaving Metaplate's examples disconnected from upstream contracts. The
+  pull-request and release templates now require those references for future
+  framework-specific changes.
 
 ### Fixed
 
