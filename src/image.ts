@@ -313,14 +313,30 @@ function jpegSize(bytes: Uint8Array): ImageDimensions {
   throw new Error("Not a JPEG: missing image scan (SOS segment)");
 }
 
-/** True when a VP8 (lossy) payload opens with its three-byte key-frame start
- * code, which sits after the three-byte frame tag. */
+/** True when a VP8 (lossy) payload is a key frame and opens with its
+ * three-byte key-frame start code, which sits after the three-byte frame tag.
+ * `show_frame` intentionally remains unconstrained: it is not needed to read
+ * a frame's size and existing callers accept hidden key frames. */
 function vp8HasKeyFrame(bytes: Uint8Array, payloadOffset: number): boolean {
   return (
+    (uint24LE(bytes, payloadOffset) & 0x01) === 0 &&
     bytes[payloadOffset + 3] === 0x9d &&
     bytes[payloadOffset + 4] === 0x01 &&
     bytes[payloadOffset + 5] === 0x2a
   );
+}
+
+/** The upper 19 bits of a VP8 frame tag declare the byte count of its first
+ * compressed partition. A key frame has a ten-byte uncompressed header, so
+ * the declared partition must fit after it without crossing the WebP chunk
+ * boundary. */
+function vp8FirstPartitionFits(
+  bytes: Uint8Array,
+  payloadOffset: number,
+  length: number,
+): boolean {
+  const firstPartitionLength = uint24LE(bytes, payloadOffset) >>> 5;
+  return firstPartitionLength <= length - 10;
 }
 
 /** True when a VP8L (lossless) payload opens with its 0x2F signature byte. */
@@ -426,6 +442,9 @@ function imageChunkHasData(
     if (!vp8HasKeyFrame(bytes, payloadOffset)) {
       throw new Error(`Not a WebP: malformed VP8 frame ${where}`);
     }
+    if (!vp8FirstPartitionFits(bytes, payloadOffset, length)) {
+      throw new Error(`Not a WebP: VP8 first partition is truncated ${where}`);
+    }
     return true;
   }
   if (child === "VP8L") {
@@ -474,8 +493,14 @@ function webpSize(bytes: Uint8Array): ImageDimensions {
     if (firstLength < 10) throw new Error("Not a WebP: VP8 chunk is too short");
     // Key frame: a 3-byte frame tag, the 0x9D012A start code, then 16-bit
     // little-endian width and height whose top two bits are a scale factor.
+    if ((uint24LE(bytes, 20) & 0x01) !== 0) {
+      throw new Error("Not a WebP: VP8 chunk is not a key frame");
+    }
     if (!vp8HasKeyFrame(bytes, 20)) {
       throw new Error("Not a WebP: missing VP8 key frame start code");
+    }
+    if (!vp8FirstPartitionFits(bytes, 20, firstLength)) {
+      throw new Error("Not a WebP: VP8 first partition is truncated");
     }
     dimensions = {
       width: uint16LE(bytes, 26) & 0x3fff,

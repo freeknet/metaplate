@@ -18,7 +18,8 @@ All notable changes to Metaplate are documented in this file. The project uses
   invalid IHDR methods, oversized zlib windows, invalid indexed palettes, and
   unknown critical chunks now fail verification.
 - Validate WebP extended-container animation structure, including canvas-area
-  bounds, required animation controls, frame bounds, and RIFF padding bytes.
+  bounds, required animation controls, frame bounds, RIFF padding bytes, and
+  lossy VP8 first-partition lengths that overrun their declared chunk payload.
 - Reject JPEG frames whose encoded width or height is zero.
 
 ### Documentation
