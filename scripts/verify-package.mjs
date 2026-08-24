@@ -228,12 +228,17 @@ try {
       dependency.startsWith("@next/swc-") &&
       existsSync(join(root, "node_modules", ...dependency.split("/"))),
   );
-  if (installedSwc.length !== 1) {
+  if (installedSwc.length === 0) {
     throw new Error(
-      `Expected one locally installed Next SWC package, found ${installedSwc.join(", ") || "none"}.`,
+      "Expected at least one locally installed Next SWC package, found none.",
     );
   }
-  copyLockedDependencyTree(nextApp, installedSwc[0], copiedNextPackages);
+  // npm can retain both glibc and musl candidates on Linux. Copy every
+  // installed, lockfile-verified candidate and let Next select the binary for
+  // the current runtime rather than assuming the install contains exactly one.
+  for (const swcPackage of installedSwc) {
+    copyLockedDependencyTree(nextApp, swcPackage, copiedNextPackages);
+  }
 
   mkdirSync(join(nextApp, "app"));
   writeFileSync(join(nextApp, "next.config.mjs"), "export default { output: 'export' };\n");
