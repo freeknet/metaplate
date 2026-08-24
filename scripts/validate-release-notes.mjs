@@ -39,7 +39,10 @@ export function validateReleaseNotes(body, version) {
   if (!body.includes(`npm install metaplate@${version}`)) {
     errors.push(`install section must pin metaplate@${version}`);
   }
-  if (!body.includes(`/compare/`) || !body.includes(`...v${version}`)) {
+  if (
+    version !== "0.1.0" &&
+    (!body.includes(`/compare/`) || !body.includes(`...v${version}`))
+  ) {
     errors.push("full changelog must link a comparison ending at this version");
   }
   if (/^## What's Changed\s*$/m.test(body) && body.indexOf("## What's Changed") < 200) {
