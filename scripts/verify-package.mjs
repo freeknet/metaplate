@@ -651,13 +651,27 @@ export const loader = og.handlerFrom(({ params }: Route.LoaderArgs) => ({
 `,
   );
   const routerCli = join(routerApp, "node_modules", "@react-router", "dev", "bin.js");
-  execFileSync(process.execPath, [routerCli, "typegen"], { cwd: routerApp, stdio: "inherit" });
+  const runRouterCli = (command) => {
+    const result = spawnSync(process.execPath, [routerCli, command], {
+      cwd: routerApp,
+      encoding: "utf8",
+    });
+    if (result.status !== 0) {
+      process.stdout.write(result.stdout ?? "");
+      process.stderr.write(result.stderr ?? "");
+      throw new Error(`React Router ${command} failed with status ${result.status}.`);
+    }
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    if (output.includes("The `envFile` option is deprecated")) {
+      throw new Error(
+        `React Router ${command} used Vite's deprecated envFile option.`,
+      );
+    }
+  };
+  runRouterCli("typegen");
   const routerTsc = join(routerApp, "node_modules", "typescript", "bin", "tsc");
   execFileSync(process.execPath, [routerTsc, "--noEmit"], { cwd: routerApp, stdio: "inherit" });
-  execFileSync(process.execPath, [routerCli, "build"], {
-    cwd: routerApp,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  runRouterCli("build");
   runModule(
     `
       import express from "express";

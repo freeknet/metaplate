@@ -51,6 +51,10 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Fixed
 
+- Pin the certified React Router 7 fixture to Vite 7.3.6 instead of allowing
+  npm to select Vite 8. React Router 7 passes Vite's deprecated `envFile`
+  option internally under Vite 8; package verification now rejects that
+  warning if the mismatch returns.
 - Harden PNG structural validation: unsupported color/bit-depth combinations,
   invalid IHDR methods, oversized zlib windows, invalid indexed palettes, and
   unknown critical chunks now fail verification.
