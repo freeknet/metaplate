@@ -22,10 +22,14 @@ export type SocialImageDescriptor = ImageSize & {
   type?: string;
 };
 
-export type TwitterCard = "summary" | "summary_large_image";
+/** X Card presentation. The emitted HTML protocol still uses `twitter:*`. */
+export type XCard = "summary" | "summary_large_image";
+
+/** Wire-format alias retained for Next.js and existing consumers. */
+export type TwitterCard = XCard;
 
 export type SocialImageMetadata<
-  Card extends TwitterCard = "summary_large_image",
+  Card extends XCard = "summary_large_image",
 > = {
   openGraph: { images: SocialImageDescriptor[] };
   twitter: {
@@ -43,7 +47,7 @@ export type OpenGraphImageOptions = {
   images: readonly SocialImageDescriptor[];
 };
 
-export type TwitterImageOptions<Card extends TwitterCard = TwitterCard> = {
+export type XImageOptions<Card extends XCard = XCard> = {
   card?: Card;
   /** A channel-specific image. Omit it to reuse the default social image. */
   image?: SocialImageDescriptor;
@@ -53,7 +57,11 @@ export type TwitterImageOptions<Card extends TwitterCard = TwitterCard> = {
   creatorId?: string;
 };
 
-export type SocialImageOptions<Card extends TwitterCard = TwitterCard> = {
+/** Wire-format alias retained for Next.js and existing consumers. */
+export type TwitterImageOptions<Card extends XCard = XCard> =
+  XImageOptions<Card>;
+
+export type SocialImageOptions<Card extends XCard = XCard> = {
   size?: ImageSize;
   imagePath?: string;
   /** Deployment prefix such as a GitHub Pages repository path. */
@@ -68,7 +76,7 @@ export type SocialImageOptions<Card extends TwitterCard = TwitterCard> = {
   /** Replaces the default Open Graph image while preserving caller order. */
   openGraph?: OpenGraphImageOptions;
   /** Overrides X Card image, card style, and account identity. */
-  twitter?: TwitterImageOptions<Card>;
+  twitter?: XImageOptions<Card>;
 };
 
 /** Enforces the image-dimension contract at every public boundary. */
@@ -227,7 +235,7 @@ function copyImages(
  * so later caller mutation cannot change the generated metadata.
  */
 export function socialImageMetadata<
-  Card extends TwitterCard = "summary_large_image",
+  Card extends XCard = "summary_large_image",
 >(
   route: string,
   alt: string,

@@ -16,6 +16,11 @@ All notable changes to Metaplate are documented in this file. The project uses
   site/creator names and IDs while preserving the existing shared-image
   default. Override descriptors are copied so later source mutation cannot
   desynchronize the channels.
+- Export X-first `XCard` and `XImageOptions` names while retaining
+  `TwitterCard` and `TwitterImageOptions` as wire-format-compatible aliases.
+  Documentation now maps the Open Graph and X channels to the platforms that
+  consume them so the `twitter` metadata key is not mistaken for the only
+  supported target.
 - `socialImageCompatibility` provides side-effect-free universal, Open Graph,
   Facebook, X, LinkedIn, Slack, Mastodon, Discord, and Instagram profiles with
   explicit error, warning, and unknown verdicts.

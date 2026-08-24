@@ -13,6 +13,8 @@ export {
   type SocialImageOptions,
   type TwitterCard,
   type TwitterImageOptions,
+  type XCard,
+  type XImageOptions,
 } from "./core.js";
 
 export {

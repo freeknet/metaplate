@@ -528,6 +528,21 @@ silently producing a URL that normalizes somewhere else.
 
 ### Channel-specific images and X Cards
 
+Metaplate configures two published webpage metadata channels, not one platform:
+
+| Metaplate option | Emitted/returned channel | Typical consumers |
+| --- | --- | --- |
+| `openGraph` / `OpenGraphImageOptions` | `og:image` and its structured properties | Facebook, LinkedIn, Slack, Mastodon, Discord, and other Open Graph readers |
+| `twitter` / `XImageOptions` | `twitter:card`, `twitter:image`, and identity fields | X Cards |
+
+The public option remains named `twitter` because `twitter:*` is still the X
+Card wire protocol and because frameworks such as Next.js expose the same
+`twitter` metadata field. `XCard` and `XImageOptions` are the preferred
+human-facing type names; `TwitterCard` and `TwitterImageOptions` remain exact
+aliases for existing code and framework terminology. Platform-specific
+delivery rules are selected separately with `SocialTarget` in
+`socialImageCompatibility`.
+
 The one-image call remains unchanged. When a landscape Open Graph image, a
 square fallback, and an X-specific composition differ, override only those
 channels. Open Graph ordering is preserved and the first descriptor remains

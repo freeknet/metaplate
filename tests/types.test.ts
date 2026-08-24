@@ -3,7 +3,14 @@ import type { ResvgRenderOptions as UpstreamResvgRenderOptions } from "@resvg/re
 import type { SatoriOptions as UpstreamSatoriOptions } from "satori";
 import type { ResvgRenderOptions } from "../src/node.js";
 import type { SatoriNode, SatoriOptions } from "../src/render.js";
-import { socialImageMetadata, type SocialImageMetadata } from "../src/index.js";
+import {
+  socialImageMetadata,
+  type SocialImageMetadata,
+  type TwitterCard,
+  type TwitterImageOptions,
+  type XCard,
+  type XImageOptions,
+} from "../src/index.js";
 
 // Satori's TwConfig is an interface with named properties and no string index
 // signature, so a `Record<string, unknown>` mirror would reject it. The local
@@ -33,8 +40,13 @@ const defaultCard: "summary_large_image" = defaultMetadata.twitter.card;
 const summaryCard: "summary" = socialImageMetadata("/", "card", {
   twitter: { card: "summary" },
 }).twitter.card;
+const xCardAlias: XCard = "summary_large_image";
+const twitterCardAlias: TwitterCard = xCardAlias;
+const xOptions: XImageOptions = { card: twitterCardAlias };
+const twitterOptions: TwitterImageOptions = xOptions;
 void defaultCard;
 void summaryCard;
+void twitterOptions;
 
 describe("React-free type mirror", () => {
   it("is exercised by the type-level assertions above", () => {
