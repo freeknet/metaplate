@@ -1,9 +1,10 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { formatVerifyPath, parseVerifyTargets, VERIFY_USAGE } from "../src/cli-args.js";
+import { METAPLATE_VERSION } from "../src/version.js";
 
 // The CLI runs against the built bundle; rebuild it (fast, no types) so the
 // spawn-based tests never go stale. The bundle is written into a temp dir so
@@ -123,6 +124,31 @@ describe("verify CLI", () => {
     ]);
   }
 
+  function svg(): string {
+    return '<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630"><path d="M0 0h1v1H0z"/></svg>';
+  }
+
+  it("provides successful help and version discovery commands", async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "metaplate-cli-"));
+    const help = run(["--help"], cwd);
+    const shortHelp = run(["-h"], cwd);
+    const version = run(["--version"], cwd);
+    const shortVersion = run(["-v"], cwd);
+    const packageVersion = JSON.parse(
+      await readFile(path.join(import.meta.dirname, "..", "package.json"), "utf8"),
+    ).version;
+
+    expect(help.status).toBe(0);
+    expect(help.stderr).toBe("");
+    expect(help.stdout).toContain(VERIFY_USAGE);
+    expect(shortHelp.stdout).toBe(help.stdout);
+    expect(version.status).toBe(0);
+    expect(version.stderr).toBe("");
+    expect(version.stdout.trim()).toBe(METAPLATE_VERSION);
+    expect(shortVersion.stdout).toBe(version.stdout);
+    expect(METAPLATE_VERSION).toBe(packageVersion);
+  });
+
   it("reports every failing target and exits non-zero", async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "metaplate-cli-"));
     await writeFile(path.join(cwd, "good.png"), png());
@@ -157,5 +183,13 @@ describe("verify CLI", () => {
     );
     expect(right.status).toBe(0);
     expect(right.stdout).toContain("✓ good.png 1200x630");
+
+    await writeFile(path.join(cwd, "good.svg"), svg());
+    const verifiedSvg = run(
+      ["verify", "--format", "svg", "--size", "1200x630", "good.svg"],
+      cwd,
+    );
+    expect(verifiedSvg.status).toBe(0);
+    expect(verifiedSvg.stdout).toContain("✓ good.svg 1200x630");
   });
 });

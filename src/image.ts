@@ -3,8 +3,8 @@ import { pngDimensions } from "./png.js";
 /** One of the formats the verifier can recognize by signature. */
 export type OutputFormat = "svg" | "png" | "jpeg" | "webp";
 
-/** Structurally recognized raster formats. */
-export type ImageFormat = "png" | "jpeg" | "webp";
+/** Structurally recognized formats. */
+export type ImageFormat = "svg" | "png" | "jpeg" | "webp";
 
 export type ImageDimensions = {
   width: number;
@@ -14,6 +14,8 @@ export type ImageDimensions = {
 
 export function imageContentType(format: ImageFormat): string {
   switch (format) {
+    case "svg":
+      return "image/svg+xml";
     case "png":
       return "image/png";
     case "jpeg":
@@ -53,6 +55,108 @@ function matches(bytes: Uint8Array, signature: readonly number[]): boolean {
 }
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] as const;
+
+const XML_WHITESPACE = /^[\t\n\r ]*/;
+const SVG_DIMENSION = /^(?:\d+(?:\.\d*)?|\.\d+)(?:px)?$/i;
+
+/**
+ * Decodes a UTF-8 SVG as text without invoking an XML parser. This verifier
+ * intentionally treats entity declarations as unsafe input: it needs only a
+ * root element and its concrete pixel dimensions, never entity expansion,
+ * external resources, or arbitrary XML features.
+ */
+function svgText(bytes: Uint8Array): string {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    throw new Error("Not an SVG: document is not valid UTF-8");
+  }
+}
+
+function skipSvgPreamble(text: string): number | undefined {
+  let offset = text.charCodeAt(0) === 0xfeff ? 1 : 0;
+  offset += text.slice(offset).match(XML_WHITESPACE)?.[0].length ?? 0;
+
+  if (text.startsWith("<?xml", offset)) {
+    const declarationEnd = text.indexOf("?>", offset + 5);
+    if (declarationEnd === -1) return undefined;
+    offset = declarationEnd + 2;
+    offset += text.slice(offset).match(XML_WHITESPACE)?.[0].length ?? 0;
+  }
+
+  return offset;
+}
+
+/** Returns the first unquoted `>` in an element opening tag. */
+function svgOpeningTagEnd(text: string, offset: number): number | undefined {
+  let quote: string | undefined;
+  for (let index = offset; index < text.length; index += 1) {
+    const character = text[index]!;
+    if (quote) {
+      if (character === quote) quote = undefined;
+    } else if (character === "\"" || character === "'") {
+      quote = character;
+    } else if (character === ">") {
+      return index;
+    }
+  }
+  return undefined;
+}
+
+/** Locates an SVG root opening tag after an optional UTF-8 XML preamble. */
+function svgRootOpeningTag(text: string): { offset: number; end: number } | undefined {
+  const offset = skipSvgPreamble(text);
+  if (offset === undefined || !text.startsWith("<svg", offset)) return undefined;
+  const boundary = text[offset + 4];
+  if (boundary !== ">" && boundary !== "/" && !/[\t\n\r ]/.test(boundary ?? "")) {
+    return undefined;
+  }
+  const end = svgOpeningTagEnd(text, offset + 4);
+  return end === undefined ? undefined : { offset, end };
+}
+
+function svgDimension(openingTag: string, name: "width" | "height"): number {
+  const matches = [...openingTag.matchAll(new RegExp(`(?:^|\\s)${name}\\s*=\\s*(["'])([^"']*)\\1`, "g"))];
+  if (matches.length !== 1) {
+    throw new Error(`Not an SVG: root must declare exactly one ${name} attribute`);
+  }
+  const value = matches[0]![2]!.trim();
+  if (!SVG_DIMENSION.test(value)) {
+    throw new Error(`Not an SVG: ${name} must be a positive pixel dimension`);
+  }
+  const dimension = Number.parseFloat(value);
+  if (!Number.isFinite(dimension) || dimension <= 0) {
+    throw new Error(`Not an SVG: ${name} must be a positive pixel dimension`);
+  }
+  return dimension;
+}
+
+/** Reads concrete root dimensions from a safe, non-expanding subset of SVG. */
+function svgSize(bytes: Uint8Array): ImageDimensions {
+  const text = svgText(bytes);
+  if (/<!\s*(?:doctype|entity)\b/i.test(text)) {
+    throw new Error("Not an SVG: DOCTYPE and entity declarations are not supported");
+  }
+  const root = svgRootOpeningTag(text);
+  if (!root) throw new Error("Not an SVG: missing or truncated root element");
+
+  const openingTag = text.slice(root.offset, root.end + 1);
+  const width = svgDimension(openingTag, "width");
+  const height = svgDimension(openingTag, "height");
+  const selfClosing = /\/\s*>$/.test(openingTag);
+  if (selfClosing) {
+    if (text.slice(root.end + 1).trim()) {
+      throw new Error("Not an SVG: trailing data after self-closing root element");
+    }
+  } else {
+    const close = text.lastIndexOf("</svg>");
+    if (close < root.end || !/^<\/svg>\s*$/.test(text.slice(close))) {
+      throw new Error("Not an SVG: missing or malformed closing root element");
+    }
+  }
+
+  return { width, height, format: "svg" };
+}
 
 /**
  * PNG dimensions plus structural completeness. Delegates to the shared
@@ -189,6 +293,12 @@ function jpegSize(bytes: Uint8Array): ImageDimensions {
       sawFrame = true;
       height = uint16(bytes, offset + 5);
       width = uint16(bytes, offset + 7);
+      // A zero SOF dimension is not a decodable frame. JPEG can defer a zero
+      // height to a later DNL marker, but this structural verifier deliberately
+      // does not implement DNL, so accepting it would return an unusable size.
+      if (width === 0 || height === 0) {
+        throw new Error("Not a JPEG: frame dimensions must be nonzero");
+      }
     }
 
     offset += 2 + length;
@@ -203,14 +313,30 @@ function jpegSize(bytes: Uint8Array): ImageDimensions {
   throw new Error("Not a JPEG: missing image scan (SOS segment)");
 }
 
-/** True when a VP8 (lossy) payload opens with its three-byte key-frame start
- * code, which sits after the three-byte frame tag. */
+/** True when a VP8 (lossy) payload is a key frame and opens with its
+ * three-byte key-frame start code, which sits after the three-byte frame tag.
+ * `show_frame` intentionally remains unconstrained: it is not needed to read
+ * a frame's size and existing callers accept hidden key frames. */
 function vp8HasKeyFrame(bytes: Uint8Array, payloadOffset: number): boolean {
   return (
+    (uint24LE(bytes, payloadOffset) & 0x01) === 0 &&
     bytes[payloadOffset + 3] === 0x9d &&
     bytes[payloadOffset + 4] === 0x01 &&
     bytes[payloadOffset + 5] === 0x2a
   );
+}
+
+/** The upper 19 bits of a VP8 frame tag declare the byte count of its first
+ * compressed partition. A key frame has a ten-byte uncompressed header, so
+ * the declared partition must fit after it without crossing the WebP chunk
+ * boundary. */
+function vp8FirstPartitionFits(
+  bytes: Uint8Array,
+  payloadOffset: number,
+  length: number,
+): boolean {
+  const firstPartitionLength = uint24LE(bytes, payloadOffset) >>> 5;
+  return firstPartitionLength <= length - 10;
 }
 
 /** True when a VP8L (lossless) payload opens with its 0x2F signature byte. */
@@ -229,7 +355,23 @@ function anmfHasImageData(
   bytes: Uint8Array,
   frameOffset: number,
   frameLength: number,
+  canvas: Pick<ImageDimensions, "width" | "height">,
 ): boolean {
+  if (frameLength < 16) {
+    throw new Error("Not a WebP: ANMF frame is too short");
+  }
+
+  // Frame X and Y are stored in two-pixel units. Frame dimensions are
+  // one-based. Do this arithmetic with JavaScript numbers rather than bitwise
+  // operations so values near WebP's 24-bit maximum do not wrap signed.
+  const x = uint24LE(bytes, frameOffset) * 2;
+  const y = uint24LE(bytes, frameOffset + 3) * 2;
+  const width = uint24LE(bytes, frameOffset + 6) + 1;
+  const height = uint24LE(bytes, frameOffset + 9) + 1;
+  if (x + width > canvas.width || y + height > canvas.height) {
+    throw new Error("Not a WebP: ANMF frame extends outside the VP8X canvas");
+  }
+
   const end = frameOffset + frameLength;
   let offset = frameOffset + 16;
   let sawImage = false;
@@ -238,8 +380,17 @@ function anmfHasImageData(
   while (offset + 8 <= end) {
     const child = ascii(bytes, offset, 4);
     const length = uint32LE(bytes, offset + 4);
-    if (offset + 8 + length > end) {
+    const payloadEnd = offset + 8 + length;
+    if (payloadEnd > end) {
       throw new Error("Not a WebP: ANMF frame chunk is truncated");
+    }
+    if (length % 2 !== 0) {
+      if (payloadEnd === end) {
+        throw new Error("Not a WebP: ANMF frame chunk is missing RIFF padding");
+      }
+      if (bytes[payloadEnd] !== 0) {
+        throw new Error("Not a WebP: ANMF frame chunk has nonzero RIFF padding");
+      }
     }
     // WebP frame data is optional ALPH plus one VP8/VP8L bitstream and
     // optional unknown chunks; animation frames never nest.
@@ -264,7 +415,7 @@ function anmfHasImageData(
     if (imageChunkHasData(bytes, offset, length, "in ANMF frame")) {
       sawImage = true;
     }
-    offset += 8 + length + (length % 2);
+    offset = payloadEnd + (length % 2);
   }
   if (offset !== end) {
     throw new Error("Not a WebP: malformed ANMF frame layout");
@@ -282,6 +433,7 @@ function imageChunkHasData(
   chunkOffset: number,
   length: number,
   where: string,
+  canvas?: Pick<ImageDimensions, "width" | "height">,
 ): boolean {
   const child = ascii(bytes, chunkOffset, 4);
   const payloadOffset = chunkOffset + 8;
@@ -289,6 +441,9 @@ function imageChunkHasData(
     if (length < 10) return false;
     if (!vp8HasKeyFrame(bytes, payloadOffset)) {
       throw new Error(`Not a WebP: malformed VP8 frame ${where}`);
+    }
+    if (!vp8FirstPartitionFits(bytes, payloadOffset, length)) {
+      throw new Error(`Not a WebP: VP8 first partition is truncated ${where}`);
     }
     return true;
   }
@@ -300,8 +455,10 @@ function imageChunkHasData(
     return true;
   }
   if (child === "ANMF") {
-    if (length < 16) return false;
-    return anmfHasImageData(bytes, payloadOffset, length);
+    if (!canvas) {
+      throw new Error("Not a WebP: ANMF frame requires a VP8X canvas");
+    }
+    return anmfHasImageData(bytes, payloadOffset, length, canvas);
   }
   return false;
 }
@@ -336,8 +493,14 @@ function webpSize(bytes: Uint8Array): ImageDimensions {
     if (firstLength < 10) throw new Error("Not a WebP: VP8 chunk is too short");
     // Key frame: a 3-byte frame tag, the 0x9D012A start code, then 16-bit
     // little-endian width and height whose top two bits are a scale factor.
+    if ((uint24LE(bytes, 20) & 0x01) !== 0) {
+      throw new Error("Not a WebP: VP8 chunk is not a key frame");
+    }
     if (!vp8HasKeyFrame(bytes, 20)) {
       throw new Error("Not a WebP: missing VP8 key frame start code");
+    }
+    if (!vp8FirstPartitionFits(bytes, 20, firstLength)) {
+      throw new Error("Not a WebP: VP8 first partition is truncated");
     }
     dimensions = {
       width: uint16LE(bytes, 26) & 0x3fff,
@@ -364,6 +527,9 @@ function webpSize(bytes: Uint8Array): ImageDimensions {
       height: uint24LE(bytes, 27) + 1,
       format: "webp",
     };
+    if (dimensions.width * dimensions.height > 0xffffffff) {
+      throw new Error("Not a WebP: VP8X canvas area exceeds 2^32 - 1 pixels");
+    }
   } else {
     throw new Error(`Not a WebP: unsupported chunk ${chunk}`);
   }
@@ -372,20 +538,48 @@ function webpSize(bytes: Uint8Array): ImageDimensions {
   // payload: a structurally complete RIFF holding only the origin/size header
   // reports dimensions yet no usable pixels, so it must not verify.
   const needsPayload = chunk === "VP8X";
+  const animationFlag = needsPayload && (bytes[20]! & 0x02) !== 0;
   let sawPayload = false;
+  let sawAnim = false;
+  let sawAnimationFrame = false;
 
   // Walk the container so a chunk truncated against the declared RIFF size
   // (for example a missing ALPH or ANIM payload) is caught.
   let offset = 12;
   while (offset + 8 <= expectedEnd) {
     const length = uint32LE(bytes, offset + 4);
-    if (offset + 8 + length > expectedEnd) {
+    const child = ascii(bytes, offset, 4);
+    const payloadEnd = offset + 8 + length;
+    if (payloadEnd > expectedEnd) {
       throw new Error("Not a WebP: chunk is truncated");
     }
-    if (needsPayload && imageChunkHasData(bytes, offset, length, "in VP8X container")) {
+    if (length % 2 !== 0) {
+      if (payloadEnd === expectedEnd) {
+        throw new Error("Not a WebP: chunk is missing RIFF padding");
+      }
+      if (bytes[payloadEnd] !== 0) {
+        throw new Error("Not a WebP: chunk has nonzero RIFF padding");
+      }
+    }
+
+    if (child === "ANIM") {
+      if (sawAnim) throw new Error("Not a WebP: multiple ANIM chunks");
+      if (length !== 6) throw new Error("Not a WebP: ANIM chunk must be six bytes");
+      sawAnim = true;
+    }
+    if (child === "ANMF") {
+      if (animationFlag && !sawAnim) {
+        throw new Error("Not a WebP: ANMF frame must follow the ANIM chunk");
+      }
+      sawAnimationFrame = true;
+    }
+    if (
+      needsPayload &&
+      imageChunkHasData(bytes, offset, length, "in VP8X container", dimensions)
+    ) {
       sawPayload = true;
     }
-    offset += 8 + length + (length % 2);
+    offset = payloadEnd + (length % 2);
   }
   if (offset !== expectedEnd) {
     throw new Error("Not a WebP: malformed chunk layout");
@@ -393,20 +587,31 @@ function webpSize(bytes: Uint8Array): ImageDimensions {
   if (needsPayload && !sawPayload) {
     throw new Error("Not a WebP: VP8X container has no image or animation data");
   }
+  if (animationFlag && !sawAnim) {
+    throw new Error("Not a WebP: animation flag requires an ANIM chunk");
+  }
+  if (animationFlag && !sawAnimationFrame) {
+    throw new Error("Not a WebP: animation flag requires an ANMF frame");
+  }
 
   return dimensions;
 }
 
-/** Reads dimensions from a PNG, JPEG, or WebP without decoding the image. */
+/** Reads dimensions from an SVG, PNG, JPEG, or WebP without decoding pixels. */
 export function imageDimensions(input: ArrayBuffer | Uint8Array): ImageDimensions {
   const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
-  if (bytes.byteLength < 16) throw new Error("Unrecognized image: file is too short");
+  if (bytes.byteLength === 0) throw new Error("Unrecognized image: file is too short");
+  const isSvg = looksLikeSvg(bytes);
+  if (bytes.byteLength < 16 && !isSvg) {
+    throw new Error("Unrecognized image: file is too short");
+  }
 
   if (matches(bytes, PNG_SIGNATURE)) return pngSize(bytes);
   if (bytes[0] === 0xff && bytes[1] === 0xd8) return jpegSize(bytes);
   if (ascii(bytes, 0, 4) === "RIFF" && ascii(bytes, 8, 4) === "WEBP") return webpSize(bytes);
+  if (isSvg) return svgSize(bytes);
 
-  throw new Error("Unrecognized image: expected a PNG, JPEG, or WebP signature");
+  throw new Error("Unrecognized image: expected an SVG, PNG, JPEG, or WebP signature");
 }
 
 /** Throws when an image does not have the expected dimensions or format. */
@@ -442,6 +647,19 @@ export function detectFormat(input: ArrayBuffer | Uint8Array): OutputFormat | un
   ) {
     return "webp";
   }
-  if (bytes.byteLength >= 4 && ascii(bytes, 0, 4) === "<svg") return "svg";
+  if (looksLikeSvg(bytes)) return "svg";
   return undefined;
+}
+
+/** A safe SVG signature accepts XML declarations and whitespace, but no XML parsing. */
+function looksLikeSvg(bytes: Uint8Array): boolean {
+  try {
+    const text = svgText(bytes);
+    if (svgRootOpeningTag(text) !== undefined) return true;
+    // Keep dangerous declarations inside the SVG verification path so callers
+    // receive the specific safety error rather than a generic signature miss.
+    return /<!\s*(?:doctype|entity)\b/i.test(text) && /<svg(?=[\t\n\r />])/.test(text);
+  } catch {
+    return false;
+  }
 }

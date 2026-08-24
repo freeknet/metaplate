@@ -21,6 +21,8 @@ export type PackageFont = {
   file: string;
   weight: FontWeight;
   style?: "normal" | "italic";
+  /** Optional BCP 47 language tag passed through to Satori's font selection. */
+  lang?: string;
 };
 
 export type LoadedFont = {
@@ -28,6 +30,8 @@ export type LoadedFont = {
   data: ArrayBuffer;
   weight: FontWeight;
   style: "normal" | "italic";
+  /** Optional BCP 47 language tag passed through to Satori's font selection. */
+  lang?: string;
 };
 
 export type PackageFontOptions = {
@@ -178,6 +182,7 @@ export async function loadPackageFonts(
         data,
         weight: font.weight,
         style: font.style ?? "normal",
+        ...(font.lang === undefined ? {} : { lang: font.lang }),
       };
     }),
   );

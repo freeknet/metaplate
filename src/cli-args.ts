@@ -3,9 +3,9 @@ import { MAX_IMAGE_DIMENSION, type ImageSize } from "./core.js";
 import type { ImageFormat } from "./image.js";
 
 export const VERIFY_USAGE =
-  "Usage: metaplate verify [--format png|jpeg|webp] --size WIDTHxHEIGHT <file> [...] [--size WIDTHxHEIGHT <file> [...]]";
+  "Usage: metaplate verify [--format svg|png|jpeg|webp] --size WIDTHxHEIGHT <file> [...] [--size WIDTHxHEIGHT <file> [...]]";
 
-const FORMATS = new Set<ImageFormat>(["png", "jpeg", "webp"]);
+const FORMATS = new Set<ImageFormat>(["svg", "png", "jpeg", "webp"]);
 
 export type VerifyTarget = {
   file: string;

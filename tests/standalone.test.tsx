@@ -3,6 +3,7 @@ import { expect, it } from "vitest";
 import { packageFontLoader } from "../src/fonts.js";
 import { createNextOg } from "../src/next.js";
 import { createNodeOg, type RenderedPixels } from "../src/node.js";
+import { imageDimensions, verifyImage } from "../src/image.js";
 import { verifyPng } from "../src/png.js";
 import { createSvgOg } from "../src/render.js";
 
@@ -44,6 +45,14 @@ it("renders SVG without Next.js", async () => {
   const svg = await plate.renderSvg({ title: "Framework neutral" });
   expect(svg).toMatch(/^<svg/);
   expect(svg).toContain('width="1200"');
+  expect(imageDimensions(new TextEncoder().encode(svg))).toEqual({
+    width: 1200,
+    height: 630,
+    format: "svg",
+  });
+  expect(verifyImage(new TextEncoder().encode(svg), plate.size, "svg")).toMatchObject({
+    format: "svg",
+  });
   expect(plate.metadata("/docs", { title: "Docs" }).openGraph.images[0]?.alt).toBe(
     "Docs social card",
   );

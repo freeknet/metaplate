@@ -66,6 +66,17 @@ jobs:
             exit 1
           fi
 
+      - name: Validate published release notes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh release view "$RELEASE_TAG" --json body --jq .body > "$RUNNER_TEMP/release-notes.md"
+          node scripts/validate-release-notes.mjs "$RUNNER_TEMP/release-notes.md" "$VERSION"
+
       # No install lifecycle scripts are needed by this project. Keeping them
       # disabled limits what a compromised transitive package can execute.
       - run: npm ci --ignore-scripts

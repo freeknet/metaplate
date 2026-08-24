@@ -9,18 +9,35 @@ function pngChunk(type: string, payload: number[]): number[] {
   return [...length, ...type.split("").map((c) => c.charCodeAt(0)), ...payload, 0, 0, 0, 0];
 }
 
-function pngHeader(width: number, height: number) {
+type PngHeaderOptions = {
+  bitDepth?: number;
+  colorType?: number;
+  compressionMethod?: number;
+  filterMethod?: number;
+  interlaceMethod?: number;
+  chunks?: number[][];
+};
+
+function pngHeader(width: number, height: number, options: PngHeaderOptions = {}) {
+  const {
+    bitDepth = 8,
+    colorType = 6,
+    compressionMethod = 0,
+    filterMethod = 0,
+    interlaceMethod = 0,
+    chunks = [pngChunk("IDAT", [0x78, 0x9c, 0x03, 0x00, 0x00, 0x00, 0x00, 0x01])],
+  } = options;
   const ihdr = [
     (width >>> 24) & 0xff, (width >>> 16) & 0xff, (width >>> 8) & 0xff, width & 0xff,
     (height >>> 24) & 0xff, (height >>> 16) & 0xff, (height >>> 8) & 0xff, height & 0xff,
-    8, 6, 0, 0, 0,
+    bitDepth, colorType, compressionMethod, filterMethod, interlaceMethod,
   ];
   return Uint8Array.from([
     0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
     ...pngChunk("IHDR", ihdr),
     // A complete (empty) zlib datastream: 0x78 0x9C header, an empty deflate
     // block, and the Adler-32 of the empty input.
-    ...pngChunk("IDAT", [0x78, 0x9c, 0x03, 0x00, 0x00, 0x00, 0x00, 0x01]),
+    ...chunks.flat(),
     ...pngChunk("IEND", []),
   ]);
 }
@@ -31,10 +48,37 @@ describe("PNG verification", () => {
   });
 
   it.each([[0, 630], [1200, 0]])("rejects zero IHDR dimensions (%ix%i)", (width, height) => {
-    expect(() => pngDimensions(pngHeader(width, height))).toThrow(/greater than zero/);
+    expect(() => pngDimensions(pngHeader(width, height))).toThrow(/dimensions must be between/);
     expect(() => verifyPng(pngHeader(width, height), { width, height })).toThrow(
-      /greater than zero/,
+      /dimensions must be between/,
     );
+  });
+
+  it.each([[0x80000000, 1], [1, 0x80000000]])(
+    "rejects dimensions beyond PNG's signed 31-bit limit (%ix%i)",
+    (width, height) => {
+      expect(() => pngDimensions(pngHeader(width, height))).toThrow(/dimensions must be between/);
+    },
+  );
+
+  it.each([
+    [1, 2],
+    [4, 4],
+    [16, 3],
+    [8, 1],
+    [8, 5],
+  ])("rejects invalid IHDR bit-depth/color-type pairs (%i/%i)", (bitDepth, colorType) => {
+    expect(() => pngDimensions(pngHeader(1200, 630, { bitDepth, colorType }))).toThrow(
+      /invalid bit depth and color type combination/,
+    );
+  });
+
+  it.each([
+    ["compression", { compressionMethod: 1 }, /compression method/],
+    ["filter", { filterMethod: 1 }, /filter method/],
+    ["interlace", { interlaceMethod: 2 }, /interlace method/],
+  ] as const)("rejects an unsupported IHDR %s method", (_name, options, message) => {
+    expect(() => pngDimensions(pngHeader(1200, 630, options))).toThrow(message);
   });
 
   it("rejects non-PNG input", () => {
@@ -49,7 +93,7 @@ describe("PNG verification", () => {
 
   it("rejects a header-only truncated PNG", () => {
     const headerOnly = Uint8Array.from(pngHeader(1200, 630).subarray(0, 24));
-    expect(() => pngDimensions(headerOnly)).toThrow(/missing IEND/);
+    expect(() => pngDimensions(headerOnly)).toThrow(/shorter than IHDR/);
   });
 
   it("accepts legal zero-length IDAT chunks", () => {
@@ -121,5 +165,79 @@ describe("PNG verification", () => {
       ...pngChunk("IEND", []),
     ]);
     expect(() => pngDimensions(wrongMethod)).toThrow(/deflate-compressed/);
+  });
+
+  it("rejects an IDAT stream whose zlib window size is out of range", () => {
+    // CINFO 8 (the high nibble of 0x88) is outside zlib's permitted 0..7 range.
+    const invalidWindow = pngHeader(1200, 630, {
+      chunks: [pngChunk("IDAT", [0x88, 0x1c, 0x03, 0x00, 0x00, 0x00, 0x00, 0x01])],
+    });
+    expect(() => pngDimensions(invalidWindow)).toThrow(/invalid zlib window size/);
+  });
+
+  it("rejects a duplicate IHDR chunk", () => {
+    const duplicate = pngHeader(1200, 630, {
+      chunks: [
+        pngChunk("IHDR", [0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0]),
+        pngChunk("IDAT", [0x78, 0x9c, 0x03, 0x00, 0x00, 0x00, 0x00, 0x01]),
+      ],
+    });
+    expect(() => pngDimensions(duplicate)).toThrow(/IHDR must appear exactly once/);
+  });
+
+  it("rejects an unknown critical chunk", () => {
+    const unknownCritical = pngHeader(1200, 630, {
+      chunks: [
+        pngChunk("ABCD", []),
+        pngChunk("IDAT", [0x78, 0x9c, 0x03, 0x00, 0x00, 0x00, 0x00, 0x01]),
+      ],
+    });
+    expect(() => pngDimensions(unknownCritical)).toThrow(/unknown critical chunk ABCD/);
+  });
+
+  it("requires PLTE before IDAT for indexed-color PNGs", () => {
+    expect(() => pngDimensions(pngHeader(1200, 630, { colorType: 3 }))).toThrow(
+      /require PLTE before IDAT/,
+    );
+  });
+
+  it("rejects a PLTE chunk after IDAT", () => {
+    const latePalette = pngHeader(1200, 630, {
+      colorType: 3,
+      chunks: [
+        pngChunk("PLTE", [0, 0, 0]),
+        pngChunk("IDAT", [0x78, 0x9c, 0x03, 0x00, 0x00, 0x00, 0x00, 0x01]),
+        pngChunk("PLTE", [255, 255, 255]),
+      ],
+    });
+    expect(() => pngDimensions(latePalette)).toThrow(/PLTE must not appear more than once|PLTE must precede IDAT/);
+  });
+
+  it.each([
+    ["a malformed payload", 2, 3, [0, 0]],
+    ["a palette that exceeds indexed bit depth", 1, 3, [0, 0, 0, 255, 255, 255, 1, 1, 1]],
+    ["a grayscale palette", 8, 0, [0, 0, 0]],
+  ])("rejects %s", (_name, bitDepth, colorType, palette) => {
+    const invalidPalette = pngHeader(1200, 630, {
+      bitDepth,
+      colorType,
+      chunks: [
+        pngChunk("PLTE", palette),
+        pngChunk("IDAT", [0x78, 0x9c, 0x03, 0x00, 0x00, 0x00, 0x00, 0x01]),
+      ],
+    });
+    expect(() => pngDimensions(invalidPalette)).toThrow(/PLTE/);
+  });
+
+  it("rejects duplicate PLTE chunks", () => {
+    const duplicatePalette = pngHeader(1200, 630, {
+      colorType: 3,
+      chunks: [
+        pngChunk("PLTE", [0, 0, 0]),
+        pngChunk("PLTE", [255, 255, 255]),
+        pngChunk("IDAT", [0x78, 0x9c, 0x03, 0x00, 0x00, 0x00, 0x00, 0x01]),
+      ],
+    });
+    expect(() => pngDimensions(duplicatePalette)).toThrow(/PLTE must not appear more than once/);
   });
 });

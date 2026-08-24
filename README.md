@@ -3,6 +3,7 @@
 [![CI](https://github.com/lnorton89/metaplate/actions/workflows/ci.yml/badge.svg)](https://github.com/lnorton89/metaplate/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/lnorton89/metaplate/actions/workflows/codeql.yml/badge.svg)](https://github.com/lnorton89/metaplate/actions/workflows/codeql.yml)
 [![npm](https://img.shields.io/npm/v/metaplate)](https://www.npmjs.com/package/metaplate)
+[![Socket Badge](https://badge.socket.dev/npm/package/metaplate/0.5.0)](https://socket.dev/npm/package/metaplate/overview/0.5.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Composable, framework-neutral Open Graph image tooling for TypeScript.
@@ -593,12 +594,13 @@ A JPEG plate uses `Content-Type = "image/jpeg"` for the same two paths.
 
 ## Verify generated files
 
-`metaplate verify` reads dimensions from the container header — PNG, JPEG, or
-WebP — and runs a structural/truncation check: the chunk stream is walked
-through image data to its terminator, and obvious header shells are rejected,
-so a truncated or partially written file fails even when its dimension header
-survives. It is not a full decode — a file whose headers are intact but whose
-payload cannot decode is outside its scope:
+`metaplate verify` reads dimensions from SVG roots and PNG, JPEG, or WebP
+container headers. It runs a structural/truncation check: raster chunk streams
+are walked through image data to their terminator, while SVG roots must declare
+safe, positive pixel dimensions (without XML entity expansion). Obvious header
+shells, malformed roots, and partially written files fail even when their
+dimension data survives. It is not a full raster decode — a file whose headers
+are intact but whose payload cannot decode is outside its scope:
 
 ```sh
 npx metaplate verify --size 1200x630 public/og.png
@@ -641,7 +643,8 @@ for PNG-only checks.
 - `metaplate/next` — native Next.js `ImageResponse` adapter. Needs `next`.
 - `metaplate/fonts` — hoist-safe package font loading and memoization. No peers.
 - `metaplate/png` — PNG header inspection and dimension verification. No peers.
-- `metaplate/image` — the same for PNG, JPEG, and WebP. No peers.
+- `metaplate/image` — dimension and structural verification for SVG, PNG,
+  JPEG, and WebP. No peers.
 
 ## Design lineage
 

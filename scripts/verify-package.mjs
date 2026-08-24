@@ -1,11 +1,14 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import {
   copyFileSync,
+  cpSync,
   existsSync,
   mkdtempSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -19,6 +22,7 @@ const temporary = mkdtempSync(join(tmpdir(), "metaplate-package-"));
 const consumer = join(temporary, "consumer");
 const standalone = join(temporary, "standalone");
 const bare = join(temporary, "bare");
+const nextApp = join(temporary, "next-app");
 const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const lockfile = JSON.parse(readFileSync(join(root, "package-lock.json"), "utf8"));
 const npmCli = process.env.npm_execpath;
@@ -59,6 +63,20 @@ function runModule(source, cwd) {
   });
 }
 
+/** Finds an exported file without assuming a Next version's output layout. */
+function findExportedFile(directory, name) {
+  for (const entry of readdirSync(directory)) {
+    const path = join(directory, entry);
+    if (statSync(path).isDirectory()) {
+      const nested = findExportedFile(path, name);
+      if (nested) return nested;
+    } else if (entry === name) {
+      return path;
+    }
+  }
+  return undefined;
+}
+
 /** Links exactly the dependency tree npm ci verified from package-lock.json. */
 function linkLockedDependency(directory, name) {
   const entry = lockfile.packages[`node_modules/${name}`];
@@ -73,6 +91,40 @@ function linkLockedDependency(directory, name) {
   const destination = join(directory, "node_modules", ...name.split("/"));
   mkdirSync(resolve(destination, ".."), { recursive: true });
   symlinkSync(source, destination, process.platform === "win32" ? "junction" : "dir");
+}
+
+/**
+ * Turbopack requires `next` itself to physically live beneath its workspace,
+ * unlike ordinary Node resolution where a junction is sufficient. Copy the
+ * lockfile-verified package into the temporary workspace.
+ */
+function copyLockedDependency(directory, name) {
+  const entry = lockfile.packages[`node_modules/${name}`];
+  if (!entry?.version) throw new Error(`No locked version available for ${name}.`);
+  const source = join(root, "node_modules", ...name.split("/"));
+  const installed = JSON.parse(readFileSync(join(source, "package.json"), "utf8"));
+  if (installed.version !== entry.version) {
+    throw new Error(
+      `${name} installation ${installed.version} does not match lockfile ${entry.version}.`,
+    );
+  }
+  const destination = join(directory, "node_modules", ...name.split("/"));
+  mkdirSync(resolve(destination, ".."), { recursive: true });
+  cpSync(source, destination, { recursive: true });
+}
+
+/** Copies an installed, lockfile-verified runtime dependency closure offline. */
+function copyLockedDependencyTree(directory, name, copied = new Set()) {
+  if (copied.has(name)) return copied;
+  copyLockedDependency(directory, name);
+  copied.add(name);
+
+  const source = join(root, "node_modules", ...name.split("/"));
+  const installed = JSON.parse(readFileSync(join(source, "package.json"), "utf8"));
+  for (const dependency of Object.keys(installed.dependencies ?? {})) {
+    copyLockedDependencyTree(directory, dependency, copied);
+  }
+  return copied;
 }
 
 try {
@@ -156,6 +208,126 @@ try {
     throw new Error("metaplate/next rendered without its next peer.");
   `;
   runModule(nextGuidance, consumer);
+
+  // The Next adapter must work in an actual static export, not merely in a
+  // mocked response or a plain Node process (which cannot resolve Next's
+  // extensionless `next/og` module). Install only the packed tarball, then
+  // copy the exact local runtime closure `npm ci` already verified from the
+  // lockfile. Turbopack deliberately does not follow dependencies linked
+  // outside its workspace root.
+  install(nextApp, [archive]);
+  const copiedNextPackages = new Set();
+  for (const dependency of ["next", "react", "react-dom"]) {
+    copyLockedDependencyTree(nextApp, dependency, copiedNextPackages);
+  }
+  const nextManifest = JSON.parse(
+    readFileSync(join(root, "node_modules", "next", "package.json"), "utf8"),
+  );
+  const installedSwc = Object.keys(nextManifest.optionalDependencies ?? {}).filter(
+    (dependency) =>
+      dependency.startsWith("@next/swc-") &&
+      existsSync(join(root, "node_modules", ...dependency.split("/"))),
+  );
+  if (installedSwc.length === 0) {
+    throw new Error(
+      "Expected at least one locally installed Next SWC package, found none.",
+    );
+  }
+  // npm can retain both glibc and musl candidates on Linux. Copy every
+  // installed, lockfile-verified candidate and let Next select the binary for
+  // the current runtime rather than assuming the install contains exactly one.
+  for (const swcPackage of installedSwc) {
+    copyLockedDependencyTree(nextApp, swcPackage, copiedNextPackages);
+  }
+
+  mkdirSync(join(nextApp, "app"));
+  writeFileSync(join(nextApp, "next.config.mjs"), "export default { output: 'export' };\n");
+  writeFileSync(
+    join(nextApp, "app", "layout.js"),
+    `import { createElement as h } from "react";
+export default function Layout({ children }) {
+  return h("html", null, h("body", null, children));
+}
+`,
+  );
+  writeFileSync(
+    join(nextApp, "app", "page.js"),
+    `import { createElement as h } from "react";
+export default function Page() {
+  return h("main", null, "Metaplate packed-package Next smoke");
+}
+`,
+  );
+  writeFileSync(
+    join(nextApp, "app", "opengraph-image.js"),
+    `import { createElement as h } from "react";
+import { createNextOg } from "metaplate/next";
+
+const copy = { title: "Metaplate package smoke", alt: "Metaplate package smoke card" };
+const og = createNextOg({
+  component: (value) => h(
+    "div",
+    {
+      style: {
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        alignItems: "center",
+        background: "#111827",
+        color: "#ffffff",
+        fontSize: 64,
+      },
+    },
+    value.title,
+  ),
+  alt: (value) => value.alt,
+});
+
+export const dynamic = "force-static";
+export const size = og.size;
+export const contentType = og.contentType;
+export default function Image() {
+  return og.render(copy);
+}
+`,
+  );
+
+  const nextCli = join(nextApp, "node_modules", "next", "dist", "bin", "next");
+  try {
+    execFileSync(process.execPath, [nextCli, "build"], {
+      cwd: nextApp,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1" },
+    });
+  } catch (error) {
+    const details = error instanceof Error && "stderr" in error ? error.stderr : error;
+    throw new Error(`Packed-package Next static export failed: ${details}`, { cause: error });
+  }
+
+  const exportedImage = findExportedFile(join(nextApp, "out"), "opengraph-image");
+  if (!exportedImage) {
+    throw new Error("Next static export did not emit the Open Graph image artifact.");
+  }
+  const exportedIndex = readFileSync(join(nextApp, "out", "index.html"), "utf8");
+  if (!exportedIndex.includes("opengraph-image")) {
+    throw new Error("Next static export did not emit Open Graph image metadata.");
+  }
+  runModule(
+    `
+      import { readFile } from "node:fs/promises";
+      import { verifyImage } from "metaplate/image";
+      const result = verifyImage(
+        await readFile(${JSON.stringify(exportedImage)}),
+        { width: 1200, height: 630 },
+        "png",
+      );
+      if (result.format !== "png" || result.width !== 1200 || result.height !== 630) {
+        throw new Error("Next static export image dimensions or content type were incorrect.");
+      }
+    `,
+    nextApp,
+  );
 
   const nodeGuidance = `
     const { createNodeOg } = await import("metaplate/node");

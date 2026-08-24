@@ -37,6 +37,34 @@ describe("package fonts", () => {
     expect(new Uint8Array(font!.data)).toEqual(Uint8Array.of(1, 2, 3));
   });
 
+  it("preserves a declared language tag for Satori font selection", async () => {
+    const { root } = await fixture();
+    const [font] = await loadPackageFonts(
+      [{
+        name: "Example",
+        package: "@fontsource/example",
+        file: "files/example.woff",
+        weight: 700,
+        lang: "ja-JP",
+      }],
+      { cwd: root },
+    );
+
+    expect(font?.lang).toBe("ja-JP");
+
+    const loader = packageFontLoader(
+      [{
+        name: "Example",
+        package: "@fontsource/example",
+        file: "files/example.woff",
+        weight: 700,
+        lang: "ja-JP",
+      }],
+      { cwd: root },
+    );
+    expect((await loader())[0]?.lang).toBe("ja-JP");
+  });
+
   it("names every directory it searched when a package is missing", async () => {
     const { nested } = await fixture();
     expect(() => findPackageDirectory("@fontsource/absent", nested)).toThrow(

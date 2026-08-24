@@ -1,7 +1,12 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { imageDimensions, verifyImage } from "../src/image.js";
+import {
+  detectFormat,
+  imageContentType,
+  imageDimensions,
+  verifyImage,
+} from "../src/image.js";
 
 // The checked-in fixtures (card.jpg, icon.jpg, the .webp files, card.png) are
 // real encoder output rather than hand-built headers, so a misreading of a
@@ -37,7 +42,125 @@ function completePng(width: number, height: number): Uint8Array {
   ]);
 }
 
+function uint24(value: number): number[] {
+  return [value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff];
+}
+
+function webpChunk(type: string, payload: number[]): number[] {
+  return [
+    ...type.split("").map((character) => character.charCodeAt(0)),
+    payload.length & 0xff,
+    (payload.length >>> 8) & 0xff,
+    (payload.length >>> 16) & 0xff,
+    (payload.length >>> 24) & 0xff,
+    ...payload,
+    ...(payload.length % 2 === 0 ? [] : [0]),
+  ];
+}
+
+function completeWebp(chunks: number[][]): Uint8Array {
+  const body = [0x57, 0x45, 0x42, 0x50, ...chunks.flat()];
+  return Uint8Array.from([
+    0x52, 0x49, 0x46, 0x46,
+    body.length & 0xff,
+    (body.length >>> 8) & 0xff,
+    (body.length >>> 16) & 0xff,
+    (body.length >>> 24) & 0xff,
+    ...body,
+  ]);
+}
+
+function vp8xChunk(width: number, height: number, flags = 0): number[] {
+  return webpChunk("VP8X", [flags, 0, 0, 0, ...uint24(width - 1), ...uint24(height - 1)]);
+}
+
+function animChunk(): number[] {
+  return webpChunk("ANIM", [0, 0, 0, 0, 0, 0]);
+}
+
+function vp8lChunk(): number[] {
+  return webpChunk("VP8L", [0x2f, 0, 0, 0, 0]);
+}
+
+function vp8KeyFrameChunk(firstPartitionLength: number, extraData: number[] = []): number[] {
+  const tag = firstPartitionLength << 5;
+  return webpChunk("VP8 ", [
+    tag & 0xff,
+    (tag >>> 8) & 0xff,
+    (tag >>> 16) & 0xff,
+    0x9d, 0x01, 0x2a,
+    0xb0, 0x04, // 1200 pixels wide
+    0x76, 0x02, // 630 pixels high
+    ...extraData,
+  ]);
+}
+
+function anmfChunk(
+  width: number,
+  height: number,
+  x = 0,
+  y = 0,
+  childChunks = [vp8lChunk()],
+): number[] {
+  return webpChunk("ANMF", [
+    ...uint24(x / 2),
+    ...uint24(y / 2),
+    ...uint24(width - 1),
+    ...uint24(height - 1),
+    0, 0, 0, // duration
+    0, // reserved, blend, disposal
+    ...childChunks.flat(),
+  ]);
+}
+
+// A complete baseline JPEG shell with one component, one scan, one
+// entropy-coded byte, and EOI. Its pixel data is intentionally synthetic: the
+// structural reader only needs an otherwise valid path to exercise SOF rules.
+function completeJpeg(width: number, height: number): Uint8Array {
+  return Uint8Array.from([
+    0xff, 0xd8, // SOI
+    0xff, 0xc0, // SOF0
+    0x00, 0x0b, // length 11 (Nf=1)
+    0x08,
+    (height >>> 8) & 0xff, height & 0xff,
+    (width >>> 8) & 0xff, width & 0xff,
+    0x01, // one component
+    0x01, 0x11, 0x00, // component id, sampling factors, quantization table
+    0xff, 0xda, // SOS
+    0x00, 0x08, // length 8 (Ns=1)
+    0x01, 0x01, 0x00, 0x00, 0x3f, 0x00,
+    0x01, // entropy-coded data
+    0xff, 0xd9, // EOI
+  ]);
+}
+
 describe("imageDimensions", () => {
+  it("reads a Satori-compatible SVG with an XML declaration", () => {
+    const svg = new TextEncoder().encode(
+      '<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630"><path d="M0 0h1v1H0z"/></svg>',
+    );
+
+    expect(detectFormat(svg)).toBe("svg");
+    expect(imageDimensions(svg)).toEqual({ width: 1200, height: 630, format: "svg" });
+    expect(verifyImage(svg, { width: 1200, height: 630 }, "svg")).toEqual({
+      width: 1200,
+      height: 630,
+      format: "svg",
+    });
+    expect(imageContentType("svg")).toBe("image/svg+xml");
+  });
+
+  it.each([
+    '<svg width="1200" height="630">',
+    '<svg width="0" height="630"></svg>',
+    '<svg width="100%" height="630"></svg>',
+    '<svg width="1200"></svg>',
+    '<!DOCTYPE svg><svg width="1200" height="630"></svg>',
+    '<!ENTITY card "unsafe"><svg width="1200" height="630"></svg>',
+  ])("rejects unsafe or structurally incomplete SVG: %s", (source) => {
+    expect(() => imageDimensions(new TextEncoder().encode(source))).toThrow(/Not an SVG/);
+  });
+
   it.each([
     ["card.jpg", 1200, 630, "jpeg"],
     ["icon.jpg", 512, 512, "jpeg"],
@@ -57,7 +180,9 @@ describe("imageDimensions", () => {
   it.each([[0, 630], [1200, 0]])(
     "rejects PNG zero dimensions through the generic reader (%ix%i)",
     (width, height) => {
-      expect(() => imageDimensions(completePng(width, height))).toThrow(/greater than zero/);
+      expect(() => imageDimensions(completePng(width, height))).toThrow(
+        /dimensions must be between 1 and 2147483647/,
+      );
     },
   );
 
@@ -65,7 +190,7 @@ describe("imageDimensions", () => {
     const real = fixture("card.png");
     // Signature (8) + IHDR chunk (12 + 13): cut right after the header.
     const truncated = real.subarray(0, 8 + 12 + 13);
-    expect(() => imageDimensions(truncated)).toThrow(/missing IEND/);
+    expect(() => imageDimensions(truncated)).toThrow(/missing IEND terminator/);
   });
 
   it("rejects a real PNG truncated inside its IDAT stream", () => {
@@ -80,7 +205,7 @@ describe("imageDimensions", () => {
       0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13,
       0x49, 0x48, 0x44, 0x52, 0, 0, 0x04, 0xb0, 0, 0, 0x02, 0x76,
     ]);
-    expect(() => imageDimensions(truncated)).toThrow(/missing IEND/);
+    expect(() => imageDimensions(truncated)).toThrow(/file is shorter than IHDR/);
   });
 
   it("rejects an unrecognized signature", () => {
@@ -104,6 +229,15 @@ describe("imageDimensions", () => {
     const truncated = bytes.subarray(0, 500);
     expect(() => imageDimensions(truncated)).toThrow(/missing EOI/);
   });
+
+  it.each([[0, 630], [1200, 0]])(
+    "rejects a JPEG SOF with a zero dimension (%ix%i)",
+    (width, height) => {
+      expect(() => imageDimensions(completeJpeg(width, height))).toThrow(
+        /frame dimensions must be nonzero/,
+      );
+    },
+  );
 
   it("rejects a WebP truncated before its declared RIFF size", () => {
     const bytes = fixture("card-lossy.webp");
@@ -173,6 +307,77 @@ describe("imageDimensions", () => {
       height: 630,
       format: "webp",
     });
+  });
+
+  it("rejects a VP8X canvas whose area exceeds the WebP maximum", () => {
+    const webp = completeWebp([vp8xChunk(65_536, 65_536), vp8lChunk()]);
+    expect(() => imageDimensions(webp)).toThrow(/canvas area exceeds/);
+  });
+
+  it("accepts a VP8X canvas at the 2^32 - 1 pixel boundary", () => {
+    const webp = completeWebp([vp8xChunk(65_537, 65_535), vp8lChunk()]);
+    expect(imageDimensions(webp)).toEqual({ width: 65_537, height: 65_535, format: "webp" });
+  });
+
+  it("rejects an animation flag without its required ANIM chunk", () => {
+    const webp = completeWebp([vp8xChunk(1200, 630, 0x02), vp8lChunk()]);
+    expect(() => imageDimensions(webp)).toThrow(/animation flag requires an ANIM chunk/);
+  });
+
+  it("rejects an animation flag with ANIM but no animation frame", () => {
+    const webp = completeWebp([vp8xChunk(1200, 630, 0x02), animChunk()]);
+    expect(() => imageDimensions(webp)).toThrow(/no image or animation data/);
+  });
+
+  it("rejects an animation control chunk with the wrong fixed length", () => {
+    const webp = completeWebp([
+      vp8xChunk(1200, 630, 0x02),
+      webpChunk("ANIM", [0]),
+      anmfChunk(1200, 630),
+    ]);
+    expect(() => imageDimensions(webp)).toThrow(/ANIM chunk must be six bytes/);
+  });
+
+  it("rejects an animation frame that precedes its control chunk", () => {
+    const webp = completeWebp([
+      vp8xChunk(1200, 630, 0x02),
+      anmfChunk(1200, 630),
+      animChunk(),
+    ]);
+    expect(() => imageDimensions(webp)).toThrow(/ANMF frame must follow the ANIM chunk/);
+  });
+
+  it("accepts a bounded animation with ANIM followed by ANMF", () => {
+    const webp = completeWebp([
+      vp8xChunk(1200, 630, 0x02),
+      animChunk(),
+      anmfChunk(1200, 630),
+    ]);
+    expect(imageDimensions(webp)).toEqual({ width: 1200, height: 630, format: "webp" });
+  });
+
+  it("rejects an animated frame that extends outside the VP8X canvas", () => {
+    const webp = completeWebp([
+      vp8xChunk(1200, 630, 0x02),
+      animChunk(),
+      anmfChunk(1, 1, 1200),
+    ]);
+    expect(() => imageDimensions(webp)).toThrow(/extends outside the VP8X canvas/);
+  });
+
+  it("rejects nonzero RIFF padding after a top-level chunk", () => {
+    const webp = completeWebp([vp8xChunk(1200, 630), vp8lChunk()]);
+    webp[webp.length - 1] = 1;
+    expect(() => imageDimensions(webp)).toThrow(/nonzero RIFF padding/);
+  });
+
+  it("rejects nonzero RIFF padding inside an ANMF frame", () => {
+    const frame = anmfChunk(1200, 630);
+    // The frame itself is even-sized; its final byte is the odd VP8L
+    // sub-chunk's required padding byte.
+    frame[frame.length - 1] = 1;
+    const webp = completeWebp([vp8xChunk(1200, 630, 0x02), animChunk(), frame]);
+    expect(() => imageDimensions(webp)).toThrow(/nonzero RIFF padding/);
   });
 
   it("rejects a PNG whose entire IDAT stream is empty", () => {
@@ -519,6 +724,51 @@ describe("imageDimensions", () => {
       0x00, // RIFF padding byte
     ]);
     expect(() => imageDimensions(webp)).toThrow(/too short/);
+  });
+
+  it("rejects a top-level VP8 frame whose first partition exceeds its payload", () => {
+    // The reviewer's exact shell: the ten-byte VP8 payload has a valid key
+    // frame header but its little-endian 24-bit tag declares a 100-byte first
+    // partition. It must not verify without that partition in the chunk.
+    const webp = Uint8Array.from([
+      0x52, 0x49, 0x46, 0x46,
+      0x16, 0x00, 0x00, 0x00,
+      0x57, 0x45, 0x42, 0x50,
+      0x56, 0x50, 0x38, 0x20,
+      0x0a, 0x00, 0x00, 0x00,
+      0x90, 0x0c, 0x00, 0x9d, 0x01, 0x2a, 0xb0, 0x04, 0x76, 0x02,
+    ]);
+    expect(() => imageDimensions(webp)).toThrow(/first partition is truncated/);
+  });
+
+  it("rejects a VP8X payload whose VP8 first partition exceeds its payload", () => {
+    const webp = completeWebp([
+      vp8xChunk(1200, 630),
+      vp8KeyFrameChunk(100),
+    ]);
+    expect(() => imageDimensions(webp)).toThrow(/first partition is truncated.*VP8X container/);
+  });
+
+  it("rejects an ANMF payload whose VP8 first partition exceeds its payload", () => {
+    const webp = completeWebp([
+      vp8xChunk(1200, 630, 0x02),
+      animChunk(),
+      anmfChunk(1200, 630, 0, 0, [vp8KeyFrameChunk(100)]),
+    ]);
+    expect(() => imageDimensions(webp)).toThrow(/first partition is truncated.*ANMF frame/);
+  });
+
+  it("accepts a VP8 first partition that exactly fits its payload", () => {
+    // `show_frame` is clear here. Structural size inspection must continue to
+    // accept such key frames while enforcing the declared partition boundary.
+    const webp = completeWebp([vp8KeyFrameChunk(1, [0])]);
+    expect(imageDimensions(webp)).toEqual({ width: 1200, height: 630, format: "webp" });
+  });
+
+  it("rejects an interframe that carries a key-frame start-code shell", () => {
+    const vp8 = vp8KeyFrameChunk(1, [0]);
+    vp8[8] = vp8[8]! | 0x01; // frame-type bit in the little-endian frame tag
+    expect(() => imageDimensions(completeWebp([vp8]))).toThrow(/not a key frame/);
   });
 
   it("rejects a top-level VP8L missing its signature byte", () => {
