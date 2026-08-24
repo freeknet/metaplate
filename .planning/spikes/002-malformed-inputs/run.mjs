@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import console from "node:console";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { performance } from "node:perf_hooks";
+import process from "node:process";
 import { pathToFileURL } from "node:url";
 import { deflateSync, inflateSync } from "node:zlib";
 

@@ -1,8 +1,9 @@
-import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import console from "node:console";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import process from "node:process";
 
 const consumer = mkdtempSync(join(tmpdir(), "metaplate-050-workflows-"));
 

@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import console from "node:console";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import process from "node:process";
 import { pathToFileURL } from "node:url";
+import { TextEncoder } from "node:util";
 
 const consumer = mkdtempSync(join(tmpdir(), "metaplate-050-gaps-"));
 
@@ -85,7 +88,6 @@ const svgCli = failed("node", [
 assert.equal(svgCli.status, 1);
 assert.match(svgCli.stderr, /^Invalid format/);
 
-const fakeFontPackage = join(consumer, "fake-font-package");
 writeFileSync(join(consumer, "font.woff"), Uint8Array.of(1, 2, 3));
 // Return the consumer directory so the ordinary path-containment logic still runs.
 const loaded = await fonts.loadPackageFonts(
