@@ -1,33 +1,106 @@
-import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
+import { runScript } from "./run-script.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const manifest = JSON.parse(readFileSync(join(root, "deployment-evidence.json"), "utf8"));
+const allowedStatuses = new Set([
+  "documented",
+  "documented-recipe",
+  "certified-local-contract",
+  "certified",
+  "not-supported",
+]);
+const requiredEvidence = [
+  "packedArtifact",
+  "productionBuild",
+  "output",
+  "imageVerification",
+  "metadataVerification",
+  "providerVersion",
+  "runtimeVersion",
+  "commitSha",
+  "evidenceUrlOrArtifact",
+];
 
-assert.equal(manifest.schemaVersion, 1);
-assert.equal(manifest.release, "0.7.0");
-assert.equal(manifest.policy.edgeNativeRendererRequired, true);
-assert.ok(Array.isArray(manifest.routes) && manifest.routes.length > 0);
-
-for (const route of manifest.routes) {
-  assert.ok(route.id && route.provider && route.runtime && route.status);
-  assert.ok(route.evidence);
-  if (/edge/i.test(route.runtime) || route.id === "edge") {
-    assert.notEqual(route.status, "certified");
-    assert.match(route.reason ?? "", /native|Wasm|renderer/i);
-  }
-  if (/^https:\/\//.test(route.officialDocs ?? "")) {
-    assert.match(route.officialDocs, /^https:\/\//);
-  }
+function present(value) {
+  return value !== undefined && value !== null && value !== "" && value !== false;
 }
 
-const certified = manifest.routes.filter((route) => route.status === "certified");
-const localContracts = manifest.routes.filter((route) => route.status === "certified-local-contract");
-assert.equal(certified.length, 0, "provider claims need real provider evidence before certification");
+export function validateDeploymentManifest(manifest) {
+  const errors = [];
+  if (manifest.schemaVersion !== 1) errors.push("schemaVersion must be 1");
+  if (!Array.isArray(manifest.policy?.certifiedRequires) || manifest.policy.certifiedRequires.length < 5) {
+    errors.push("policy.certifiedRequires must declare the certification evidence requirements");
+  }
+  if (manifest.release !== "0.7.0") errors.push("release must be 0.7.0");
+  if (manifest.policy?.edgeNativeRendererRequired !== true) {
+    errors.push("edgeNativeRendererRequired must be true");
+  }
+  if (!Array.isArray(manifest.routes) || manifest.routes.length === 0) {
+    errors.push("routes must be a non-empty array");
+    return errors;
+  }
 
-process.stdout.write(
-  `Verified deployment evidence manifest: ${manifest.routes.length} routes, ${localContracts.length} local contracts, ${certified.length} provider-certified.\n`,
-);
+  for (const route of manifest.routes) {
+    if (!route || !route.id || !route.provider || !route.runtime || !route.status) {
+      errors.push("every route requires id, provider, runtime, and status");
+      continue;
+    }
+    if (!allowedStatuses.has(route.status)) errors.push(`${route.id}: unknown status ${route.status}`);
+    if (!present(route.evidence)) errors.push(`${route.id}: evidence is required`);
+    if ((/edge/i.test(route.runtime) || route.id === "edge") && route.status === "certified") {
+      errors.push(`${route.id}: native edge runtime cannot be certified without an edge renderer`);
+    }
+    if (route.status === "not-supported" && !present(route.reason)) {
+      errors.push(`${route.id}: not-supported routes require a reason`);
+    }
+    if (route.officialDocs !== undefined && !/^https:\/\//.test(route.officialDocs)) {
+      errors.push(`${route.id}: officialDocs must be an HTTPS URL`);
+    }
+    if (route.status === "certified") {
+      if (!route.certification || typeof route.certification !== "object") {
+        errors.push(`${route.id}: certified routes require a certification object`);
+      } else {
+        const policyRequirements = {
+          packedArtifact: ["packed-artifact"],
+          productionBuild: ["production-build"],
+          output: ["served-or-published-output"],
+          imageVerification: ["image-format-and-dimension-check"],
+          metadataVerification: ["page-metadata-check"],
+        };
+        for (const field of requiredEvidence) {
+          const requiredByPolicy = policyRequirements[field]?.some((requirement) => manifest.policy.certifiedRequires.includes(requirement)) ?? false;
+          if (!present(route.certification[field]) || (policyRequirements[field] && !requiredByPolicy)) {
+            errors.push(`${route.id}: certification.${field} is required`);
+          }
+        }
+        if (route.certification.imageVerification?.verified !== true) {
+          errors.push(`${route.id}: imageVerification.verified must be true`);
+        }
+        if (route.certification.metadataVerification?.verified !== true) {
+          errors.push(`${route.id}: metadataVerification.verified must be true`);
+        }
+      }
+    }
+  }
+  return errors;
+}
+
+export function loadManifest(file = join(root, "deployment-evidence.json")) {
+  return JSON.parse(readFileSync(file, "utf8"));
+}
+
+function main() {
+  const manifest = loadManifest(process.argv[2]);
+  const errors = validateDeploymentManifest(manifest);
+  if (errors.length > 0) throw new Error(`Invalid deployment evidence manifest:\n- ${errors.join("\n- ")}`);
+  const certified = manifest.routes.filter((route) => route.status === "certified");
+  const localContracts = manifest.routes.filter((route) => route.status === "certified-local-contract");
+  process.stdout.write(
+    `Verified deployment evidence manifest: ${manifest.routes.length} routes, ${localContracts.length} local contracts, ${certified.length} provider-certified.\n`,
+  );
+}
+
+runScript(main, import.meta.url);

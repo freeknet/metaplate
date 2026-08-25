@@ -14,19 +14,25 @@ const output = execFileSync(process.execPath, [join(root, "scripts/dependency-in
 });
 const report = JSON.parse(output);
 
-assert.equal(report.schemaVersion, 1);
+assert.equal(report.schemaVersion, 2);
 assert.equal(report.package.name, packageJson.name);
 assert.equal(report.package.version, packageJson.version);
 assert.equal(report.controls.lockfileVersion, lockfile.lockfileVersion);
+assert.equal(report.controls.lockfileInstallScriptField, true);
 assert.equal(report.controls.registryOnlyExpected, true);
 assert.deepEqual(
-  report.package.runtimePeers.sort(),
+  [...report.package.runtimePeers].sort(),
   Object.keys(packageJson.peerDependencies).sort(),
 );
 assert.ok(report.packages.length > 0);
-assert.ok(report.packages.some((entry) => entry.name === "@resvg/resvg-js" && entry.native));
-assert.ok(report.packages.some((entry) => entry.name === "next" && entry.direct));
+assert.ok(report.packages.some((entry) => entry.name === "@resvg/resvg-js" && entry.classification === "runtime-peer" && entry.native));
+assert.ok(report.packages.some((entry) => entry.name === "next" && entry.direct && entry.classification === "runtime-peer"));
+assert.ok(report.packages.some((entry) => entry.name === "esbuild" && entry.installScript === true));
+assert.ok(report.packages.some((entry) => entry.name === "fsevents" && entry.optional === true && entry.installScript === true));
+assert.ok(report.packages.some((entry) => entry.classification === "development-only"));
+assert.ok(report.packages.some((entry) => entry.classification === "optional-platform"));
 assert.ok(report.packages.every((entry) => entry.version));
+assert.ok(report.packages.every((entry) => !entry.path.includes("node_modules/node_modules/")));
 assert.ok(
   report.packages.every(
     (entry) => entry.resolved === null || entry.resolved.startsWith("https://registry.npmjs.org/"),
@@ -35,5 +41,5 @@ assert.ok(
 );
 
 process.stdout.write(
-  `Verified dependency inventory: ${report.summary.lockfilePackages} lockfile packages, ${report.summary.nativePackages} native candidates.\n`,
+  `Verified dependency inventory: ${report.summary.lockfilePackages} lockfile packages, ${report.summary.publishedRuntime} published-runtime, ${report.summary.nativePackages} native candidates.\n`,
 );

@@ -11,8 +11,9 @@ GitHub Releases are the user-facing home for each version. They must explain why
    upstream page that defines the routing, metadata, build, adapter, runtime, or
    deployment behavior. Keep Metaplate's tested runtime/version boundary next
    to that link.
-5. Review `dependency-inventory.json` and record every Socket high/critical
-   alert in `socket-dispositions.json`. Do not describe `npm audit` as
+5. Run `npm run dependencies:report` to generate the canonical local
+   `dependency-inventory.json`, then review it and record every Socket   high/critical alert in `socket-dispositions.json`.
+ Do not describe `npm audit` as
    equivalent to Socket analysis; behavioral and native-code signals need their
    own evidence or an explicit time-bounded exception. An incomplete Socket
    report must not be presented as clean.
@@ -24,6 +25,7 @@ GitHub Releases are the user-facing home for each version. They must explain why
    npm run check:package
    npm run check:dependencies
    npm run check:deployment
+   npm run release:evidence
    node scripts/verify-socket-dispositions.mjs
    ```
 
@@ -51,8 +53,10 @@ provenance attestation. A release is not complete until **Verify published
 artifact** passes.
 
 Then update version-specific badges when applicable and confirm the GitHub
-release remains the best single overview of the version. For 0.7.0 deployment
-claims, retain `deployment-evidence.json`, the provider/runtime evidence table,
-and the dependency inventory with the release artifacts. A route is certified
-only after its packed-artifact, production-build, output, image, and metadata
-evidence is recorded.
+release remains the best single overview of the version. For 0.7.0 deployment claims, retain the checked-in
+`deployment-evidence.json`, the provider/runtime evidence table, the generated
+`release-evidence-report.json`, and the dependency inventory with the release
+artifacts. A route is certified only after its packed-artifact,
+production-build, served/published output, image, and metadata evidence is
+recorded in a structured certification object. Local contract evidence must not
+be described as hosted provider certification.

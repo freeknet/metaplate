@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { OG_CONTENT_TYPE } from "./core.js";
 import { detectFormat, imageContentType, type ImageFormat, type OutputFormat } from "./image.js";
 import { loadPeerPair } from "./optional-peer.js";
@@ -95,6 +96,8 @@ export type NodeOgDefinition<Copy> = SvgOgDefinition<Copy> & {
   headers?: HeadersInit;
   /** Encodes something other than PNG, and declares what that something is. */
   output?: OutputEncoder;
+  /** Adds a strong ETag derived from the final encoded bytes to responses. */
+  etag?: boolean | "sha256";
 };
 
 function assertDimensionPreservingResvgOptions(
@@ -125,6 +128,35 @@ function outputContentType(output: OutputEncoder | undefined): string {
   return "format" in output ? imageContentType(output.format) : output.contentType;
 }
 
+function assertMediaType(value: string): void {
+  if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+\/[!#$%&'*+.^_`|~0-9A-Za-z-]+(?:\s*;\s*[!#$%&'*+.^_`|~0-9A-Za-z-]+=(?:[!#$%&'*+.^_`|~0-9A-Za-z-]+|"[^"\\\r\n]*"))*$/.test(value)) {
+    throw new TypeError(`Invalid output contentType: ${value}`);
+  }
+}
+
+const REPRESENTATION_HEADERS = new Set(["content-type", "content-length", "content-encoding"]);
+
+function assertResponseHeaderConfiguration(input: HeadersInit | undefined): void {
+  const headers = new Headers(input);
+  for (const name of REPRESENTATION_HEADERS) {
+    if (headers.has(name)) {
+      throw new TypeError(`The ${name} response header is owned by Metaplate and must not be configured`);
+    }
+  }
+}
+
+function createResponseHeaders(definition: NodeOgDefinition<unknown>, contentType: string, byteLength: number, etag?: string): Headers {
+  const headers = new Headers(definition.headers);
+  headers.set("Content-Type", contentType);
+  headers.set("Content-Length", String(byteLength));
+  if (etag) headers.set("ETag", etag);
+  return headers;
+}
+
+function strongEtag(bytes: Uint8Array): string {
+  return `"${createHash("sha256").update(bytes).digest("hex")}"`;
+}
+
 /**
  * Defines a Node renderer that emits image bytes and Fetch API Responses for
  * Astro, SvelteKit, Remix, Express adapters, build scripts, and other runtimes.
@@ -132,7 +164,9 @@ function outputContentType(output: OutputEncoder | undefined): string {
 export function createNodeOg<Copy>(definition: NodeOgDefinition<Copy>) {
   const svg = createSvgOg(definition);
   assertDimensionPreservingResvgOptions(definition.resvg, svg.size);
+  assertResponseHeaderConfiguration(definition.headers);
   const contentType = outputContentType(definition.output);
+  assertMediaType(contentType);
   const social = createPlateSocial(definition, contentType, svg.size);
 
   async function rasterize(copy: Copy) {
@@ -167,6 +201,9 @@ export function createNodeOg<Copy>(definition: NodeOgDefinition<Copy>) {
         `output.encode must return a Uint8Array; received ${describe(encoded)}`,
       );
     }
+    if (encoded.byteLength === 0) {
+      throw new Error("output.encode must return non-empty image bytes");
+    }
 
     // A JPEG encoder that returns WebP bytes makes every downstream consumer
     // serve one format while advertising another; the agreement is declared
@@ -196,10 +233,27 @@ export function createNodeOg<Copy>(definition: NodeOgDefinition<Copy>) {
     return { pixels: image.pixels, width: image.width, height: image.height };
   }
 
-  async function response(copy: Copy) {
-    const headers = new Headers(definition.headers);
-    headers.set("Content-Type", contentType);
+  async function artifact(route: string, copy: Copy) {
     const bytes = await render(copy);
+    const format = definition.output && "format" in definition.output
+      ? definition.output.format
+      : detectFormat(bytes);
+    return Object.freeze({
+      bytes,
+      byteLength: bytes.byteLength,
+      contentType,
+      format,
+      size: svg.size,
+      image: Object.freeze({ width: svg.size.width, height: svg.size.height, format }),
+      metadata: social.metadata(route, copy),
+      ...(definition.etag ? { etag: strongEtag(bytes) } : {}),
+    });
+  }
+
+  async function response(copy: Copy) {
+    const bytes = await render(copy);
+    const etag = definition.etag ? strongEtag(bytes) : undefined;
+    const headers = createResponseHeaders(definition as NodeOgDefinition<unknown>, contentType, bytes.byteLength, etag);
     const body = bytes.buffer.slice(
       bytes.byteOffset,
       bytes.byteOffset + bytes.byteLength,
@@ -213,6 +267,7 @@ export function createNodeOg<Copy>(definition: NodeOgDefinition<Copy>) {
     contentType,
     render,
     renderPixels,
+    artifact,
     response,
     ...createPlateHandlers(response),
   });

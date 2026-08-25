@@ -139,9 +139,15 @@ export function socialImageCompatibility(
       options.fileSize !== undefined &&
       options.fileSize > profile.maximumFileSize.bytes
     ) {
-        issues.push(
-          issue(target, "error", "file-size", profile.maximumFileSize.message),
-        );
+      issues.push(issue(target, "error", "file-size", profile.maximumFileSize.message));
+    }
+
+    if (profile.recommendedAspectRatio && (!profile.minimumSize || (image.width >= profile.minimumSize.width && image.height >= profile.minimumSize.height))) {
+      const ratio = image.width / image.height;
+      const { value, tolerance, message } = profile.recommendedAspectRatio;
+      if (Math.abs(ratio - value) > tolerance) {
+        issues.push(issue(target, "warning", "dimensions", `${message} Received ${ratio.toFixed(2)}:1.`));
+      }
     }
 
     if (profile.unknownContract) {

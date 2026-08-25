@@ -863,6 +863,32 @@ export const loader = og.handlerFrom(({ params }: Route.LoaderArgs) => ({
     throw new Error("Installed CLI did not report a dimension mismatch.");
   }
 
+  const jsonCheck = spawnSync(
+    process.execPath,
+    [
+      cliPath,
+      "verify",
+      "--json",
+      "--target",
+      "universal",
+      "--url",
+      absoluteFixtureImage,
+      "--alt",
+      "Packed card",
+      "--size",
+      cardSizeArgument,
+      CLI_IMAGE_FIXTURES.cardJpeg,
+    ],
+    { cwd: consumer, encoding: "utf8" },
+  );
+  if (jsonCheck.status !== 0) {
+    throw new Error(`Installed CLI JSON verification failed: ${jsonCheck.stdout}${jsonCheck.stderr}`);
+  }
+  const jsonReport = JSON.parse(jsonCheck.stdout);
+  if (jsonReport.schemaVersion !== 1 || jsonReport.files[0]?.targets?.universal?.compatible !== true) {
+    throw new Error("Installed CLI JSON verification did not report universal compatibility.");
+  }
+
   const formatCheck = spawnSync(
     process.execPath,
     [
@@ -949,6 +975,15 @@ export const loader = og.handlerFrom(({ params }: Route.LoaderArgs) => ({
     });
 
     verifyPng(await plate.render({ title: "Standalone" }), plate.size);
+    const fetchable = plate.fetchableFrom(async (request, context) => ({
+      title: context.slug + ":" + new URL(request.url).pathname,
+    }));
+    const fetchableResponse = await fetchable.fetch(new Request("https://example.com/cards/packed"), { slug: "packed" });
+    verifyPng(await fetchableResponse.arrayBuffer(), plate.size);
+    const artifact = await plate.artifact("/cards/packed", { title: "Artifact" });
+    if (artifact.byteLength !== artifact.bytes.byteLength || artifact.image.format !== "png" || artifact.metadata.openGraph.images[0].url !== "/cards/packed/og-image") {
+      throw new Error("Packed artifact did not keep bytes, image facts, and metadata together.");
+    }
   `;
   runModule(standaloneSmoke, standalone);
 

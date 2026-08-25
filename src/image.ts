@@ -1,10 +1,10 @@
 import { pngDimensions } from "./png.js";
 
 /** One of the formats the verifier can recognize by signature. */
-export type OutputFormat = "svg" | "png" | "jpeg" | "webp";
+export type OutputFormat = "svg" | "png" | "jpeg" | "webp" | "gif";
 
 /** Structurally recognized formats. */
-export type ImageFormat = "svg" | "png" | "jpeg" | "webp";
+export type ImageFormat = "svg" | "png" | "jpeg" | "webp" | "gif";
 
 export type ImageDimensions = {
   width: number;
@@ -22,6 +22,8 @@ export function imageContentType(format: ImageFormat): string {
       return "image/jpeg";
     case "webp":
       return "image/webp";
+    case "gif":
+      return "image/gif";
   }
 }
 
@@ -463,6 +465,99 @@ function imageChunkHasData(
   return false;
 }
 
+/** Reads GIF87a/GIF89a dimensions and walks its image/extension blocks. */
+function gifSize(bytes: Uint8Array): ImageDimensions {
+  if (bytes.byteLength < 13) throw new Error("Not a GIF: file is shorter than its header");
+  const signature = ascii(bytes, 0, 6);
+  if (signature !== "GIF87a" && signature !== "GIF89a") {
+    throw new Error("Not a GIF: expected GIF87a or GIF89a signature");
+  }
+  const width = uint16LE(bytes, 6);
+  const height = uint16LE(bytes, 8);
+  if (width === 0 || height === 0) throw new Error("Not a GIF: logical screen dimensions must be nonzero");
+
+  let offset = 13;
+  const packed = bytes[10]!;
+  if ((packed & 0x80) !== 0) {
+    const tableLength = 3 * (2 ** ((packed & 0x07) + 1));
+    if (offset + tableLength > bytes.byteLength) throw new Error("Not a GIF: global color table is truncated");
+    offset += tableLength;
+  }
+
+  let sawImage = false;
+  const skipSubBlocks = (label: string): void => {
+    let sawTerminator = false;
+    while (offset < bytes.byteLength) {
+      const length = bytes[offset++]!;
+      if (length === 0) {
+        sawTerminator = true;
+        break;
+      }
+      if (offset + length > bytes.byteLength) throw new Error(`Not a GIF: ${label} sub-block is truncated`);
+      offset += length;
+    }
+    if (!sawTerminator) throw new Error(`Not a GIF: ${label} sub-block terminator is missing`);
+  };
+
+  while (offset < bytes.byteLength) {
+    const block = bytes[offset++]!;
+    if (block === 0x3b) {
+      if (!sawImage) throw new Error("Not a GIF: no image descriptor found");
+      if (offset !== bytes.byteLength) throw new Error("Not a GIF: trailing data after trailer");
+      return { width, height, format: "gif" };
+    }
+    if (block === 0x2c) {
+      if (offset + 9 > bytes.byteLength) throw new Error("Not a GIF: image descriptor is truncated");
+      const left = uint16LE(bytes, offset);
+      const top = uint16LE(bytes, offset + 2);
+      const imageWidth = uint16LE(bytes, offset + 4);
+      const imageHeight = uint16LE(bytes, offset + 6);
+      if (imageWidth === 0 || imageHeight === 0) throw new Error("Not a GIF: image dimensions must be nonzero");
+      if (left + imageWidth > width || top + imageHeight > height) throw new Error("Not a GIF: image descriptor exceeds the logical screen");
+      const descriptorPacked = bytes[offset + 8]!;
+      offset += 9;
+      if ((descriptorPacked & 0x80) !== 0) {
+        const tableLength = 3 * (2 ** ((descriptorPacked & 0x07) + 1));
+        if (offset + tableLength > bytes.byteLength) throw new Error("Not a GIF: local color table is truncated");
+        offset += tableLength;
+      }
+      if (offset >= bytes.byteLength) throw new Error("Not a GIF: missing LZW minimum code size");
+      const lzwMinimumCodeSize = bytes[offset++]!;
+      if (lzwMinimumCodeSize < 2 || lzwMinimumCodeSize > 8) throw new Error("Not a GIF: invalid LZW minimum code size");
+      skipSubBlocks("image data");
+      sawImage = true;
+      continue;
+    }
+    if (block === 0x21) {
+      if (offset >= bytes.byteLength) throw new Error("Not a GIF: extension label is missing");
+      const label = bytes[offset++]!;
+      if (label === 0xf9) {
+        if (offset >= bytes.byteLength || bytes[offset++] !== 4) throw new Error("Not a GIF: malformed graphic control extension");
+        if (offset + 4 > bytes.byteLength) throw new Error("Not a GIF: graphic control extension is truncated");
+        offset += 4;
+        if (offset >= bytes.byteLength || bytes[offset++] !== 0) throw new Error("Not a GIF: graphic control extension terminator is missing");
+      } else if (label === 0xff) {
+        if (offset >= bytes.byteLength) throw new Error("Not a GIF: application extension is truncated");
+        const length = bytes[offset++]!;
+        if (length !== 11 || offset + length > bytes.byteLength) throw new Error("Not a GIF: malformed application extension");
+        offset += length;
+        skipSubBlocks("application extension");
+      } else if (label === 0x01) {
+        if (offset >= bytes.byteLength) throw new Error("Not a GIF: plain-text extension is truncated");
+        const length = bytes[offset++]!;
+        if (length !== 12 || offset + length > bytes.byteLength) throw new Error("Not a GIF: malformed plain-text extension");
+        offset += length;
+        skipSubBlocks("plain-text extension");
+      } else {
+        skipSubBlocks("extension");
+      }
+      continue;
+    }
+    throw new Error(`Not a GIF: unknown block 0x${block.toString(16).padStart(2, "0")}`);
+  }
+  throw new Error("Not a GIF: missing trailer");
+}
+
 /**
  * Reads the canvas size from a lossy, lossless, or extended WebP chunk and
  * walks every chunk inside the RIFF container, so a file truncated before its
@@ -602,11 +697,12 @@ export function imageDimensions(input: ArrayBuffer | Uint8Array): ImageDimension
   const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
   if (bytes.byteLength === 0) throw new Error("Unrecognized image: file is too short");
   const isSvg = looksLikeSvg(bytes);
-  if (bytes.byteLength < 16 && !isSvg) {
+  if (bytes.byteLength < 13 && !isSvg) {
     throw new Error("Unrecognized image: file is too short");
   }
 
   if (matches(bytes, PNG_SIGNATURE)) return pngSize(bytes);
+  if (ascii(bytes, 0, 6) === "GIF87a" || ascii(bytes, 0, 6) === "GIF89a") return gifSize(bytes);
   if (bytes[0] === 0xff && bytes[1] === 0xd8) return jpegSize(bytes);
   if (ascii(bytes, 0, 4) === "RIFF" && ascii(bytes, 8, 4) === "WEBP") return webpSize(bytes);
   if (isSvg) return svgSize(bytes);
@@ -639,6 +735,7 @@ export function verifyImage(
 export function detectFormat(input: ArrayBuffer | Uint8Array): OutputFormat | undefined {
   const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
   if (bytes.byteLength >= 8 && matches(bytes, PNG_SIGNATURE)) return "png";
+  if (bytes.byteLength >= 6 && (ascii(bytes, 0, 6) === "GIF87a" || ascii(bytes, 0, 6) === "GIF89a")) return "gif";
   if (bytes.byteLength >= 2 && bytes[0] === 0xff && bytes[1] === 0xd8) return "jpeg";
   if (
     bytes.byteLength >= 12 &&

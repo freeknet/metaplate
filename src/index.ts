@@ -25,3 +25,10 @@ export {
   type SocialCompatibilityReport,
   type SocialTarget,
 } from "./compatibility.js";
+
+export {
+  verifySocialImage,
+  type SocialImageVerificationIssue,
+  type SocialImageVerificationOptions,
+  type SocialImageVerificationReport,
+} from "./social-verification.js";

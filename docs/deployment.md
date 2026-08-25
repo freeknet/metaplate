@@ -132,11 +132,16 @@ exports. Put a function in `api/og.ts` and keep the route on the Node runtime:
 // api/og.ts
 import { og } from "../src/lib/og";
 
-export const GET = og.handlerFrom((context: { params?: { slug?: string } }) => {
-  const slug = (context.params?.slug ?? "home").slice(0, 80);
+export const GET = og.fetchableFrom((request: Request) => {
+  const slug = new URL(request.url).searchParams.get("slug")?.slice(0, 80) ?? "home";
   return { title: slug, alt: `${slug} card` };
 });
 ```
+
+The first resolver argument is the Web `Request`; route data is read from its
+URL or from the framework's documented request context. `fetchableFrom` returns
+an object with a `fetch` method, so it can be exported directly by Fetch-style
+runtimes without an adapter wrapper.
 
 If a framework supplies generated route types, use those types rather than the
 structural example above. Do not mark this function for Vercel Edge when the
@@ -163,7 +168,7 @@ custom paths and named path parameters:
 import type { Config } from "@netlify/functions";
 import { og } from "../../src/lib/og";
 
-export default og.handlerFrom(({ params }) => {
+export default og.handlerFrom((_request, { params }: { params: Record<string, string | undefined> }) => {
   const slug = (params.slug ?? "home").slice(0, 80);
   return { title: slug, alt: `${slug} card` };
 });
@@ -187,7 +192,11 @@ runtime/region because the generated file cannot be edited safely.
 ## Railway, Render, and generic Node services
 
 For a long-lived service, expose a health endpoint, listen on `process.env.PORT`,
-and use a graceful shutdown path. The provider only needs the normal Node build
+and use a graceful shutdown path. `response()` owns `Content-Type` and computes
+`Content-Length`; configure cache and other non-representation headers through
+`headers`, but do not provide `Content-Type`, `Content-Length`, or
+`Content-Encoding` yourself. Set `etag: "sha256"` when a deterministic strong
+ETag derived from the final bytes is useful. The provider only needs the normal Node build
 and start commands; no Railway or Render SDK is required:
 
 ```ts

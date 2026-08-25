@@ -24,6 +24,7 @@ export type SocialCompatibilityProfile = Readonly<{
   format?: FormatProfile;
   warnOnSvg?: string;
   minimumSize?: Readonly<{ width: number; height: number; message: string }>;
+  recommendedAspectRatio?: Readonly<{ value: number; tolerance: number; message: string }>;
   maximumFileSize?: Readonly<{ bytes: number; message: string }>;
   unknownContract?: string;
 }>;
@@ -69,6 +70,11 @@ export const SOCIAL_COMPATIBILITY_PROFILES = {
       width: 1200,
       height: 627,
       message: "LinkedIn full-size previews require at least 1200x627 pixels.",
+    },
+    recommendedAspectRatio: {
+      value: 1.91,
+      tolerance: 0.02,
+      message: "LinkedIn link previews are optimized for approximately a 1.91:1 aspect ratio.",
     },
     maximumFileSize: {
       bytes: 5_000_000,

@@ -8,13 +8,11 @@
 
 Composable, framework-neutral Open Graph image tooling for TypeScript.
 
-Metaplate turns one branded JSX plate into a consistent image system: SVG and
-raster rendering (PNG by default, any format an encoder produces), Fetch API
-responses, predictable image URLs, configurable Open Graph and X metadata,
-project-, framework-, and package-managed font loading, and image verification.
-It works with plain Node, Node-compatible framework adapters, static build
-scripts, and Next.js. Runtime
-compatibility depends on both the framework and its deployment adapter.
+Define your social images once. Render, serve, and publish them consistently across your TypeScript app.
+
+Metaplate turns a single branded JSX plate into the complete Open Graph image pipeline. Use the same definition to render SVG or raster images, serve them from Node-compatible routes, generate matching Open Graph and X metadata, manage fonts, produce predictable image URLs, and verify the files you ship.
+
+It works with plain Node, static build scripts, Next.js, and Node-compatible framework adapters, without tying your image design to a single framework.
 
 ## Contents
 
@@ -107,13 +105,24 @@ export const og = createNodeOg<{ title: string; alt: string }>({
 });
 ```
 
-The resulting plate supports three output forms:
+The resulting plate supports rendering, a complete artifact, and Fetchable route forms:
 
 ```ts
 const png: Uint8Array = await og.render(copy);
 const svg: string = await og.renderSvg(copy);
+const artifact = await og.artifact("/posts/hello", copy);
 const response: Response = await og.response(copy);
+const fetchable = og.fetchableFrom((request: Request) => ({
+  title: new URL(request.url).pathname,
+  alt: "Social card",
+}));
 ```
+
+`artifact` renders the bytes and matching descriptor metadata from the same copy.
+Node responses own `Content-Type`, `Content-Length`, and `Content-Encoding`; pass
+only unrelated headers such as `Cache-Control`. Set `etag: "sha256"` on the
+plate when responses should carry a deterministic strong ETag based on the final
+encoded bytes.
 
 Rendering is safe to call concurrently. Satori is a pure call, each render
 builds its own Resvg instance, and the font loaders memoize one shared copy
@@ -318,6 +327,12 @@ const og = createNodeOg({
       h("div", { style: { fontSize: 72 } }, copy.title),
     ),
 });
+
+const copy = {
+  eyebrow: "Project guide",
+  title: "Build-time social image",
+  alt: "Project guide social card",
+};
 
 await writeFile("public/og-image.png", await og.render(copy));
 ```
@@ -779,7 +794,8 @@ runtime without a separately tested Wasm-compatible renderer.
 
 ## Verify generated files
 
-`metaplate verify` reads dimensions from SVG roots and PNG, JPEG, or WebP
+`metaplate verify` reads dimensions from SVG roots and PNG, JPEG, WebP, or
+structurally walked GIF files
 container headers. It runs a structural/truncation check: raster chunk streams
 are walked through image data to their terminator, while SVG roots must declare
 safe, positive pixel dimensions (without XML entity expansion). Obvious header
@@ -816,8 +832,12 @@ npx metaplate verify --format jpeg --size 1200x630 out/og-image.jpg
 ```
 
 Or import `verifyImage` from `metaplate/image` in a test, which returns the
-format it verified alongside the dimensions. `metaplate/png` remains available
-for PNG-only checks.
+format it verified alongside the dimensions. For a single application/reporting
+contract, use `verifySocialImage(bytes, descriptor, { targets: [...] })` to catch
+byte/metadata format and dimension mismatches alongside target compatibility
+findings. Add `--json --target linkedin --url https://example.com/og.png --alt
+\"Project card\"` to the CLI for machine-readable deployment checks.
+`metaplate/png` remains available for PNG-only checks.
 
 ## Entry points
 

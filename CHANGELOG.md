@@ -3,6 +3,37 @@
 All notable changes to Metaplate are documented in this file. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] - Unreleased
+
+### Added
+
+- Provider-neutral `fetchable` and `fetchableFrom` handlers for Fetch-style
+  deployments, plus a unified Node `artifact(route, copy)` result that keeps
+  encoded bytes, dimensions, format, content type, and metadata together.
+- `verifySocialImage` combines structural image-byte validation with metadata
+  agreement and social compatibility reports. `metaplate verify` now accepts
+  JSON output, repeated compatibility targets, GIF files, and optional metadata
+  fields for deployment CI.
+- GIF87a/GIF89a structural verification, LinkedIn aspect-ratio guidance, and
+  deterministic SHA-256 ETags for Node responses.
+
+### Changed
+
+- Node responses own and compute `Content-Type` and `Content-Length`, reject
+  caller-supplied representation headers, and preserve unrelated cache headers.
+- Dependency inventory now uses lockfile reachability, nested package identity,
+  optional/dev/peer state, and npm's authoritative `hasInstallScript` field.
+- Deployment certification and Socket release policy manifests are executable;
+  CI evidence reports include verified checks, route status, artifact hashes,
+  dependency summaries, and commit/version context.
+
+### Fixed
+
+- Correct the Vercel example to consume a Web `Request` and the Netlify example
+  to read `params` from the second `context` argument.
+- Prevent empty or invalid custom encoder output and implausible custom media
+  types from becoming HTTP responses.
+
 ## [0.6.0] - 2026-08-24
 
 ### Added
@@ -351,7 +382,8 @@ reflects that `render` may return any consumer-encoded format ([#54]).
 - Typed package exports for framework-neutral, rendering, Node.js, Next.js,
   font, and PNG entry points.
 
-[Unreleased]: https://github.com/lnorton89/metaplate/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/lnorton89/metaplate/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/lnorton89/metaplate/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/lnorton89/metaplate/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/lnorton89/metaplate/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/lnorton89/metaplate/compare/v0.4.0...v0.4.1

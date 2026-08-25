@@ -40,6 +40,11 @@ export function createPlateSocial<Copy>(
 }
 
 /** Shared fixed-copy and argument-resolver handlers used by route adapters. */
+export type FetchableHandler<Result> = {
+  fetch: (...arguments_: unknown[]) => Promise<Result>;
+};
+
+/** Shared fixed-copy, resolver, and Fetchable handlers for route adapters. */
 export function createPlateHandlers<Copy, Result>(
   render: (copy: Copy) => Promise<Result>,
 ) {
@@ -49,5 +54,13 @@ export function createPlateHandlers<Copy, Result>(
       resolve: (...arguments_: Arguments) => Copy | Promise<Copy>,
     ) =>
       async (...arguments_: Arguments) => render(await resolve(...arguments_)),
+    fetchable: (copy: Copy) => ({
+      fetch: () => render(copy),
+    }),
+    fetchableFrom: <Arguments extends unknown[]>(
+      resolve: (...arguments_: Arguments) => Copy | Promise<Copy>,
+    ) => ({
+      fetch: async (...arguments_: Arguments) => render(await resolve(...arguments_)),
+    }),
   });
 }

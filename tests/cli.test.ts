@@ -77,7 +77,6 @@ describe("parseVerifyTargets", () => {
     { args: ["verify", "--size", "99999999999999999999x630", "image.png"] },
     { args: ["verify", "--size", "1200.5x630", "image.png"] },
     { args: ["verify", "--size", "-1200x630", "image.png"] },
-    { args: ["verify", "--format", "gif", "--size", "1200x630", "image.png"] },
   ] satisfies { args: string[] }[])(`rejects invalid arguments: $args`, ({ args }) => {
     expect(() => parseVerifyTargets(args)).toThrow(VERIFY_USAGE);
   });
@@ -164,6 +163,39 @@ describe("verify CLI", () => {
     expect(result.stderr).toContain("✗ bad.png");
     expect(result.stderr).toContain("✗ does-not-exist.png");
     expect(result.stderr).toContain("2 of 3 files failed verification");
+  });
+
+  it("emits stable JSON for a compatible social target", async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "metaplate-cli-"));
+    await writeFile(path.join(cwd, "good.png"), png());
+
+    const result = run([
+      "verify",
+      "--json",
+      "--target",
+      "universal",
+      "--url",
+      "https://example.com/og.png",
+      "--alt",
+      "Project card",
+      "--size",
+      "1200x630",
+      "good.png",
+    ], cwd);
+    const report = JSON.parse(result.stdout) as {
+      schemaVersion: number;
+      files: Array<{ file: string; compatible: boolean; format: string; targets: Record<string, { compatible: boolean }> }>;
+    };
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(report.schemaVersion).toBe(1);
+    expect(report.files[0]).toMatchObject({
+      file: "good.png",
+      compatible: true,
+      format: "png",
+      targets: { universal: { compatible: true } },
+    });
   });
 
   it("honors --format and rejects a format mismatch", async () => {

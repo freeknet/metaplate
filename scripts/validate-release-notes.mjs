@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath, URL } from "node:url";
+import { runScript } from "./run-script.mjs";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const packageVersion = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8")).version;
@@ -66,11 +67,4 @@ function main() {
   process.stdout.write(`Release notes for v${version} are complete: ${file}\n`);
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  try {
-    main();
-  } catch (error) {
-    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-    process.exitCode = 1;
-  }
-}
+runScript(main, import.meta.url);
