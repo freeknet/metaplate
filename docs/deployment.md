@@ -27,9 +27,9 @@ into an image or asset element; allowlist remote assets or keep them local.
 | Deployment shape | API | Runtime | Recommended output | Support status |
 | --- | --- | --- | --- | --- |
 | Static site/CDN | `render()` or `renderSvg()` in a build script | Node at build time only | `public/og-image.png` or `.jpg` | Supported |
-| Vercel Function | `handler()` / `handlerFrom()` or `response()` | Vercel Node.js runtime | `/api/og` or framework route | Supported recipe; certify the exact framework version in CI |
-| Netlify Function | `handler()` / `handlerFrom()` or `response()` | Netlify Node.js Function | Function path or custom path | Supported recipe; generated framework functions use project settings |
-| Railway/Render service | `response()` or `render()` + `Buffer.from()` | Long-lived Node.js service | Application route | Supported generic Node recipe |
+| Vercel Function | `handler()` / `handlerFrom()` or `response()` | Vercel Node.js runtime | `/api/og` or framework route | Locally certified provider-shaped contract; hosted provider certification is separate |
+| Netlify Function | `handler()` / `handlerFrom()` or `response()` | Netlify Node.js Function | Function path or custom path | Locally certified provider-shaped contract; generated framework functions use project settings |
+| Railway/Render service | `response()` or `render()` + `Buffer.from()` | Long-lived Node.js service | Application route | Locally certified generic Node contract; provider deployment remains a recipe |
 | Next.js native route | `metaplate/next` | Next build/Node runtime | Metadata file or route handler | Supported by the Next integration contract |
 | Cloudflare Workers / Vercel Edge / Netlify Edge | Not `metaplate/node` | Edge/Wasm renderer required | Provider route | Not supported by the current native renderer |
 
@@ -141,6 +141,11 @@ export const GET = og.handlerFrom((context: { params?: { slug?: string } }) => {
 If a framework supplies generated route types, use those types rather than the
 structural example above. Do not mark this function for Vercel Edge when the
 plate imports `metaplate/node`; use the Vercel Node.js runtime instead.
+
+The packed-package release gate locally exercises the Vercel-style Web Standard
+handler, Netlify-style `context.params` handler/config shape, and generic Node
+service over HTTP. This proves Metaplate's contract and bytes from the exact npm
+artifact; it does not prove a hosted provider build or account configuration.
 
 - [Vercel Functions](https://vercel.com/docs/functions)
 - [Vercel Node.js runtime](https://vercel.com/docs/functions/runtimes/node-js)

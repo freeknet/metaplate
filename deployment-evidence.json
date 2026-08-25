@@ -26,8 +26,8 @@
       "provider": "Vercel",
       "runtime": "Node.js Functions",
       "api": "Web Standard GET/Response",
-      "status": "documented-recipe",
-      "evidence": "docs/deployment.md",
+      "status": "certified-local-contract",
+      "evidence": "scripts/verify-package.mjs packed-artifact deployment fixture",
       "officialDocs": "https://vercel.com/docs/functions/runtimes/node-js"
     },
     {
@@ -35,8 +35,8 @@
       "provider": "Netlify",
       "runtime": "Node.js Functions",
       "api": "Function/Response",
-      "status": "documented-recipe",
-      "evidence": "docs/deployment.md",
+      "status": "certified-local-contract",
+      "evidence": "scripts/verify-package.mjs packed-artifact deployment fixture",
       "officialDocs": "https://docs.netlify.com/build/functions/configuration/"
     },
     {
@@ -53,8 +53,9 @@
       "provider": "Railway/Render/generic",
       "runtime": "long-lived Node.js",
       "api": "Express/raw bytes",
-      "status": "documented-recipe",
-      "evidence": "docs/deployment.md"
+      "status": "certified-local-contract",
+      "evidence": "scripts/verify-package.mjs packed-artifact deployment fixture",
+      "officialDocs": "https://docs.railway.com/guides/express"
     },
     {
       "id": "edge",

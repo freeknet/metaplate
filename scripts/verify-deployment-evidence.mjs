@@ -25,6 +25,9 @@ for (const route of manifest.routes) {
 }
 
 const certified = manifest.routes.filter((route) => route.status === "certified");
-assert.equal(certified.length, 0, "provider claims need real fixture evidence before certification");
+const localContracts = manifest.routes.filter((route) => route.status === "certified-local-contract");
+assert.equal(certified.length, 0, "provider claims need real provider evidence before certification");
 
-process.stdout.write(`Verified deployment evidence manifest: ${manifest.routes.length} routes, ${certified.length} certified.\n`);
+process.stdout.write(
+  `Verified deployment evidence manifest: ${manifest.routes.length} routes, ${localContracts.length} local contracts, ${certified.length} provider-certified.\n`,
+);

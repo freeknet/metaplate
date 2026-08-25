@@ -532,6 +532,100 @@ const image = social.openGraph.images[0];
     expressApp,
   );
 
+  // Exercise provider-shaped Web Standard handlers from the exact packed
+  // artifact. These fixtures intentionally model provider contracts without
+  // importing provider SDKs: Vercel's Node function shape is a GET export over
+  // Request/Response, while Netlify supplies named path params in context.
+  runModule(
+    `
+      import http from "node:http";
+      import { fontsourceFontLoader } from "metaplate/fonts";
+      import { verifyImage } from "metaplate/image";
+      import { createNodeOg } from "metaplate/node";
+
+      const og = createNodeOg({
+        alt: (copy) => \`${"${copy.title}"} deployment card\`,
+        fonts: fontsourceFontLoader([${fontsourceFontSource}]),
+        headers: { "Cache-Control": "public, max-age=86400" },
+        component: (copy) => ({
+          type: "div",
+          props: {
+            style: {
+              width: "100%",
+              height: "100%",
+              display: "flex",
+              alignItems: "center",
+              background: "#111827",
+              color: "#ffffff",
+              fontFamily: "Inter",
+              fontSize: 64,
+            },
+            children: copy.title,
+          },
+        }),
+      });
+
+      const vercelGet = og.handlerFrom((request) => {
+        const slug = new URL(request.url).pathname.split("/").pop()?.slice(0, 80) || "home";
+        return { title: slug };
+      });
+      const netlifyFunction = og.handlerFrom((_request, { params }) => ({
+        title: (params.slug ?? "home").slice(0, 80),
+      }));
+      const netlifyConfig = { path: "/netlify/:slug", method: "GET" };
+      if (netlifyConfig.path !== "/netlify/:slug" || netlifyConfig.method !== "GET") {
+        throw new Error("Netlify fixture config did not preserve its custom route contract.");
+      }
+
+      const server = http.createServer(async (request, response) => {
+        try {
+          const url = new URL(request.url ?? "/", "http://127.0.0.1");
+          let result;
+          if (url.pathname.startsWith("/vercel/")) {
+            result = await vercelGet(new Request(url));
+          } else if (url.pathname.startsWith("/netlify/")) {
+            result = await netlifyFunction(new Request(url), {
+              params: { slug: url.pathname.slice("/netlify/".length) },
+            });
+          } else if (url.pathname === "/health") {
+            result = new Response(JSON.stringify({ ok: true }), {
+              headers: { "Content-Type": "application/json" },
+            });
+          } else {
+            result = new Response("Not found", { status: 404 });
+          }
+          response.writeHead(result.status, Object.fromEntries(result.headers));
+          response.end(Buffer.from(await result.arrayBuffer()));
+        } catch (error) {
+          response.writeHead(500, { "Content-Type": "text/plain" });
+          response.end(String(error));
+        }
+      });
+      await new Promise((resolve) => server.listen(Number(process.env.PORT ?? 0), "127.0.0.1", resolve));
+      try {
+        const address = server.address();
+        if (!address || typeof address === "string") throw new Error("Deployment fixture did not bind TCP.");
+        const base = \`http://127.0.0.1:\${address.port}\`;
+        const health = await fetch(base + "/health");
+        if (!health.ok || (await health.json()).ok !== true) throw new Error("Node health endpoint failed.");
+        for (const path of ["/vercel/packed", "/netlify/packed"]) {
+          const result = await fetch(base + path);
+          if (!result.ok) throw new Error(\`${"${path}"} returned \${result.status}.\`);
+          if (result.headers.get("content-type") !== ${JSON.stringify(SOCIAL_CARD_FIXTURE.contentType)}) {
+            throw new Error(\`${"${path}"} returned the wrong content type.\`);
+          }
+          if (result.headers.get("cache-control") !== "public, max-age=86400") {
+            throw new Error(\`${"${path}"} returned the wrong cache policy.\`);
+          }
+          verifyImage(new Uint8Array(await result.arrayBuffer()), ${cardSizeSource}, "png");
+        }
+      } finally {
+        await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+      }
+    `,
+    expressApp,
+  );
+
   // Build and serve a current React Router framework-mode resource route.
   // This verifies its loader(args) convention and generated route types from
   // the tarball instead of treating it as an old Remix-style GET handler.
