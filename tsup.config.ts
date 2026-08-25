@@ -7,6 +7,7 @@ export default defineConfig({
     render: "src/render.ts",
     node: "src/node.ts",
     fonts: "src/fonts.ts",
+    "font-data": "src/font-data.ts",
     png: "src/png.ts",
     image: "src/image.ts",
     cli: "src/cli.ts",

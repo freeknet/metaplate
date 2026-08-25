@@ -44,6 +44,11 @@ export const PACKAGE_FONT_FIXTURE = Object.freeze({
   weight: 700,
 });
 
+export const FONTSOURCE_FONT_FIXTURE = Object.freeze({
+  font: "inter",
+  weight: 700,
+});
+
 export const CLI_IMAGE_FIXTURES = Object.freeze({
   cardJpeg: "card.jpg",
   cardWebp: "card-lossy.webp",

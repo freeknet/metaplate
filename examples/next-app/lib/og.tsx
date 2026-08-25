@@ -1,4 +1,4 @@
-import { packageFontLoader } from "metaplate/fonts";
+import { fontsourceFontLoader } from "metaplate/fonts";
 import { createNextOg } from "metaplate/next";
 
 export type OgCopy = {
@@ -10,14 +10,7 @@ export type OgCopy = {
 
 export const og = createNextOg<OgCopy>({
   alt: (copy) => copy.alt,
-  fonts: packageFontLoader([
-    {
-      name: "Inter",
-      package: "@fontsource/inter",
-      file: "files/inter-latin-700-normal.woff",
-      weight: 700,
-    },
-  ]),
+  fonts: fontsourceFontLoader([{ font: "inter", weight: 700 }]),
   component: (copy) => (
     <div
       style={{

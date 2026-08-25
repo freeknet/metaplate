@@ -1,16 +1,9 @@
-import { packageFontLoader } from "metaplate/fonts";
+import { fontsourceFontLoader } from "metaplate/fonts";
 import { createNodeOg } from "metaplate/node";
 
 export const og = createNodeOg<{ title: string }>({
   alt: (copy) => `${copy.title} social card`,
-  fonts: packageFontLoader([
-    {
-      name: "Inter",
-      package: "@fontsource/inter",
-      file: "files/inter-latin-700-normal.woff",
-      weight: 700,
-    },
-  ]),
+  fonts: fontsourceFontLoader([{ font: "inter", weight: 700 }]),
   component: (copy) => (
     <div
       style={{

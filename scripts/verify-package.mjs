@@ -18,6 +18,7 @@ import process from "node:process";
 import { fileURLToPath, URL } from "node:url";
 import {
   CLI_IMAGE_FIXTURES,
+  FONTSOURCE_FONT_FIXTURE,
   FRAMEWORK_DEPENDENCIES,
   PACKAGE_FONT_FIXTURE,
   REQUIRED_RENDERER_PEERS,
@@ -46,6 +47,7 @@ const cardSize = Object.freeze({
 });
 const cardSizeSource = JSON.stringify(cardSize);
 const packageFontSource = JSON.stringify(PACKAGE_FONT_FIXTURE);
+const fontsourceFontSource = JSON.stringify(FONTSOURCE_FONT_FIXTURE);
 const cardSizeArgument = `${cardSize.width}x${cardSize.height}`;
 const iconSizeArgument = `${CLI_IMAGE_FIXTURES.iconWidth}x${CLI_IMAGE_FIXTURES.iconHeight}`;
 const absoluteFixtureImage = new URL(
@@ -209,6 +211,34 @@ try {
   runModule(esmImportSmoke(packageEntries), consumer);
   runModule(nextPeerGuidanceSmoke(), consumer);
 
+  const portableFontEntry = join(
+    consumer,
+    "node_modules",
+    manifest.name,
+    manifest.exports["./font-data"].import,
+  );
+  const portableFontSource = readFileSync(portableFontEntry, "utf8");
+  if (/\bnode:/.test(portableFontSource)) {
+    throw new Error("metaplate/font-data unexpectedly imports a Node built-in.");
+  }
+  runModule(
+    `
+      const { fontLoader } = await import(${JSON.stringify(`${manifest.name}/font-data`)});
+      let calls = 0;
+      const fonts = fontLoader([{
+        name: "Portable",
+        weight: 400,
+        data: () => { calls += 1; return Uint8Array.of(1, 2, 3); },
+      }]);
+      const first = await fonts();
+      const second = await fonts();
+      if (first !== second || calls !== 1 || first[0].data.byteLength !== 3) {
+        throw new Error("The portable font loader did not normalize and memoize bytes.");
+      }
+    `,
+    consumer,
+  );
+
   // The Next adapter must work in an actual static export, not merely in a
   // mocked response or a plain Node process (which cannot resolve Next's
   // extensionless `next/og` module). Install only the packed tarball, then
@@ -341,12 +371,12 @@ export default function Image() {
   writeFileSync(join(astroApp, "astro.config.mjs"), "export default {};\n");
   writeFileSync(
     join(astroApp, "src", "lib", "og.ts"),
-    `import { packageFontLoader } from "metaplate/fonts";
+    `import { fontsourceFontLoader } from "metaplate/fonts";
 import { createNodeOg } from "metaplate/node";
 
 export const og = createNodeOg({
   alt: (copy: { title: string }) => \`${"${copy.title}"} social card\`,
-  fonts: packageFontLoader([${packageFontSource}]),
+  fonts: fontsourceFontLoader([${fontsourceFontSource}]),
   imagePath: ${JSON.stringify(SOCIAL_CARD_FIXTURE.imagePath)},
   origin: ${JSON.stringify(SOCIAL_CARD_FIXTURE.origin)},
   component: (copy: { title: string }) => ({
@@ -444,13 +474,13 @@ const image = social.openGraph.images[0];
   runModule(
     `
       import express from "express";
-      import { packageFontLoader } from "metaplate/fonts";
+      import { fontsourceFontLoader } from "metaplate/fonts";
       import { verifyImage } from "metaplate/image";
       import { createNodeOg } from "metaplate/node";
 
       const og = createNodeOg({
         alt: () => "Express smoke card",
-        fonts: packageFontLoader([${packageFontSource}]),
+        fonts: fontsourceFontLoader([${fontsourceFontSource}]),
         component: () => ({
           type: "div",
           props: {
@@ -596,11 +626,11 @@ export default function Home() { return <main>Metaplate React Router fixture</ma
   );
   writeFileSync(
     join(routerApp, "app", "lib", "og.ts"),
-    `import { packageFontLoader } from "metaplate/fonts";
+    `import { fontsourceFontLoader } from "metaplate/fonts";
 import { createNodeOg } from "metaplate/node";
 export const og = createNodeOg({
   alt: (copy: { title: string }) => \`${"${copy.title}"} social card\`,
-  fonts: packageFontLoader([${packageFontSource}]),
+  fonts: fontsourceFontLoader([${fontsourceFontSource}]),
   component: (copy: { title: string }) => ({
     type: "div",
     props: {
@@ -802,13 +832,13 @@ export const loader = og.handlerFrom(({ params }: Route.LoaderArgs) => ({
   }
 
   const standaloneSmoke = `
-    const { packageFontLoader } = await import("metaplate/fonts");
+    const { fontsourceFontLoader } = await import("metaplate/fonts");
     const { createNodeOg } = await import("metaplate/node");
     const { verifyPng } = await import("metaplate/png");
 
     const plate = createNodeOg({
       alt: () => "card",
-      fonts: packageFontLoader([${packageFontSource}]),
+      fonts: fontsourceFontLoader([${fontsourceFontSource}]),
       component: (copy) => ({
         type: "div",
         props: {

@@ -26,6 +26,11 @@ All notable changes to Metaplate are documented in this file. The project uses
   explicit error, warning, and unknown verdicts.
 - Node and Next plates expose `handlerFrom`, a framework-neutral sync/async
   resolver that forwards every route argument for dynamic copy.
+- Font loading now matches how applications already manage assets:
+  `fontsourceFontLoader` infers family, subset, and WOFF paths from installed
+  Fontsource metadata; `fileFontLoader` reads project-owned files; and the
+  runtime-neutral `metaplate/font-data` entry memoizes existing or lazily
+  fetched bytes for framework and edge runtimes.
 
 ### Changed
 
@@ -88,6 +93,9 @@ All notable changes to Metaplate are documented in this file. The project uses
 - Document Node-versus-edge runtime boundaries, dynamic-route resource and
   SSRF controls, channel-specific metadata, social compatibility profiles,
   and framework certification status.
+- Document how Satori's byte requirement differs from framework CSS loaders,
+  including `next/font`, and give explicit Fontsource, project-file, and
+  framework-provided byte recipes with upstream references.
 - Add reviewed, versioned GitHub release notes, a reusable highlights-first
   template, a draft-release workflow, and publish-time validation so a bare
   generated pull-request list cannot become the release landing page again.
