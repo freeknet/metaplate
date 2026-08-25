@@ -53,6 +53,7 @@ async function main(args: string[]) {
 
   const invocation = parseVerifyInvocation(args);
   const failures: string[] = [];
+  const failedFiles = new Set<string>();
   const jsonFiles: JsonFileReport[] = [];
 
   for (const target of invocation.targets) {
@@ -65,8 +66,8 @@ async function main(args: string[]) {
 
       if (invocation.socialTargets.length > 0 || invocation.maxFileSize !== undefined) {
         const descriptor = {
-          url: invocation.url ?? "https://example.invalid/og-image",
-          alt: invocation.alt ?? "",
+          ...(invocation.url !== undefined ? { url: invocation.url } : {}),
+          ...(invocation.alt !== undefined ? { alt: invocation.alt } : {}),
           width: target.size.width,
           height: target.size.height,
           type: dimensions.format === "svg"
@@ -90,8 +91,12 @@ async function main(args: string[]) {
 
       const valid = !hasError(globalIssues);
       const targetFailures = Object.entries(targetReports).filter(([, report]) => !report.compatible);
-      if (!valid) failures.push(`✗ ${fileName} verification failed: ${messages(globalIssues)}`);
+      if (!valid) {
+        failedFiles.add(fileName);
+        failures.push(`✗ ${fileName} verification failed: ${messages(globalIssues)}`);
+      }
       for (const [socialTarget, report] of targetFailures) {
+        failedFiles.add(fileName);
         failures.push(`✗ ${fileName} ${socialTarget} compatibility failed: ${messages(report.issues)}`);
       }
 
@@ -112,6 +117,7 @@ async function main(args: string[]) {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      failedFiles.add(fileName);
       failures.push(`✗ ${fileName} verification failed: ${message}`);
       jsonFiles.push({
         file: fileName,
@@ -126,7 +132,7 @@ async function main(args: string[]) {
     process.stdout.write(`${JSON.stringify({ schemaVersion: 1, files: jsonFiles }, null, 2)}\n`);
   } else if (failures.length > 0) {
     for (const failure of failures) process.stderr.write(`${failure}\n`);
-    process.stderr.write(`${failures.length} of ${invocation.targets.length} files failed verification\n`);
+    process.stderr.write(`${failedFiles.size} of ${invocation.targets.length} files failed verification\n`);
   }
 
   if (failures.length > 0) process.exitCode = 1;

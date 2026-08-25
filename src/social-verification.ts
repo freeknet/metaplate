@@ -71,6 +71,8 @@ export function verifySocialImage(
   };
   const compatibility = socialImageCompatibility(compatibilityDescriptor, {
     ...(options.targets ? { targets: options.targets } : {}),
+    checkUrl: descriptor.url !== undefined,
+    checkAlt: descriptor.alt !== undefined,
     fileSize: byteLength,
     ...(options.crawlerReady !== undefined ? { crawlerReady: options.crawlerReady } : {}),
   });

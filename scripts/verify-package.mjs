@@ -531,7 +531,7 @@ const image = social.openGraph.images[0];
           packedArtifact: true,
           servedOutput: true,
           imageVerification: { verified: true, format: image.format, width: image.width, height: image.height, byteLength: imageBytes.byteLength },
-          metadataVerification: { verified: true, contentType: response.headers.get("content-type"), cacheControl: response.headers.get("cache-control") },
+          responseVerification: { verified: true, contentType: response.headers.get("content-type"), cacheControl: response.headers.get("cache-control") },
         };
       } finally {
         await new Promise((resolve, reject) =>
@@ -644,7 +644,7 @@ const image = social.openGraph.images[0];
             packedArtifact: true,
             servedOutput: true,
             imageVerification: { verified: true, format: image.format, width: image.width, height: image.height, byteLength: imageBytes.byteLength },
-            metadataVerification: { verified: true, contentType: result.headers.get("content-type"), queryOrPathResolved: true },
+            responseVerification: { verified: true, contentType: result.headers.get("content-type"), queryOrPathResolved: true },
           };
         }
       } finally {

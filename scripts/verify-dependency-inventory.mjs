@@ -28,10 +28,11 @@ assert.deepEqual(
 assert.ok(report.packages.length > 0);
 assert.ok(report.packages.some((entry) => entry.name === "@resvg/resvg-js" && entry.classification === "runtime-peer" && entry.native));
 assert.equal(report.summary.publishedRuntime, 0);
-assert.ok(report.packages.some((entry) => entry.name === "next" && entry.direct && entry.classification === "runtime-peer"));
+assert.ok(report.packages.some((entry) => entry.name === "next" && entry.direct && entry.classification === "runtime-peer-optional"));
 assert.ok(report.packages.some((entry) => entry.name === "esbuild" && entry.installScript === true));
 assert.ok(report.packages.some((entry) => entry.name === "fsevents" && entry.optional === true && entry.installScript === true));
 assert.ok(report.summary.platformBinary > 0);
+assert.ok(report.summary.binaryCandidates >= report.summary.platformBinary);
 assert.ok(report.packages.some((entry) => entry.platformSpecific === true && entry.native === true));
 assert.ok(report.packages.some((entry) => entry.classification === "development-only"));
 assert.ok(report.packages.some((entry) => entry.classification === "runtime-peer-optional" || entry.classification === "runtime-optional" || entry.classification === "development-optional"));

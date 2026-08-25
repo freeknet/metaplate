@@ -1,4 +1,4 @@
-import { assertImageSize, type SocialImageDescriptor } from "./core.js";
+import { assertImageSize, type SocialImageDescriptor, type SocialImageVerificationDescriptor } from "./core.js";
 import {
   SOCIAL_COMPATIBILITY_PROFILES,
   SOCIAL_TARGETS,
@@ -18,6 +18,11 @@ export type SocialCompatibilityIssue = Readonly<{
   message: string;
 }>;
 
+export type SocialCompatibilityImage = Omit<SocialImageDescriptor, "url" | "alt"> & {
+  url?: string;
+  alt?: string;
+};
+
 export type SocialCompatibilityOptions = {
   /** Profiles to evaluate. Defaults to the conservative universal profile. */
   targets?: readonly SocialTarget[];
@@ -25,6 +30,10 @@ export type SocialCompatibilityOptions = {
   fileSize?: number;
   /** Require a crawler-ready absolute HTTPS URL even for generic Open Graph. */
   crawlerReady?: boolean;
+  /** Check the URL contract; defaults to true for direct compatibility checks. */
+  checkUrl?: boolean;
+  /** Check the alt-text contract; defaults to true for direct compatibility checks. */
+  checkAlt?: boolean;
 };
 
 export type SocialCompatibilityReport = Readonly<{
@@ -59,10 +68,13 @@ function crawlerReadyUrl(value: string): boolean {
  * verification with SSRF controls and are not inferred here.
  */
 export function socialImageCompatibility(
-  image: SocialImageDescriptor,
+  image: SocialImageDescriptor | SocialImageVerificationDescriptor,
   options: SocialCompatibilityOptions = {},
 ): SocialCompatibilityReport {
-  assertImageSize(image);
+  if (image.width === undefined || image.height === undefined) {
+    throw new TypeError("social compatibility requires image width and height");
+  }
+  assertImageSize({ width: image.width, height: image.height });
   if (
     options.fileSize !== undefined &&
     (!Number.isInteger(options.fileSize) || options.fileSize < 0)
@@ -81,8 +93,9 @@ export function socialImageCompatibility(
     const profile: SocialCompatibilityProfile =
       SOCIAL_COMPATIBILITY_PROFILES[target];
     if (
+      options.checkUrl !== false &&
       (options.crawlerReady || profile.crawlerReady) &&
-      !crawlerReadyUrl(image.url)
+      (!image.url || !crawlerReadyUrl(image.url))
     ) {
       issues.push(
         issue(
@@ -94,7 +107,7 @@ export function socialImageCompatibility(
       );
     }
 
-    if (!image.alt) {
+    if (options.checkAlt !== false && !image.alt) {
       issues.push(issue(target, "error", "contract", "Social images require alt text."));
     }
 

@@ -1,9 +1,12 @@
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import process from "node:process";
 import { TextDecoder } from "node:util";
+import { fileURLToPath, URL } from "node:url";
+import { classifyLockPackages, packageIdentityFromExample } from "./dependency-model.mjs";
 
+const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const output = process.argv[2] ?? "socket-score-report.json";
 const input = process.argv[3] ?? process.env.SOCKET_REPORT_INPUT;
 const SCORE_KEYS = ["overall", "supplyChain", "maintenance", "quality", "vulnerability", "license"];
@@ -23,42 +26,86 @@ function assertScore(score, label) {
   return Object.fromEntries(SCORE_KEYS.map((key) => [key, score[key]]));
 }
 
-function assertAlerts(alerts, label) {
+function assertAlerts(alerts, label, inventory) {
   if (!Array.isArray(alerts)) throw new Error(`${label} alerts must be an array`);
-  return alerts.map((alert) => {
+  return alerts.map((alert, index) => {
     if (!alert || typeof alert !== "object" || typeof (alert.name ?? alert.type) !== "string") {
       throw new Error(`${label} alerts must contain alert names`);
     }
-    return { ...alert, scope: label };
+    const identity = packageIdentityFromExample(alert.example);
+    const packageName = alert.package ?? identity.package;
+    const version = alert.version ?? identity.version;
+    const matches = packageName && version
+      ? inventory.filter((entry) => entry.name === packageName && entry.version === version)
+      : [];
+    const paths = [...new Set(matches.flatMap((entry) => entry.dependencyPaths ?? []))].sort();
+    const reachability = matches
+      .map((entry) => entry.classification)
+      .sort((a, b) => ({ "published-runtime": 5, "runtime-peer": 4, "runtime-peer-optional": 3, "runtime-optional": 2, "development-only": 1, "development-optional": 0 }[b] ?? -1) - ({ "published-runtime": 5, "runtime-peer": 4, "runtime-peer-optional": 3, "runtime-optional": 2, "development-only": 1, "development-optional": 0 }[a] ?? -1))[0];
+    const enriched = {
+      ...alert,
+      scope: label,
+      ...(packageName ? { package: packageName } : {}),
+      ...(version ? { version } : {}),
+      ...(matches.length > 0 ? {
+        dependencyEvidence: {
+          source: "package-lock.json",
+          paths,
+          reachability: reachability ?? "unknown",
+        },
+      } : {
+        dependencyEvidence: {
+          source: "package-lock.json",
+          paths: [],
+          reachability: "unknown",
+          unresolved: true,
+        },
+      }),
+    };
+    if (paths.length > 0 && !enriched.dependencyPath) enriched.dependencyPath = paths[0];
+    if (matches.length === 0 && ["high", "critical"].includes(alert.severity)) {
+      throw new Error(`${label} alert ${index} could not be resolved in package-lock.json`);
+    }
+    return enriched;
   });
+}
+
+function assertSourceConsistency(source, purl, version) {
+  if (typeof source !== "string" || !source.startsWith("https://socket.dev/")) {
+    throw new Error("Socket report requires an official https://socket.dev/ source");
+  }
+  const purlMatch = typeof purl === "string" && /^pkg:npm\/([^@]+)@([^?]+)$/.exec(purl);
+  const sourceMatch = /\/npm\/package\/([^/?#]+)(?:\/alerts\/([^/?#]+))?/.exec(source);
+  if (purlMatch && (purlMatch[1] !== "metaplate" || purlMatch[2] !== version)) {
+    throw new Error("Socket report PURL must identify metaplate at the baseline version");
+  }
+  if (sourceMatch && (sourceMatch[1] !== "metaplate" && sourceMatch[1] !== `metaplate@${version}` || sourceMatch[2] && sourceMatch[2] !== version)) {
+    throw new Error("Socket report source URL does not identify metaplate at the baseline version");
+  }
 }
 
 function normalize(report, inputSha256) {
   if (!report || typeof report !== "object") throw new Error("Socket report must be a JSON object");
   const data = report.data ?? report;
+  const purl = data.purl ?? data.self?.purl?.replace(/^npm\//, "pkg:npm/");
+  const packageMatch = typeof purl === "string" && /^pkg:npm\/metaplate@(\d+\.\d+\.\d+)/.exec(purl);
   const source = report.source ?? (
-    typeof data.purl === "string"
-      ? `https://socket.dev/npm/package/${data.purl.replace(/^pkg:npm\//, "")}`
-      : data.self?.purl
-        ? `https://socket.dev/npm/package/${data.self.purl.replace(/^npm\//, "")}`
-        : undefined
+    typeof purl === "string"
+      ? `https://socket.dev/npm/package/${purl.replace(/^pkg:npm\//, "")}`
+      : undefined
   );
-  if (typeof source !== "string" || !source.startsWith("https://socket.dev/")) {
-    throw new Error("Socket report requires an official https://socket.dev/ source");
-  }
-  const packageMatch = source.match(/metaplate@(\d+\.\d+\.\d+)/);
-  const version = report.version ?? data.version ?? data.self?.purl?.match(/@(\d+\.\d+\.\d+)$/)?.[1] ?? packageMatch?.[1];
+  const version = report.version ?? data.version ?? packageMatch?.[1] ?? source?.match(/\/alerts\/(\d+\.\d+\.\d+)/)?.[1];
   if (version !== "0.6.0") throw new Error("This baseline importer only accepts metaplate@0.6.0 reports");
-  if (data.purl && data.purl !== `pkg:npm/metaplate@${version}`) throw new Error("Socket report package must be metaplate");
-  const sourcePackage = source.match(/\/npm\/package\/([^/?#]+)/)?.[1];
-  if (!data.purl && sourcePackage !== "metaplate" && sourcePackage !== `metaplate@${version}`) {
-    throw new Error("Socket report package must be metaplate");
-  }
+  assertSourceConsistency(source, purl, version);
+  if (purl && purl !== `pkg:npm/metaplate@${version}`) throw new Error("Socket report package must be metaplate");
 
+  const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+  const lockfile = JSON.parse(readFileSync(join(root, "package-lock.json"), "utf8"));
+  const inventory = classifyLockPackages({ root, manifest, lockfile });
   const shallowScore = assertScore(data.self?.score ?? report.shallow?.score ?? report.shallow, "shallow");
   const deepScore = assertScore(data.transitively?.score ?? report.deep?.score ?? report.deep, "deep");
-  const shallowAlerts = assertAlerts(data.self?.alerts ?? report.shallow?.alerts ?? [], "shallow");
-  const deepAlerts = assertAlerts(data.transitively?.alerts ?? report.deep?.alerts ?? [], "deep");
+  const shallowAlerts = assertAlerts(data.self?.alerts ?? report.shallow?.alerts ?? [], "shallow", inventory);
+  const deepAlerts = assertAlerts(data.transitively?.alerts ?? report.deep?.alerts ?? [], "deep", inventory);
   const deep = data.transitively ?? report.deep ?? {};
   return {
     schemaVersion: 2,
@@ -78,6 +125,7 @@ function normalize(report, inputSha256) {
     provenance: {
       importedFrom: "Socket CLI export",
       inputSha256,
+      dependencyEvidence: "package-lock.json via dependency-model.mjs",
     },
   };
 }

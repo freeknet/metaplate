@@ -17,14 +17,14 @@ const evidenceFieldByRequirement = new Map([
   ["production-build", "productionBuild"],
   ["served-or-published-output", "output"],
   ["image-format-and-dimension-check", "imageVerification"],
-  ["page-metadata-check", "metadataVerification"],
+  ["response-header-check", "responseVerification"],
 ]);
 const requiredCertificationFields = [
   "packedArtifact",
   "productionBuild",
   "output",
   "imageVerification",
-  "metadataVerification",
+  "responseVerification",
   "providerVersion",
   "runtimeVersion",
   "commitSha",
@@ -90,8 +90,8 @@ export function validateDeploymentManifest(manifest) {
         if (route.certification.imageVerification?.verified !== true) {
           errors.push(`${route.id}: imageVerification.verified must be true`);
         }
-        if (route.certification.metadataVerification?.verified !== true) {
-          errors.push(`${route.id}: metadataVerification.verified must be true`);
+        if (route.certification.responseVerification?.verified !== true) {
+          errors.push(`${route.id}: responseVerification.verified must be true`);
         }
       }
     }

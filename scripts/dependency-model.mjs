@@ -14,6 +14,14 @@ export function packageNameFromLockPath(lockPath) {
   return parts[0].startsWith("@") ? parts.slice(0, 2).join("/") : parts[0];
 }
 
+export function packageIdentityFromExample(example) {
+  if (typeof example !== "string") return {};
+  const value = example.replace(/^npm\//, "");
+  const at = value.lastIndexOf("@");
+  if (at <= 0 || at === value.length - 1) return { package: value };
+  return { package: value.slice(0, at), version: value.slice(at + 1) };
+}
+
 export function isRemoteSpecifier(specifier) {
   return /^(?:git(?:\\+|:)|https?:|ssh:|file:)/i.test(specifier);
 }
@@ -52,11 +60,26 @@ function packageHasInstallScript(root, lockPath, entry) {
   return Object.keys(installed.scripts ?? {}).some((script) => INSTALL_SCRIPTS.has(script));
 }
 
+function nativeEvidence(name, entry) {
+  const evidence = [];
+  if (NATIVE_PATTERN.test(name)) evidence.push("known native/binary package naming");
+  if (Object.keys(entry.optionalDependencies ?? {}).some((dependency) => NATIVE_PATTERN.test(dependency))) {
+    evidence.push("native optional dependency metadata");
+  }
+  return evidence;
+}
+
+function binaryEvidence(name, entry) {
+  const evidence = [...nativeEvidence(name, entry)];
+  if (Array.isArray(entry.os) || Array.isArray(entry.cpu) || Array.isArray(entry.libc)) {
+    evidence.push("lockfile platform constraints");
+  }
+  if (isPlatformSpecific(name)) evidence.push("platform-qualified package name");
+  return evidence;
+}
+
 function isNative(name, entry) {
-  return Boolean(
-    NATIVE_PATTERN.test(name) ||
-      Object.keys(entry.optionalDependencies ?? {}).some((dependency) => NATIVE_PATTERN.test(dependency)),
-  );
+  return nativeEvidence(name, entry).length > 0;
 }
 
 function isPlatformSpecific(name) {
@@ -65,12 +88,41 @@ function isPlatformSpecific(name) {
 
 function directDependencyKinds(manifest) {
   const kinds = new Map();
-  for (const name of Object.keys(manifest.dependencies ?? {})) kinds.set(name, "dependency");
-  for (const name of Object.keys(manifest.peerDependencies ?? {})) kinds.set(name, "runtime-peer");
+  for (const name of Object.keys(manifest.dependencies ?? {})) {
+    kinds.set(name, { origin: "published-runtime", optional: false });
+  }
+  for (const name of Object.keys(manifest.peerDependencies ?? {})) {
+    kinds.set(name, {
+      origin: "runtime-peer",
+      optional: manifest.peerDependenciesMeta?.[name]?.optional === true,
+    });
+  }
   for (const name of Object.keys(manifest.devDependencies ?? {})) {
-    if (!kinds.has(name)) kinds.set(name, "development");
+    if (!kinds.has(name)) kinds.set(name, { origin: "development", optional: false });
   }
   return kinds;
+}
+
+const ORIGIN_RANK = new Map([
+  ["development", 0],
+  ["runtime-peer", 1],
+  ["published-runtime", 2],
+]);
+
+function mergeState(current, next) {
+  if (!current) return next;
+  const currentRank = ORIGIN_RANK.get(current.origin) ?? -1;
+  const nextRank = ORIGIN_RANK.get(next.origin) ?? -1;
+  if (nextRank > currentRank) return next;
+  if (nextRank < currentRank) return current;
+  return { origin: current.origin, optional: current.optional && next.optional };
+}
+
+function displayClassification(state) {
+  if (!state) return "unknown";
+  if (state.origin === "published-runtime") return state.optional ? "runtime-optional" : "published-runtime";
+  if (state.origin === "runtime-peer") return state.optional ? "runtime-peer-optional" : "runtime-peer";
+  return state.optional ? "development-optional" : "development-only";
 }
 
 /**
@@ -82,49 +134,53 @@ export function classifyLockPackages({ root, manifest, lockfile }) {
   const packages = lockfile.packages ?? {};
   const directKinds = directDependencyKinds(manifest);
   const classifications = new Map();
+  const dependencyPaths = new Map();
   const visited = new Set();
 
-  function walk(path, classification, edgeOptional = false) {
-    const key = `${classification}:${path}:${edgeOptional}`;
+  function walk(path, state, edgeOptional = false, lineage = "") {
+    const nextState = { ...state, optional: state.optional || edgeOptional };
+    const key = `${nextState.origin}:${path}:${nextState.optional}`;
     if (visited.has(key)) return;
     visited.add(key);
     const entry = packages[path];
     if (!entry) return;
 
-    const optional = edgeOptional || entry.optional === true;
-    const current = classifications.get(path);
-    const effective = optional
-      ? classification === "development-only" ? "development-optional" : "runtime-peer" === classification ? "runtime-peer-optional" : "runtime-optional"
-      : current === "published-runtime" || current === "runtime-peer"
-        ? current
-        : classification;
-    if (!current || current === "development-only" || effective === "published-runtime" || effective === "runtime-peer") {
-      classifications.set(path, effective);
+    const name = packageNameFromLockPath(path);
+    const currentLineage = lineage || manifest.name;
+    const currentPath = `${currentLineage} > ${name}`;
+    if (name) {
+      const paths = dependencyPaths.get(path) ?? new Set();
+      paths.add(currentPath);
+      dependencyPaths.set(path, paths);
     }
+
+    const current = classifications.get(path);
+    const merged = mergeState(current, { ...nextState, optional: nextState.optional || entry.optional === true });
+    classifications.set(path, merged);
 
     for (const [dependency, specifier] of Object.entries(entry.dependencies ?? {})) {
       const child = resolveLockPackage(packages, path, dependency);
       if (child) {
-        walk(child, classification, false);
+        walk(child, nextState, false, currentPath);
       } else if (isRemoteSpecifier(specifier)) {
         classifications.set(`${path}:${dependency}`, "unknown");
       }
     }
     for (const dependency of Object.keys(entry.optionalDependencies ?? {})) {
       const child = resolveLockPackage(packages, path, dependency);
-      if (child) walk(child, classification, true);
+      if (child) walk(child, nextState, true, currentPath);
     }
     for (const dependency of Object.keys(entry.peerDependencies ?? {})) {
       const child = resolveLockPackage(packages, path, dependency);
       const optionalPeer = entry.peerDependenciesMeta?.[dependency]?.optional === true;
-      if (child) walk(child, classification, optionalPeer || edgeOptional);
+      if (child) walk(child, { ...nextState, optional: nextState.optional || optionalPeer }, false, currentPath);
     }
   }
 
   for (const [name, kind] of directKinds) {
     const path = `node_modules/${name}`;
     if (!packages[path]) continue;
-    walk(path, kind === "runtime-peer" ? "runtime-peer" : kind === "dependency" ? "published-runtime" : "development-only");
+    walk(path, kind);
   }
 
   const rows = [];
@@ -134,7 +190,7 @@ export function classifyLockPackages({ root, manifest, lockfile }) {
     if (!name) continue;
     const isDirect = path === `node_modules/${name}` && directKinds.has(name);
     const directKind = isDirect ? directKinds.get(name) : undefined;
-    const classification = classifications.get(path) ?? "unknown";
+    const classification = displayClassification(classifications.get(path));
     rows.push({
       name,
       path,
@@ -148,10 +204,14 @@ export function classifyLockPackages({ root, manifest, lockfile }) {
       devOptional: entry.devOptional === true,
       peer: entry.peer === true,
       native: isNative(name, entry),
+      binaryCandidate: binaryEvidence(name, entry).length > 0,
+      binaryEvidence: binaryEvidence(name, entry),
       platformSpecific: isPlatformSpecific(name),
+      platformBinary: isPlatformSpecific(name) && binaryEvidence(name, entry).length > 0,
       installScript: packageHasInstallScript(root, path, entry),
       resolved: entry.resolved ?? null,
       remoteDependency: Object.values(entry.dependencies ?? {}).some(isRemoteSpecifier),
+      dependencyPaths: [...(dependencyPaths.get(path) ?? [])].sort(),
     });
   }
   return rows.sort((a, b) => a.path.localeCompare(b.path));

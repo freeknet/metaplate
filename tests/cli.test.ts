@@ -205,6 +205,25 @@ describe("verify CLI", () => {
     });
   });
 
+  it("does not invent URL or alt metadata for target-only checks", async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "metaplate-cli-"));
+    await writeFile(path.join(cwd, "good.png"), png());
+    const result = run(["verify", "--json", "--target", "universal", "--size", "1200x630", "good.png"], cwd);
+    expect(result.status).toBe(0);
+    const report = JSON.parse(result.stdout) as { files: Array<{ valid: boolean; targets: Record<string, { compatible: boolean; issues: unknown[] }> }> };
+    expect(report.files[0]?.valid).toBe(true);
+    expect(report.files[0]?.targets.universal).toMatchObject({ compatible: true, issues: [] });
+  });
+
+  it("counts failed files rather than individual findings", async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "metaplate-cli-"));
+    await writeFile(path.join(cwd, "good.png"), png());
+    const result = run(["verify", "--target", "linkedin", "--max-file-size", "1", "--size", "1200x630", "good.png"], cwd);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("1 of 1 files failed verification");
+    expect(result.stderr).not.toContain("2 of 1 files failed verification");
+  });
+
   it("enforces --max-file-size without requiring a social target", async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "metaplate-cli-"));
     await writeFile(path.join(cwd, "good.png"), png());

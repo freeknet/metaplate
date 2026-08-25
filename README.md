@@ -279,7 +279,7 @@ set actually exercised by the release gate.
 | Integration | Official framework reference | Supported runtime | Release evidence |
 | --- | --- | --- | --- |
 | `metaplate/next` | [Metadata and OG images](https://nextjs.org/docs/app/getting-started/metadata-and-og-images), [metadata files](https://nextjs.org/docs/app/api-reference/file-conventions/metadata/opengraph-image), and [static exports](https://nextjs.org/docs/app/guides/static-exports) | Next.js 16.3.2–16.x Node/build pipeline | Exact packed artifact is built through a real Next static export in the release gate. Next 15 is not claimed because its remaining dependency advisories fail this project's release audit. |
-| Astro static endpoints | [Static and server endpoints](https://docs.astro.build/en/guides/endpoints/) | Astro 7 build on Node 24 | Exact packed artifact produces the endpoint, PNG bytes, dimensions, and absolute page metadata. |
+| Astro static endpoints | [Static and server endpoints](https://docs.astro.build/en/guides/endpoints/) | Astro 7 build on Node 24 | Exact packed artifact produces the endpoint, PNG bytes, dimensions, and separately tested page metadata. |
 | React Router resource routes | [Resource routes](https://reactrouter.com/how-to/resource-routes) | React Router 7 framework mode on Node | Exact packed artifact is type-generated, typechecked, built, served, and fetched through a dynamic `loader(args)` route. |
 | SvelteKit | [`+server` routing](https://svelte.dev/docs/kit/routing#server) and [`adapter-node`](https://svelte.dev/docs/kit/adapter-node) | Node-compatible adapters | `handlerFrom` follows its `RequestHandler` contract, but certification is deferred while the latest stable Kit line retains an upstream Cookie advisory. |
 | Express | [Express 5 response API](https://expressjs.com/en/5x/api/#res.send) | Express 5 on Node | Exact packed artifact is served over an ephemeral HTTP server and checked for headers, bytes, and dimensions. |
@@ -837,7 +837,9 @@ format it verified alongside the dimensions. For a single application/reporting
 contract, use `verifySocialImage(bytes, descriptor, { targets: [...] })` to catch
 byte/metadata format and dimension mismatches alongside target compatibility
 findings. Add `--json --target linkedin --url https://example.com/og.png --alt
-\"Project card\"` to the CLI for machine-readable deployment checks.
+\"Project card\"` to the CLI for machine-readable deployment checks. A target
+without `--url` or `--alt` verifies only image/platform facts and does not invent
+metadata; those fields are checked only when supplied.
 `metaplate/png` remains available for PNG-only checks.
 
 ## Entry points

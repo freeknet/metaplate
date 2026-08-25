@@ -10,7 +10,7 @@ const base = {
       "production-build",
       "served-or-published-output",
       "image-format-and-dimension-check",
-      "page-metadata-check",
+      "response-header-check",
     ],
     edgeNativeRendererRequired: true,
   },

@@ -59,7 +59,7 @@ describe("Socket report importer", () => {
         },
         transitively: {
           score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 },
-          alerts: [{ name: "socketUpgradeAvailable", severity: "high", example: "npm/example@1.0.0", dependencyPath: "metaplate > example" }],
+          alerts: [{ name: "socketUpgradeAvailable", severity: "high", example: "npm/string.prototype.codepointat@0.2.1" }],
         },
       },
     });
@@ -85,15 +85,16 @@ describe("Socket report importer", () => {
       alerts: [{
         type: "socketUpgradeAvailable",
         severity: "high",
-        package: "example",
-        version: "1.0.0",
-        path: "metaplate > example",
+        package: "string.prototype.codepointat",
+        version: "0.2.1",
+        path: "metaplate > satori > @shuding/opentype.js > string.prototype.codepointat",
         reachability: "runtime-peer",
         disposition: "upgrade",
         evidence: "Socket CLI export",
         verification: "package verification",
       }],
     };
+    expect(normalized.deep.alerts[0].dependencyEvidence.paths).toContain("metaplate > satori > @shuding/opentype.js > string.prototype.codepointat");
     expect(validateSocketReport(disposition)).toEqual([]);
   });
 
@@ -105,6 +106,16 @@ describe("Socket report importer", () => {
     const report = JSON.parse(result.output!);
     expect(report.source).toBe("https://socket.dev/npm/package/metaplate@0.6.0");
     expect(report.deep.score).toEqual({ overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 });
+  });
+
+  it("rejects an unresolved high alert instead of producing unverifiable evidence", async () => {
+    await expect(runImporter({
+      data: {
+        purl: "pkg:npm/metaplate@0.6.0",
+        self: { purl: "npm/metaplate@0.6.0", score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 } },
+        transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 }, alerts: [{ name: "newHigh", severity: "high", example: "npm/not-in-lock@1.0.0" }] },
+      },
+    })).resolves.toMatchObject({ code: 1 });
   });
 
   it("rejects malformed score objects as well as untrusted provenance", async () => {

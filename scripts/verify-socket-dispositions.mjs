@@ -4,6 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
 import { runScript } from "./run-script.mjs";
+import { packageIdentityFromExample } from "./dependency-model.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const severities = new Set(["critical", "high", "medium", "low"]);
@@ -29,14 +30,6 @@ function normalizeSeverity(value) {
 function isExpired(value, now = new Date()) {
   const expiry = new Date(value);
   return !Number.isFinite(expiry.getTime()) || expiry.getTime() <= now.getTime();
-}
-
-function packageIdentityFromExample(example) {
-  if (typeof example !== "string") return {};
-  const value = example.replace(/^npm\//, "");
-  const at = value.lastIndexOf("@");
-  if (at <= 0 || at === value.length - 1) return { package: value };
-  return { package: value.slice(0, at), version: value.slice(at + 1) };
 }
 
 function alertIdentity(alert, index, source = "score") {
@@ -141,6 +134,17 @@ export function validateSocketReport(report, now = new Date()) {
         if (score.package !== report.package) errors.push("complete report score artifact package does not match disposition package");
         if (score.version !== report.version) errors.push("complete report score artifact version does not match disposition version");
         if (typeof score.source !== "string" || !/^https:\/\/socket\.dev\//.test(score.source)) errors.push("complete report score artifact source must be a Socket HTTPS URL");
+        if (score.captureKind === "socket-cli-import") {
+          if (!/^[a-f0-9]{64}$/i.test(score.provenance?.inputSha256 ?? "")) {
+            errors.push("socket-cli-import score artifact requires a valid 64-character inputSha256");
+          }
+        } else if (score.captureKind === "historical-normalized-snapshot") {
+          if (score.provenance?.rawInputSha256 !== null || score.provenance?.rawInputRetained !== false) {
+            errors.push("historical-normalized-snapshot must explicitly state that raw input is unavailable");
+          }
+        } else {
+          errors.push(`unknown score artifact captureKind ${score.captureKind}`);
+        }
 
         const scoreAlerts = policyAlerts(score);
         if (!Array.isArray(score.shallow?.alerts) || !Array.isArray(score.deep?.alerts)) {

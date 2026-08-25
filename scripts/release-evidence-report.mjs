@@ -60,7 +60,7 @@ export function createEvidenceReport({ commitSha = process.env.GITHUB_SHA ?? "lo
     try { return readJson("deployment-contract-evidence.json"); } catch { return undefined; }
   })();
   const localRouteIds = deployment.routes.filter(({ status }) => status === "certified-local-contract").map(({ id }) => id);
-  if (!routeEvidence || routeEvidence.commitSha !== commitSha || localRouteIds.some((id) => !routeEvidence.routes?.[id]?.imageVerification?.verified || !routeEvidence.routes?.[id]?.metadataVerification?.verified)) {
+  if (!routeEvidence || routeEvidence.commitSha !== commitSha || localRouteIds.some((id) => !routeEvidence.routes?.[id]?.imageVerification?.verified || !routeEvidence.routes?.[id]?.responseVerification?.verified)) {
     throw new Error("deployment-contract-evidence.json is missing, stale, or incomplete for local-certified routes");
   }
   const artifacts = [
@@ -84,10 +84,10 @@ export function createEvidenceReport({ commitSha = process.env.GITHUB_SHA ?? "lo
       status: routeEvidence?.routes?.[route.id]?.imageVerification?.verified === true ? "verified" : "not-evaluated",
       evidence: routeEvidence?.routes?.[route.id]?.imageVerification ?? null,
     })),
-    metadataVerificationResults: deployment.routes.map((route) => ({
+    responseVerificationResults: deployment.routes.map((route) => ({
       route: route.id,
-      status: routeEvidence?.routes?.[route.id]?.metadataVerification?.verified === true ? "verified" : "not-evaluated",
-      evidence: routeEvidence?.routes?.[route.id]?.metadataVerification ?? null,
+      status: routeEvidence?.routes?.[route.id]?.responseVerification?.verified === true ? "verified" : "not-evaluated",
+      evidence: routeEvidence?.routes?.[route.id]?.responseVerification ?? null,
     })),
     dependencyInventorySummary: inventory.summary,
     socketPolicy: {

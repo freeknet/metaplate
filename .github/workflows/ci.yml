@@ -40,6 +40,11 @@ jobs:
           path: |
             dependency-inventory.json
             release-evidence-report.json
+            release-check-results.json
+            deployment-contract-evidence.json
+            deployment-evidence.json
+            socket-score-report.json
+            socket-dispositions.json
           if-no-files-found: error
       - name: Exercise the post-publication verifier against the local artifact
         shell: bash
