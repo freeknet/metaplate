@@ -35,9 +35,11 @@ Review the rendered draft on GitHub. Check links, code blocks, upgrade guidance,
 
 Publishing the GitHub draft triggers the npm publish workflow. That workflow validates the live GitHub release body again before it installs dependencies, builds, packs, or publishes anything. A release with incomplete notes therefore cannot publish the npm package.
 
-After publication:
+After publication, the workflow waits for registry propagation and then installs
+the exact registry version in a clean consumer. It verifies every export,
+required/optional peer behavior, the CLI, npm registry signatures, and the SLSA
+provenance attestation. A release is not complete until **Verify published
+artifact** passes.
 
-1. confirm npm provenance and registry integrity;
-2. run the published-package smoke against the exact registry artifact;
-3. update version-specific badges when applicable;
-4. verify the GitHub release remains the best single overview of the version.
+Then update version-specific badges when applicable and confirm the GitHub
+release remains the best single overview of the version.

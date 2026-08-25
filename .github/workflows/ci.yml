@@ -29,6 +29,14 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run check
       - run: npm run check:package
+      - name: Exercise the post-publication verifier against the local artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive=$(npm pack --silent)
+          version=$(node -p "require('./package.json').version")
+          METAPLATE_PACKAGE_SPEC="$PWD/$archive" \
+            node scripts/verify-published-package.mjs "$version"
       # Development dependencies execute during the build and are part of the
       # release trust chain, so high-severity findings in them block CI too.
       - run: npm audit --audit-level=high
