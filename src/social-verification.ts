@@ -53,27 +53,41 @@ export function verifySocialImage(
 ): SocialImageVerificationReport {
   const actual = imageDimensions(bytes);
   const byteLength = bytes instanceof Uint8Array ? bytes.byteLength : bytes.byteLength;
-  assertImageSize(descriptor);
+  if (descriptor.width !== undefined || descriptor.height !== undefined) {
+    if (descriptor.width === undefined || descriptor.height === undefined) {
+      throw new TypeError("descriptor width and height must be provided together");
+    }
+    assertImageSize({ width: descriptor.width, height: descriptor.height });
+  }
   if (options.maxFileSize !== undefined &&
       (!Number.isInteger(options.maxFileSize) || options.maxFileSize < 0)) {
     throw new Error(`maxFileSize must be a non-negative integer; received ${options.maxFileSize}`);
   }
 
-  const compatibility = socialImageCompatibility(descriptor, {
+  const compatibilityDescriptor = {
+    ...descriptor,
+    width: descriptor.width ?? actual.width,
+    height: descriptor.height ?? actual.height,
+  };
+  const compatibility = socialImageCompatibility(compatibilityDescriptor, {
     ...(options.targets ? { targets: options.targets } : {}),
     fileSize: options.fileSize ?? byteLength,
     ...(options.crawlerReady !== undefined ? { crawlerReady: options.crawlerReady } : {}),
   });
   const issues: SocialImageVerificationIssue[] = [];
   const actualContentType = imageContentType(actual.format);
-  if (actual.width !== descriptor.width || actual.height !== descriptor.height) {
+  if (
+    descriptor.width !== undefined &&
+    descriptor.height !== undefined &&
+    (actual.width !== descriptor.width || actual.height !== descriptor.height)
+  ) {
     issues.push(issue(
       "error",
       "dimensions",
       `Metadata advertises ${descriptor.width}x${descriptor.height}, but image bytes are ${actual.width}x${actual.height}.`,
     ));
   }
-  if (descriptor.type?.toLowerCase() !== actualContentType) {
+  if (descriptor.type !== undefined && descriptor.type.toLowerCase() !== actualContentType) {
     issues.push(issue(
       "error",
       "format",

@@ -19,6 +19,25 @@ const baseDeployment = {
   routes: [],
 };
 
+const certifiedRoute = {
+  id: "provider-node",
+  provider: "Example",
+  runtime: "Node.js",
+  status: "certified",
+  evidence: "claim",
+  certification: {
+    packedArtifact: true,
+    productionBuild: true,
+    output: true,
+    imageVerification: { verified: true },
+    metadataVerification: { verified: true },
+    providerVersion: "1.0",
+    runtimeVersion: "node-24",
+    commitSha: "abc123",
+    evidenceUrlOrArtifact: "artifact.zip",
+  },
+};
+
 const baseSocket = {
   schemaVersion: 1,
   package: "metaplate",
@@ -57,6 +76,18 @@ describe("deployment evidence policy", () => {
       }],
     });
     expect(errors).toEqual([]);
+  });
+
+  it("enforces newly declared policy requirements", () => {
+    const errors = validateDeploymentManifest({
+      ...baseDeployment,
+      policy: {
+        ...baseDeployment.policy,
+        certifiedRequires: [...baseDeployment.policy.certifiedRequires, "custom-evidence"],
+      },
+      routes: [certifiedRoute],
+    });
+    expect(errors).toContain("policy.certifiedRequires contains unknown requirement custom-evidence");
   });
 
   it("rejects certified routes with missing evidence and unknown statuses", () => {

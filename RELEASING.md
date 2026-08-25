@@ -12,8 +12,8 @@ GitHub Releases are the user-facing home for each version. They must explain why
    deployment behavior. Keep Metaplate's tested runtime/version boundary next
    to that link.
 5. Run `npm run dependencies:report` to generate the canonical local
-   `dependency-inventory.json`, then review it and record every Socket   high/critical alert in `socket-dispositions.json`.
- Do not describe `npm audit` as
+   `dependency-inventory.json`, then review it and record every Socket
+   high/critical alert in `socket-dispositions.json`. Do not describe `npm audit` as
    equivalent to Socket analysis; behavioral and native-code signals need their
    own evidence or an explicit time-bounded exception. An incomplete Socket
    report must not be presented as clean.

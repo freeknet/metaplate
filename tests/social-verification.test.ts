@@ -21,6 +21,23 @@ describe("verifySocialImage", () => {
     expect(report.actual).toMatchObject({ format: "png", width: 1200, height: 630 });
   });
 
+  it("allows descriptors without optional dimensions or media type", () => {
+    const report = verifySocialImage(completePng(1200, 630), {
+      url: "https://example.com/og.png",
+      alt: "Project card",
+    } as never);
+    expect(report.compatible).toBe(false);
+    expect(report.issues.map(({ code }) => code)).toEqual(["format"]);
+  });
+
+  it("rejects partially specified descriptor dimensions", () => {
+    expect(() => verifySocialImage(completePng(1200, 630), {
+      url: "https://example.com/og.png",
+      alt: "Project card",
+      width: 1200,
+    } as never)).toThrow("width and height must be provided together");
+  });
+
   it("reports format and dimension disagreement without throwing", () => {
     const report = verifySocialImage(completePng(512, 512), {
       ...pngDescriptor,

@@ -12,7 +12,14 @@ const allowedStatuses = new Set([
   "certified",
   "not-supported",
 ]);
-const requiredEvidence = [
+const evidenceFieldByRequirement = new Map([
+  ["packed-artifact", "packedArtifact"],
+  ["production-build", "productionBuild"],
+  ["served-or-published-output", "output"],
+  ["image-format-and-dimension-check", "imageVerification"],
+  ["page-metadata-check", "metadataVerification"],
+]);
+const requiredCertificationFields = [
   "packedArtifact",
   "productionBuild",
   "output",
@@ -33,6 +40,12 @@ export function validateDeploymentManifest(manifest) {
   if (manifest.schemaVersion !== 1) errors.push("schemaVersion must be 1");
   if (!Array.isArray(manifest.policy?.certifiedRequires) || manifest.policy.certifiedRequires.length < 5) {
     errors.push("policy.certifiedRequires must declare the certification evidence requirements");
+  } else {
+    for (const requirement of manifest.policy.certifiedRequires) {
+      if (!evidenceFieldByRequirement.has(requirement)) {
+        errors.push(`policy.certifiedRequires contains unknown requirement ${requirement}`);
+      }
+    }
   }
   if (manifest.release !== "0.7.0") errors.push("release must be 0.7.0");
   if (manifest.policy?.edgeNativeRendererRequired !== true) {
@@ -63,16 +76,14 @@ export function validateDeploymentManifest(manifest) {
       if (!route.certification || typeof route.certification !== "object") {
         errors.push(`${route.id}: certified routes require a certification object`);
       } else {
-        const policyRequirements = {
-          packedArtifact: ["packed-artifact"],
-          productionBuild: ["production-build"],
-          output: ["served-or-published-output"],
-          imageVerification: ["image-format-and-dimension-check"],
-          metadataVerification: ["page-metadata-check"],
-        };
-        for (const field of requiredEvidence) {
-          const requiredByPolicy = policyRequirements[field]?.some((requirement) => manifest.policy.certifiedRequires.includes(requirement)) ?? false;
-          if (!present(route.certification[field]) || (policyRequirements[field] && !requiredByPolicy)) {
+        for (const requirement of manifest.policy.certifiedRequires) {
+          const field = evidenceFieldByRequirement.get(requirement);
+          if (field && !present(route.certification[field])) {
+            errors.push(`${route.id}: certification.${field} is required by ${requirement}`);
+          }
+        }
+        for (const field of requiredCertificationFields.slice(5)) {
+          if (!present(route.certification[field])) {
             errors.push(`${route.id}: certification.${field} is required`);
           }
         }
