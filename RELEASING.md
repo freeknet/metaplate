@@ -7,15 +7,21 @@ GitHub Releases are the user-facing home for each version. They must explain why
 1. Update `package.json`, `package-lock.json`, `src/version.ts`, and `CHANGELOG.md` to the same version.
 2. Copy `.github/RELEASE_TEMPLATE.md` to `.github/releases/vX.Y.Z.md`.
 3. Replace every placeholder with user-facing copy. Summarize outcomes rather than commit titles.
-4. For every framework-specific claim, link the exact official upstream page
-   that defines the routing, metadata, build, adapter, or deployment behavior.
-   Keep Metaplate's tested runtime/version boundary next to that link.
-5. Include explicit upgrade advice and write `None.` under breaking changes when there is no migration.
-6. Run the complete local gate:
+4. For every framework-specific or deployment claim, link the exact official
+   upstream page that defines the routing, metadata, build, adapter, runtime, or
+   deployment behavior. Keep Metaplate's tested runtime/version boundary next
+   to that link.
+5. Review the dependency inventory and record every Socket high/critical alert
+   disposition. Do not describe `npm audit` as equivalent to Socket analysis;
+   behavioral and native-code signals need their own evidence or an explicit
+   time-bounded exception.
+6. Include explicit upgrade advice and write `None.` under breaking changes when there is no migration.
+7. Run the complete local gate:
 
    ```sh
    npm run check
    npm run check:package
+   npm run check:dependencies
    ```
 
    `npm run check` validates the current version's release notes and rejects missing sections, placeholders, mismatched install commands, and generated-note-only bodies.
@@ -42,4 +48,6 @@ provenance attestation. A release is not complete until **Verify published
 artifact** passes.
 
 Then update version-specific badges when applicable and confirm the GitHub
-release remains the best single overview of the version.
+release remains the best single overview of the version. For 0.7.0 deployment
+claims, retain the provider/runtime evidence table and the dependency inventory
+with the release artifacts.

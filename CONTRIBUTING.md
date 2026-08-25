@@ -44,6 +44,7 @@ npm run lint
 npm run typecheck
 npm test
 npm run build
+npm run check:dependencies
 ```
 
 ## Design constraints
@@ -74,7 +75,11 @@ blocking peer dependency supports the newer release.
 
 Install lifecycle scripts are disabled in CI and release verification because
 this repository does not require them. A dependency that begins requiring a
-script needs an explicit review before that policy changes.
+script needs an explicit review before that policy changes. The dependency
+inventory command classifies lockfile packages by published/runtime reachability,
+native-code indicators, install scripts, and non-registry resolutions so Socket
+alerts can be triaged without treating expected native rendering packages as
+automatic malware findings.
 
 ## Releases
 

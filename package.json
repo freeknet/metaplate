@@ -72,8 +72,9 @@
   },
   "scripts": {
     "build": "tsup",
-    "check": "npm run lint && npm run check:duplicates && npm run check:release-notes && npm run typecheck && npm run typecheck:examples && npm test && npm run build && npm pack --dry-run",
+    "check": "npm run lint && npm run check:duplicates && npm run check:dependencies && npm run check:release-notes && npm run typecheck && npm run typecheck:examples && npm test && npm run build && npm pack --dry-run",
     "check:duplicates": "jscpd src scripts tests examples --min-lines 8 --min-tokens 60 --reporters console --ignore \"**/fixtures/**\" --threshold 0",
+    "check:dependencies": "node scripts/dependency-inventory.mjs --summary && node scripts/verify-dependency-inventory.mjs",
     "check:package": "node scripts/verify-package.mjs",
     "check:release-notes": "node scripts/validate-release-notes.mjs",
     "lint": "eslint .",

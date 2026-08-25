@@ -35,6 +35,7 @@ compatibility depends on both the framework and its deployment adapter.
 - [Fonts](#fonts)
 - [Plate constraints](#plate-constraints)
 - [Static hosts](#static-hosts)
+- [Deployment routes](#deployment-routes)
 - [Verify generated files](#verify-generated-files)
 - [Entry points](#entry-points)
 - [Design lineage](#design-lineage)
@@ -764,6 +765,15 @@ for = "/*/og-image"
 ```
 
 A JPEG plate uses `Content-Type = "image/jpeg"` for the same two paths.
+
+## Deployment routes
+
+For provider-neutral guidance covering static generation, Vercel and Netlify Node
+functions, Railway and Render services, GitHub Pages, and edge-runtime limits,
+see the [deployment routes guide](docs/deployment.md). The short version is:
+use a real `.png`/`.jpg` file for static hosts, use the provider's Node runtime
+for `metaplate/node`, and do not deploy the native renderer to an Edge/Workers
+runtime without a separately tested Wasm-compatible renderer.
 
 ## Verify generated files
 
