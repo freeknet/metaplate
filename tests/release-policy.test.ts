@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { packageNameFromLockPath } from "../scripts/dependency-model.mjs";
 import { validateDeploymentManifest } from "../scripts/verify-deployment-evidence.mjs";
 import { validateSocketReport } from "../scripts/verify-socket-dispositions.mjs";
+import { validateCheckResults } from "../scripts/release-evidence-report.mjs";
 
 const baseDeployment = {
   schemaVersion: 1,
@@ -39,7 +40,7 @@ const certifiedRoute = {
 };
 
 const baseSocket = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   package: "metaplate",
   source: "https://socket.dev/npm/package/metaplate/alerts/0.6.0",
   version: "0.6.0",
@@ -51,7 +52,11 @@ const baseSocket = {
     acceptedExceptionRequires: ["owner", "reason", "expiry", "verification"],
   },
   alerts: [],
-  export: undefined,
+  export: {
+    artifact: "missing-score-report.json",
+    generatedAt: "2026-08-25",
+    sha256: "placeholder",
+  },
 };
 
 describe("deployment evidence policy", () => {
@@ -143,6 +148,33 @@ describe("Socket release policy", () => {
       verification: "isolated in CI",
     });
     expect(validateSocketReport({ ...baseSocket, alerts: [accepted] }).some((error: string) => error.includes("accepted exception is expired"))).toBe(true);
+  });
+});
+
+describe("release check evidence", () => {
+  const checks = [
+    "production-build",
+    "packed-artifact",
+    "dependency-inventory",
+    "deployment-evidence-policy",
+    "socket-release-policy",
+  ].map((name) => ({ name, status: "passed" }));
+
+  it("requires every expected check exactly once and passed", () => {
+    expect(validateCheckResults({ schemaVersion: 1, commitSha: "abc", releaseVersion: "0.6.0", checks }, { commitSha: "abc", releaseVersion: "0.6.0" })).toEqual(checks);
+  });
+
+  it("rejects incomplete, duplicate, unknown, and non-passed check sets", () => {
+    const cases = [
+      [],
+      checks.slice(1),
+      [...checks, checks[0]!],
+      [...checks.slice(0, 4), { name: "unknown", status: "passed" }],
+      [...checks.slice(0, 4), { name: "socket-release-policy", status: "unknown" }],
+    ];
+    for (const invalidChecks of cases) {
+      expect(() => validateCheckResults({ schemaVersion: 1, commitSha: "abc", releaseVersion: "0.6.0", checks: invalidChecks }, { commitSha: "abc", releaseVersion: "0.6.0" })).toThrow();
+    }
   });
 });
 

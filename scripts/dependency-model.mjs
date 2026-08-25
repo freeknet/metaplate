@@ -59,6 +59,10 @@ function isNative(name, entry) {
   );
 }
 
+function isPlatformSpecific(name) {
+  return /(?:darwin|linux|win32|freebsd|openbsd|netbsd|sunos|aix|android|haiku|wasm32|arm64|x64|ia32|ppc64|s390x|riscv64|musl|gnu|msvc)/i.test(name);
+}
+
 function directDependencyKinds(manifest) {
   const kinds = new Map();
   for (const name of Object.keys(manifest.dependencies ?? {})) kinds.set(name, "dependency");
@@ -90,7 +94,7 @@ export function classifyLockPackages({ root, manifest, lockfile }) {
     const optional = edgeOptional || entry.optional === true;
     const current = classifications.get(path);
     const effective = optional
-      ? "optional-platform"
+      ? classification === "development-only" ? "development-optional" : "runtime-peer" === classification ? "runtime-peer-optional" : "runtime-optional"
       : current === "published-runtime" || current === "runtime-peer"
         ? current
         : classification;
@@ -101,14 +105,19 @@ export function classifyLockPackages({ root, manifest, lockfile }) {
     for (const [dependency, specifier] of Object.entries(entry.dependencies ?? {})) {
       const child = resolveLockPackage(packages, path, dependency);
       if (child) {
-        walk(child, classification === "runtime-peer" ? "published-runtime" : classification, false);
+        walk(child, classification, false);
       } else if (isRemoteSpecifier(specifier)) {
         classifications.set(`${path}:${dependency}`, "unknown");
       }
     }
     for (const dependency of Object.keys(entry.optionalDependencies ?? {})) {
       const child = resolveLockPackage(packages, path, dependency);
-      if (child) walk(child, "optional-platform", true);
+      if (child) walk(child, classification, true);
+    }
+    for (const dependency of Object.keys(entry.peerDependencies ?? {})) {
+      const child = resolveLockPackage(packages, path, dependency);
+      const optionalPeer = entry.peerDependenciesMeta?.[dependency]?.optional === true;
+      if (child) walk(child, classification, optionalPeer || edgeOptional);
     }
   }
 
@@ -139,6 +148,7 @@ export function classifyLockPackages({ root, manifest, lockfile }) {
       devOptional: entry.devOptional === true,
       peer: entry.peer === true,
       native: isNative(name, entry),
+      platformSpecific: isPlatformSpecific(name),
       installScript: packageHasInstallScript(root, path, entry),
       resolved: entry.resolved ?? null,
       remoteDependency: Object.values(entry.dependencies ?? {}).some(isRemoteSpecifier),

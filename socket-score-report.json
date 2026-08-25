@@ -1,32 +1,34 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "package": "metaplate",
   "version": "0.6.0",
-  "captureKind": "official-socket-cli",
+  "captureKind": "socket-cli-import",
   "capturedAt": "2026-08-25",
   "source": "https://socket.dev/npm/package/metaplate/alerts/0.6.0?tab=dependencies",
   "packageSizeBytes": 459066,
   "shallow": {
-    "overall": 76,
-    "supplyChain": 76,
-    "maintenance": 92,
-    "quality": 99,
-    "vulnerability": 100,
-    "license": 100,
-    "capabilities": [],
+    "score": {
+      "overall": 76,
+      "supplyChain": 76,
+      "maintenance": 92,
+      "quality": 99,
+      "vulnerability": 100,
+      "license": 100
+    },
     "alerts": [
       { "name": "recentlyPublished", "severity": "middle", "category": "supplyChainRisk", "example": "npm/metaplate@0.6.0" }
     ]
   },
   "deep": {
+    "score": {
+      "overall": 38,
+      "supplyChain": 60,
+      "maintenance": 54,
+      "quality": 38,
+      "vulnerability": 100,
+      "license": 70
+    },
     "dependencyCount": 90,
-    "aggregation": "min",
-    "overall": 38,
-    "supplyChain": 60,
-    "maintenance": 54,
-    "quality": 38,
-    "vulnerability": 100,
-    "license": 70,
     "lowest": {
       "overall": "npm/@resvg/resvg-js-android-arm-eabi@2.6.2",
       "supplyChain": "npm/next@16.3.3",
@@ -43,19 +45,19 @@
       { "name": "potentialVulnerability", "severity": "middle", "category": "supplyChainRisk", "example": "npm/next@16.3.3", "reachability": "runtime-peer" },
       { "name": "recentlyPublished", "severity": "middle", "category": "supplyChainRisk", "example": "npm/satori@0.33.4", "reachability": "runtime-peer" },
       { "name": "shellAccess", "severity": "middle", "category": "supplyChainRisk", "example": "npm/@resvg/resvg-js@2.6.2", "reachability": "runtime-peer" },
-      { "name": "trivialPackage", "severity": "middle", "category": "supplyChainRisk", "example": "npm/@img/sharp-linux-arm@0.35.3", "reachability": "development-only" },
-      { "name": "usesEval", "severity": "middle", "category": "supplyChainRisk", "example": "npm/source-map-js@1.2.1", "reachability": "development-only" },
+      { "name": "trivialPackage", "severity": "middle", "category": "supplyChainRisk", "example": "npm/@img/sharp-linux-arm@0.35.3", "reachability": "runtime-peer" },
+      { "name": "usesEval", "severity": "middle", "category": "supplyChainRisk", "example": "npm/source-map-js@1.2.1", "reachability": "runtime-peer" },
       { "name": "copyleftLicense", "severity": "low", "category": "license", "example": "npm/@resvg/resvg-js-android-arm-eabi@2.6.2", "reachability": "runtime-peer" },
-      { "name": "debugAccess", "severity": "low", "category": "supplyChainRisk", "example": "npm/sharp@0.35.3", "reachability": "development-only" },
+      { "name": "debugAccess", "severity": "low", "category": "supplyChainRisk", "example": "npm/sharp@0.35.3", "reachability": "runtime-peer" },
       { "name": "dynamicRequire", "severity": "low", "category": "supplyChainRisk", "example": "npm/next@16.3.3", "reachability": "runtime-peer" },
-      { "name": "envVars", "severity": "low", "category": "supplyChainRisk", "example": "npm/css-to-react-native@3.2.0", "reachability": "development-only" },
+      { "name": "envVars", "severity": "low", "category": "supplyChainRisk", "example": "npm/css-to-react-native@3.2.0", "reachability": "runtime-peer" },
       { "name": "filesystemAccess", "severity": "low", "category": "supplyChainRisk", "example": "npm/@resvg/resvg-js@2.6.2", "reachability": "runtime-peer" },
-      { "name": "gptAnomaly", "severity": "low", "category": "supplyChainRisk", "example": "npm/fflate@0.7.3", "reachability": "development-only" },
+      { "name": "gptAnomaly", "severity": "low", "category": "supplyChainRisk", "example": "npm/fflate@0.7.3", "reachability": "runtime-peer" },
       { "name": "minifiedFile", "severity": "low", "category": "quality", "example": "npm/@resvg/resvg-js@2.6.2", "reachability": "runtime-peer" },
-      { "name": "newAuthor", "severity": "low", "category": "supplyChainRisk", "example": "npm/camelize@1.0.1", "reachability": "development-only" },
+      { "name": "newAuthor", "severity": "low", "category": "supplyChainRisk", "example": "npm/camelize@1.0.1", "reachability": "runtime-peer" },
       { "name": "nonpermissiveLicense", "severity": "low", "category": "license", "example": "npm/@resvg/resvg-js-android-arm-eabi@2.6.2", "reachability": "runtime-peer" },
       { "name": "unmaintained", "severity": "low", "category": "maintenance", "example": "npm/metaplate@0.6.0", "reachability": "published-package-metadata" },
-      { "name": "urlStrings", "severity": "low", "category": "supplyChainRisk", "example": "npm/camelize@1.0.1", "reachability": "development-only" }
+      { "name": "urlStrings", "severity": "low", "category": "supplyChainRisk", "example": "npm/camelize@1.0.1", "reachability": "runtime-peer" }
     ]
   },
   "highCriticalDisposition": {
@@ -73,6 +75,10 @@
       }
     ],
     "critical": []
+  },
+  "provenance": {
+    "importedFrom": "Socket CLI export",
+    "inputSha256": "historical-cli-capture"
   },
   "limitations": [
     "Socket CLI output exposes example package identities but not full physical dependency paths; lockfilePath and dependencyPath above are derived locally and labeled accordingly.",

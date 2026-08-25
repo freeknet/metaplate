@@ -489,6 +489,20 @@ it(
     expect(response.headers.get("cache-control")).toBe("public, max-age=60");
     expect(() => createNodeOg({ ...definition, headers: { "Content-Length": "1" } })).toThrow(/owned by Metaplate/);
     expect(() => createNodeOg({ ...definition, headers: { "Content-Encoding": "gzip" } })).toThrow(/owned by Metaplate/);
+    expect(() => createNodeOg({ ...definition, etag: true, headers: { ETag: "\"caller\"" } })).toThrow(/automatic Metaplate ETag generation/);
+  },
+  20_000,
+);
+
+it(
+  "preserves a caller ETag when automatic ETag generation is disabled",
+  async () => {
+    const plate = createNodeOg({
+      ...definition,
+      headers: { ETag: "\"caller\"" },
+    });
+    const response = await plate.response({ title: "Caller ETag" });
+    expect(response.headers.get("etag")).toBe('"caller"');
   },
   20_000,
 );

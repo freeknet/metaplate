@@ -188,7 +188,8 @@ const { pixels, width, height } = await og.renderPixels(copy);
 
 Point `imagePath` at the extension actually written, so `socialImage` and
 `socialImageMetadata` describe the real file. `metaplate verify` reads PNG,
-JPEG, and WebP, so the build check follows the card whichever format it takes.
+JPEG, WebP, or structurally walked GIF files, so the build check follows the
+card whichever format it takes.
 
 ### Fetch-based framework routes
 
@@ -854,7 +855,7 @@ findings. Add `--json --target linkedin --url https://example.com/og.png --alt
   application-byte font loading for Node-compatible runtimes. No peers.
 - `metaplate/png` — PNG header inspection and dimension verification. No peers.
 - `metaplate/image` — dimension and structural verification for SVG, PNG,
-  JPEG, and WebP. No peers.
+  JPEG, WebP, and GIF. No peers.
 
 ## Design lineage
 

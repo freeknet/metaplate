@@ -184,7 +184,13 @@ describe("verify CLI", () => {
     ], cwd);
     const report = JSON.parse(result.stdout) as {
       schemaVersion: number;
-      files: Array<{ file: string; compatible: boolean; format: string; targets: Record<string, { compatible: boolean }> }>;
+      files: Array<{
+        file: string;
+        valid: boolean;
+        image: { format: string; width: number; height: number; bytes: number };
+        globalIssues: Array<{ code?: string }>;
+        targets: Record<string, { compatible: boolean }>;
+      }>;
     };
 
     expect(result.status).toBe(0);
@@ -192,8 +198,9 @@ describe("verify CLI", () => {
     expect(report.schemaVersion).toBe(1);
     expect(report.files[0]).toMatchObject({
       file: "good.png",
-      compatible: true,
-      format: "png",
+      valid: true,
+      image: { format: "png", width: 1200, height: 630 },
+      globalIssues: [],
       targets: { universal: { compatible: true } },
     });
   });
@@ -203,9 +210,11 @@ describe("verify CLI", () => {
     await writeFile(path.join(cwd, "good.png"), png());
     const result = run(["verify", "--json", "--max-file-size", "1", "--size", "1200x630", "good.png"], cwd);
     expect(result.status).toBe(1);
-    const report = JSON.parse(result.stdout) as { files: Array<{ compatible: boolean; issues: Array<{ code: string }> }> };
-    expect(report.files[0]?.compatible).toBe(false);
-    expect(report.files[0]?.issues.some(({ code }) => code === "file-size")).toBe(true);
+    const report = JSON.parse(result.stdout) as {
+      files: Array<{ valid: boolean; globalIssues: Array<{ code?: string }> }>;
+    };
+    expect(report.files[0]?.valid).toBe(false);
+    expect(report.files[0]?.globalIssues.some(({ code }) => code === "file-size")).toBe(true);
   });
 
   it("honors --format and rejects a format mismatch", async () => {

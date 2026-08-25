@@ -25,7 +25,7 @@ describe("verifySocialImage", () => {
     const report = verifySocialImage(completePng(1200, 630), {
       url: "https://example.com/og.png",
       alt: "Project card",
-    } as never);
+    });
     expect(report.compatible).toBe(false);
     expect(report.issues.map(({ code }) => code)).toEqual(["format"]);
   });
@@ -35,7 +35,7 @@ describe("verifySocialImage", () => {
       url: "https://example.com/og.png",
       alt: "Project card",
       width: 1200,
-    } as never)).toThrow("width and height must be provided together");
+    })).toThrow("width and height must be provided together");
   });
 
   it("reports format and dimension disagreement without throwing", () => {

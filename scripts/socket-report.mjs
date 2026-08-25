@@ -6,10 +6,31 @@ import { TextDecoder } from "node:util";
 
 const output = process.argv[2] ?? "socket-score-report.json";
 const input = process.argv[3] ?? process.env.SOCKET_REPORT_INPUT;
+const SCORE_KEYS = ["overall", "supplyChain", "maintenance", "quality", "vulnerability", "license"];
 
 function fail(message) {
   process.stderr.write(`${message}\n`);
   process.exitCode = 1;
+}
+
+function assertScore(score, label) {
+  if (!score || typeof score !== "object") throw new Error(`${label} score must be an object`);
+  for (const key of SCORE_KEYS) {
+    if (!Number.isFinite(score[key]) || score[key] < 0 || score[key] > 100) {
+      throw new Error(`${label} score ${key} must be a number from 0 to 100`);
+    }
+  }
+  return Object.fromEntries(SCORE_KEYS.map((key) => [key, score[key]]));
+}
+
+function assertAlerts(alerts, label) {
+  if (!Array.isArray(alerts)) throw new Error(`${label} alerts must be an array`);
+  return alerts.map((alert) => {
+    if (!alert || typeof alert !== "object" || typeof (alert.name ?? alert.type) !== "string") {
+      throw new Error(`${label} alerts must contain alert names`);
+    }
+    return { ...alert, scope: label };
+  });
 }
 
 function normalize(report, inputSha256) {
@@ -19,33 +40,43 @@ function normalize(report, inputSha256) {
     typeof data.purl === "string"
       ? `https://socket.dev/npm/package/${data.purl.replace(/^pkg:npm\//, "")}`
       : data.self?.purl
+        ? `https://socket.dev/npm/package/${data.self.purl.replace(/^npm\//, "")}`
+        : undefined
   );
   if (typeof source !== "string" || !source.startsWith("https://socket.dev/")) {
     throw new Error("Socket report requires an official https://socket.dev/ source");
   }
-  const version = report.version ?? data.version ?? data.self?.purl?.match(/@(\d+\.\d+\.\d+)$/)?.[1];
+  const packageMatch = source.match(/metaplate@(\d+\.\d+\.\d+)/);
+  const version = report.version ?? data.version ?? data.self?.purl?.match(/@(\d+\.\d+\.\d+)$/)?.[1] ?? packageMatch?.[1];
   if (version !== "0.6.0") throw new Error("This baseline importer only accepts metaplate@0.6.0 reports");
-  const alerts = [
-    ...(data.self?.alerts ?? []),
-    ...(data.transitively?.alerts ?? []),
-  ];
+  if (data.purl && data.purl !== `pkg:npm/metaplate@${version}`) throw new Error("Socket report package must be metaplate");
+  const sourcePackage = source.match(/\/npm\/package\/([^/?#]+)/)?.[1];
+  if (!data.purl && sourcePackage !== "metaplate" && sourcePackage !== `metaplate@${version}`) {
+    throw new Error("Socket report package must be metaplate");
+  }
+
+  const shallowScore = assertScore(data.self?.score ?? report.shallow?.score ?? report.shallow, "shallow");
+  const deepScore = assertScore(data.transitively?.score ?? report.deep?.score ?? report.deep, "deep");
+  const shallowAlerts = assertAlerts(data.self?.alerts ?? report.shallow?.alerts ?? [], "shallow");
+  const deepAlerts = assertAlerts(data.transitively?.alerts ?? report.deep?.alerts ?? [], "deep");
+  const deep = data.transitively ?? report.deep ?? {};
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     package: "metaplate",
     version,
     source,
     capturedAt: report.capturedAt ?? new Date().toISOString(),
-    captureKind: "official-export",
-    shallow: data.self?.score ?? report.shallow ?? null,
-    deep: data.transitively?.score ?? report.deep ?? null,
-    alerts,
-    capabilities: data.transitively?.capabilities ?? data.self?.capabilities ?? report.capabilities ?? null,
-    metrics: {
-      dependencyCount: data.transitively?.dependencyCount ?? null,
-      lowest: data.transitively?.lowest ?? null,
+    captureKind: "socket-cli-import",
+    shallow: { score: shallowScore, alerts: shallowAlerts },
+    deep: {
+      score: deepScore,
+      dependencyCount: deep.dependencyCount ?? null,
+      capabilities: deep.capabilities ?? [],
+      lowest: deep.lowest ?? null,
+      alerts: deepAlerts,
     },
     provenance: {
-      importedFrom: "official Socket export",
+      importedFrom: "Socket CLI export",
       inputSha256,
     },
   };

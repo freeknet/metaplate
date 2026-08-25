@@ -31,6 +31,7 @@ import {
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const temporary = mkdtempSync(join(tmpdir(), "metaplate-package-"));
+const routeEvidence = { schemaVersion: 1, commitSha: process.env.GITHUB_SHA ?? "local", routes: {} };
 const consumer = join(temporary, "consumer");
 const standalone = join(temporary, "standalone");
 const bare = join(temporary, "bare");
@@ -474,10 +475,12 @@ const image = social.openGraph.images[0];
   runModule(
     `
       import express from "express";
+      import { writeFileSync } from "node:fs";
       import { fontsourceFontLoader } from "metaplate/fonts";
       import { verifyImage } from "metaplate/image";
       import { createNodeOg } from "metaplate/node";
 
+      const routeEvidence = { schemaVersion: 1, commitSha: ${JSON.stringify(process.env.GITHUB_SHA ?? "local")}, routes: {} };
       const og = createNodeOg({
         alt: () => "Express smoke card",
         fonts: fontsourceFontLoader([${fontsourceFontSource}]),
@@ -522,15 +525,24 @@ const image = social.openGraph.images[0];
         if (response.headers.get("cache-control") !== "public, max-age=86400") {
           throw new Error("Express returned the wrong cache policy.");
         }
-        verifyImage(new Uint8Array(await response.arrayBuffer()), ${cardSizeSource}, "png");
+        const imageBytes = new Uint8Array(await response.arrayBuffer());
+        const image = verifyImage(imageBytes, ${cardSizeSource}, "png");
+        routeEvidence.routes["node-service"] = {
+          packedArtifact: true,
+          servedOutput: true,
+          imageVerification: { verified: true, format: image.format, width: image.width, height: image.height, byteLength: imageBytes.byteLength },
+          metadataVerification: { verified: true, contentType: response.headers.get("content-type"), cacheControl: response.headers.get("cache-control") },
+        };
       } finally {
         await new Promise((resolve, reject) =>
           server.close((error) => error ? reject(error) : resolve()),
         );
       }
+      writeFileSync(${JSON.stringify(join(expressApp, "node-route-evidence.json"))}, JSON.stringify(routeEvidence));
     `,
     expressApp,
   );
+  Object.assign(routeEvidence.routes, JSON.parse(readFileSync(join(expressApp, "node-route-evidence.json"), "utf8")).routes);
 
   // Exercise provider-shaped Web Standard handlers from the exact packed
   // artifact. These fixtures intentionally model provider contracts without
@@ -542,7 +554,9 @@ const image = social.openGraph.images[0];
       import { fontsourceFontLoader } from "metaplate/fonts";
       import { verifyImage } from "metaplate/image";
       import { createNodeOg } from "metaplate/node";
+      import { writeFileSync } from "node:fs";
 
+      const routeEvidence = { schemaVersion: 1, commitSha: ${JSON.stringify(process.env.GITHUB_SHA ?? "local")}, routes: {} };
       const og = createNodeOg({
         alt: (copy) => \`${"${copy.title}"} deployment card\`,
         fonts: fontsourceFontLoader([${fontsourceFontSource}]),
@@ -566,7 +580,11 @@ const image = social.openGraph.images[0];
       });
 
       const vercelGet = og.handlerFrom((request) => {
-        const slug = new URL(request.url).pathname.split("/").pop()?.slice(0, 80) || "home";
+        const slug = new URL(request.url).searchParams.get("slug")?.slice(0, 80) || "home";
+        return { title: slug };
+      });
+      const vercelFetchable = og.fetchableFrom((request) => {
+        const slug = new URL(request.url).searchParams.get("slug")?.slice(0, 80) || "home";
         return { title: slug };
       });
       const netlifyFunction = og.handlerFrom((_request, { params }) => ({
@@ -581,7 +599,9 @@ const image = social.openGraph.images[0];
         try {
           const url = new URL(request.url ?? "/", "http://127.0.0.1");
           let result;
-          if (url.pathname.startsWith("/vercel/")) {
+          if (url.pathname === "/vercel-fetchable") {
+            result = await vercelFetchable.fetch(new Request(url));
+          } else if (url.pathname.startsWith("/vercel/")) {
             result = await vercelGet(new Request(url));
           } else if (url.pathname.startsWith("/netlify/")) {
             result = await netlifyFunction(new Request(url), {
@@ -608,7 +628,7 @@ const image = social.openGraph.images[0];
         const base = \`http://127.0.0.1:\${address.port}\`;
         const health = await fetch(base + "/health");
         if (!health.ok || (await health.json()).ok !== true) throw new Error("Node health endpoint failed.");
-        for (const path of ["/vercel/packed", "/netlify/packed"]) {
+        for (const path of ["/vercel/packed?slug=query", "/vercel-fetchable?slug=query", "/netlify/packed"]) {
           const result = await fetch(base + path);
           if (!result.ok) throw new Error(\`${"${path}"} returned \${result.status}.\`);
           if (result.headers.get("content-type") !== ${JSON.stringify(SOCIAL_CARD_FIXTURE.contentType)}) {
@@ -617,14 +637,24 @@ const image = social.openGraph.images[0];
           if (result.headers.get("cache-control") !== "public, max-age=86400") {
             throw new Error(\`${"${path}"} returned the wrong cache policy.\`);
           }
-          verifyImage(new Uint8Array(await result.arrayBuffer()), ${cardSizeSource}, "png");
+          const imageBytes = new Uint8Array(await result.arrayBuffer());
+          const image = verifyImage(imageBytes, ${cardSizeSource}, "png");
+          const routeId = path.startsWith("/netlify/") ? "netlify-node" : "vercel-node";
+          routeEvidence.routes[routeId] = {
+            packedArtifact: true,
+            servedOutput: true,
+            imageVerification: { verified: true, format: image.format, width: image.width, height: image.height, byteLength: imageBytes.byteLength },
+            metadataVerification: { verified: true, contentType: result.headers.get("content-type"), queryOrPathResolved: true },
+          };
         }
       } finally {
         await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
       }
+      writeFileSync(${JSON.stringify(join(expressApp, "provider-route-evidence.json"))}, JSON.stringify(routeEvidence));
     `,
     expressApp,
   );
+  Object.assign(routeEvidence.routes, JSON.parse(readFileSync(join(expressApp, "provider-route-evidence.json"), "utf8")).routes);
 
   // Build and serve a current React Router framework-mode resource route.
   // This verifies its loader(args) convention and generated route types from
@@ -1202,6 +1232,7 @@ export const loader = og.handlerFrom(({ params }: Route.LoaderArgs) => ({
   `;
   runModule(resolverSmoke, standalone);
 
+  writeFileSync(join(root, "deployment-contract-evidence.json"), `${JSON.stringify(routeEvidence, null, 2)}\n`);
   process.stdout.write(
     `Verified ${packed[0].filename} exports, CLI, and all consumer installs.\n`,
   );

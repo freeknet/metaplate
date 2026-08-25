@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "package": "metaplate",
   "version": "0.6.0",
   "source": "https://socket.dev/npm/package/metaplate/alerts/0.6.0?tab=dependencies",
@@ -7,7 +7,7 @@
   "export": {
     "artifact": "socket-score-report.json",
     "generatedAt": "2026-08-25",
-    "sha256": "5d4ecf63376108e973f0f86ceeec07691ad3ee6eb6e67bd184762169ff33c561"
+    "sha256": "b78408615ee3db60b813f8d0ba78f5a894a99e4958bdd70bd2eae73ee7a27193"
   },
   "releasePolicy": {
     "blockSeverities": ["critical"],

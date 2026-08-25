@@ -22,6 +22,12 @@ export type SocialImageDescriptor = ImageSize & {
   type?: string;
 };
 
+/** Descriptor accepted by byte verification before dimensions are known. */
+export type SocialImageVerificationDescriptor = Omit<SocialImageDescriptor, "width" | "height"> & {
+  width?: number;
+  height?: number;
+};
+
 /** X Card presentation. The emitted HTML protocol still uses `twitter:*`. */
 export type XCard = "summary" | "summary_large_image";
 

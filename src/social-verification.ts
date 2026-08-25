@@ -1,4 +1,4 @@
-import { assertImageSize, type SocialImageDescriptor } from "./core.js";
+import { assertImageSize, type SocialImageVerificationDescriptor } from "./core.js";
 import {
   socialImageCompatibility,
   type SocialCompatibilityIssue,
@@ -48,7 +48,7 @@ function issue(
  */
 export function verifySocialImage(
   bytes: ArrayBuffer | Uint8Array,
-  descriptor: SocialImageDescriptor,
+  descriptor: SocialImageVerificationDescriptor,
   options: SocialImageVerificationOptions = {},
 ): SocialImageVerificationReport {
   const actual = imageDimensions(bytes);

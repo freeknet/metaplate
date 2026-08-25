@@ -136,12 +136,18 @@ function assertMediaType(value: string): void {
 
 const REPRESENTATION_HEADERS = new Set(["content-type", "content-length", "content-encoding"]);
 
-function assertResponseHeaderConfiguration(input: HeadersInit | undefined): void {
+function assertResponseHeaderConfiguration(
+  input: HeadersInit | undefined,
+  automaticEtag: boolean,
+): void {
   const headers = new Headers(input);
   for (const name of REPRESENTATION_HEADERS) {
     if (headers.has(name)) {
       throw new TypeError(`The ${name} response header is owned by Metaplate and must not be configured`);
     }
+  }
+  if (automaticEtag && headers.has("etag")) {
+    throw new TypeError("The ETag response header is owned by automatic Metaplate ETag generation and must not be configured");
   }
 }
 
@@ -164,7 +170,7 @@ function strongEtag(bytes: Uint8Array): string {
 export function createNodeOg<Copy>(definition: NodeOgDefinition<Copy>) {
   const svg = createSvgOg(definition);
   assertDimensionPreservingResvgOptions(definition.resvg, svg.size);
-  assertResponseHeaderConfiguration(definition.headers);
+  assertResponseHeaderConfiguration(definition.headers, Boolean(definition.etag));
   const contentType = outputContentType(definition.output);
   assertMediaType(contentType);
   const social = createPlateSocial(definition, contentType, svg.size);

@@ -82,7 +82,7 @@ function policyAlerts(score) {
 export function validateSocketReport(report, now = new Date()) {
   const errors = [];
   const policy = report.releasePolicy;
-  if (report.schemaVersion !== 1) errors.push("schemaVersion must be 1");
+  if (report.schemaVersion !== 2) errors.push("schemaVersion must be 2");
   if (report.package !== "metaplate") errors.push("package must be metaplate");
   if (report.version !== undefined && report.version !== "0.6.0") errors.push("version must be the 0.6.0 Socket baseline");
   if (typeof report.source !== "string" || !/^https:\/\/socket\.dev\//.test(report.source)) errors.push("source must be a Socket HTTPS URL");
@@ -131,13 +131,13 @@ export function validateSocketReport(report, now = new Date()) {
   }
 
   if (report.status === "complete") {
-    if (report.export !== undefined && (!report.export.artifact || !report.export.generatedAt || !report.export.sha256)) {
+    if (!report.export || !report.export.artifact || !report.export.generatedAt || !report.export.sha256) {
       errors.push("complete reports require export artifact, generatedAt, and sha256 provenance");
-    } else if (report.export?.artifact) {
+    } else {
       try {
         const { score, digest } = loadScoreArtifact(report);
         if (digest !== report.export.sha256) errors.push("complete report export sha256 does not match its artifact");
-        if (score.schemaVersion !== 1) errors.push("complete report score artifact schemaVersion must be 1");
+        if (score.schemaVersion !== 2) errors.push("complete report score artifact schemaVersion must be 2");
         if (score.package !== report.package) errors.push("complete report score artifact package does not match disposition package");
         if (score.version !== report.version) errors.push("complete report score artifact version does not match disposition version");
         if (typeof score.source !== "string" || !/^https:\/\/socket\.dev\//.test(score.source)) errors.push("complete report score artifact source must be a Socket HTTPS URL");
