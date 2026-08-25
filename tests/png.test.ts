@@ -1,13 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { pngDimensions, verifyPng } from "../src/png.js";
-
-function pngChunk(type: string, payload: number[]): number[] {
-  const data = payload.length;
-  const length = [
-    (data >>> 24) & 0xff, (data >>> 16) & 0xff, (data >>> 8) & 0xff, data & 0xff,
-  ];
-  return [...length, ...type.split("").map((c) => c.charCodeAt(0)), ...payload, 0, 0, 0, 0];
-}
+import { pngChunk, uint32be } from "./helpers/image-fixtures.js";
 
 type PngHeaderOptions = {
   bitDepth?: number;
@@ -28,8 +21,8 @@ function pngHeader(width: number, height: number, options: PngHeaderOptions = {}
     chunks = [pngChunk("IDAT", [0x78, 0x9c, 0x03, 0x00, 0x00, 0x00, 0x00, 0x01])],
   } = options;
   const ihdr = [
-    (width >>> 24) & 0xff, (width >>> 16) & 0xff, (width >>> 8) & 0xff, width & 0xff,
-    (height >>> 24) & 0xff, (height >>> 16) & 0xff, (height >>> 8) & 0xff, height & 0xff,
+    ...uint32be(width),
+    ...uint32be(height),
     bitDepth, colorType, compressionMethod, filterMethod, interlaceMethod,
   ];
   return Uint8Array.from([

@@ -2,36 +2,38 @@ import { existsSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  loadedFont,
+  memoizedFontLoader,
+  type FontFace,
+  type FontWeight,
+  type LoadedFont,
+} from "./font-core.js";
 
-export type FontWeight =
-  | 100
-  | 200
-  | 300
-  | 400
-  | 500
-  | 600
-  | 700
-  | 800
-  | 900;
+export { fontLoader, loadFonts } from "./font-core.js";
+export type { DataFont, FontBytes, FontWeight, LoadedFont } from "./font-core.js";
 
-export type PackageFont = {
-  name: string;
+export type FileFont = FontFace & {
+  /** Absolute/relative project path or a co-located `file:` URL. */
+  file: string | URL;
+};
+
+export type PackageFont = FontFace & {
   package: string;
   /** Path relative to the package directory, such as `files/font-latin-700-normal.woff`. */
   file: string;
-  weight: FontWeight;
-  style?: "normal" | "italic";
-  /** Optional BCP 47 language tag passed through to Satori's font selection. */
-  lang?: string;
 };
 
-export type LoadedFont = {
-  name: string;
-  data: ArrayBuffer;
-  weight: FontWeight;
-  style: "normal" | "italic";
-  /** Optional BCP 47 language tag passed through to Satori's font selection. */
-  lang?: string;
+export type FontsourceFont = Omit<FontFace, "name" | "weight"> & {
+  /** Fontsource id (`inter`) or installed package name (`@fontsource/inter`). */
+  font: string;
+  /** Defaults to the family name declared by the installed Fontsource package. */
+  name?: string;
+  /** Defaults to 400. */
+  weight?: FontWeight;
+  /** Defaults to the package's declared default subset (normally `latin`). */
+  subset?: string;
 };
 
 export type PackageFontOptions = {
@@ -44,6 +46,11 @@ export type PackageFontOptions = {
    * there. Return `undefined` to fall back to the default resolution.
    */
   resolvePackage?: (packageName: string) => string | undefined;
+};
+
+export type FileFontOptions = {
+  /** Base directory for relative project font paths. Defaults to `process.cwd()`. */
+  cwd?: string;
 };
 
 const PACKAGE_SEGMENT = /^[a-z0-9][a-z0-9._~-]*$/i;
@@ -76,6 +83,35 @@ function resolveFontFile(packageDirectory: string, file: string): string {
     throw new Error(`Font file must stay within its package directory: ${file}`);
   }
   return target;
+}
+
+function projectFontPath(file: string | URL, cwd: string): string {
+  if (file instanceof URL) {
+    if (file.protocol !== "file:") {
+      throw new Error(`Project font URLs must use the file: protocol: ${file.href}`);
+    }
+    return fileURLToPath(file);
+  }
+  return path.resolve(cwd, file);
+}
+
+/** Loads co-located or otherwise project-managed font files. */
+export async function loadFileFonts(
+  fonts: readonly FileFont[],
+  options: FileFontOptions = {},
+): Promise<LoadedFont[]> {
+  const cwd = path.resolve(options.cwd ?? process.cwd());
+  return Promise.all(
+    fonts.map(async (font) => loadedFont(font, await readFile(projectFontPath(font.file, cwd)))),
+  );
+}
+
+/** Memoizes project-managed font files across renders. */
+export function fileFontLoader(
+  fonts: readonly FileFont[],
+  options: FileFontOptions = {},
+): () => Promise<LoadedFont[]> {
+  return memoizedFontLoader(() => loadFileFonts(fonts, options));
 }
 
 /**
@@ -172,18 +208,77 @@ export async function loadPackageFonts(
         options.resolvePackage,
       );
       const bytes = await readFile(resolveFontFile(directory, font.file));
-      const data = bytes.buffer.slice(
-        bytes.byteOffset,
-        bytes.byteOffset + bytes.byteLength,
-      ) as ArrayBuffer;
+      return loadedFont(font, bytes);
+    }),
+  );
+}
 
-      return {
-        name: font.name,
-        data,
-        weight: font.weight,
-        style: font.style ?? "normal",
-        ...(font.lang === undefined ? {} : { lang: font.lang }),
-      };
+type FontsourceMetadata = {
+  id: string;
+  family: string;
+  defSubset: string;
+};
+
+function fontsourcePackageName(font: string): string {
+  const packageName = font.startsWith("@") ? font : `@fontsource/${font}`;
+  if (!packageName.startsWith("@fontsource/")) {
+    throw new Error(`Fontsource packages must use the @fontsource scope: ${font}`);
+  }
+  assertPackageName(packageName);
+  return packageName;
+}
+
+function fontsourceMetadata(directory: string, packageName: string): FontsourceMetadata {
+  const metadata = JSON.parse(
+    readFileSync(resolveFontFile(directory, "metadata.json"), "utf8"),
+  ) as Partial<FontsourceMetadata>;
+  if (
+    typeof metadata.id !== "string" ||
+    !PACKAGE_SEGMENT.test(metadata.id) ||
+    typeof metadata.family !== "string" ||
+    metadata.family.length === 0 ||
+    typeof metadata.defSubset !== "string" ||
+    !PACKAGE_SEGMENT.test(metadata.defSubset)
+  ) {
+    throw new Error(`${packageName} has invalid Fontsource metadata.`);
+  }
+  return metadata as FontsourceMetadata;
+}
+
+/**
+ * Loads static Fontsource faces using the installed package's family and
+ * default-subset metadata, so callers do not need to discover internal paths.
+ */
+export async function loadFontsourceFonts(
+  fonts: readonly FontsourceFont[],
+  options: PackageFontOptions = {},
+): Promise<LoadedFont[]> {
+  return Promise.all(
+    fonts.map(async (font) => {
+      const packageName = fontsourcePackageName(font.font);
+      const directory = findPackageDirectory(
+        packageName,
+        options.cwd,
+        options.resolvePackage,
+      );
+      const metadata = fontsourceMetadata(directory, packageName);
+      const subset = font.subset ?? metadata.defSubset;
+      if (!PACKAGE_SEGMENT.test(subset)) {
+        throw new Error(`Invalid Fontsource subset: ${subset}`);
+      }
+      const weight = font.weight ?? 400;
+      const style = font.style ?? "normal";
+      const file = `files/${metadata.id}-${subset}-${weight}-${style}.woff`;
+      const bytes = await readFile(resolveFontFile(directory, file));
+      return loadedFont(
+        {
+          name: font.name ?? metadata.family,
+          weight,
+          style,
+          ...(font.lang === undefined ? {} : { lang: font.lang }),
+        },
+        bytes,
+      );
     }),
   );
 }
@@ -197,12 +292,13 @@ export function packageFontLoader(
   fonts: readonly PackageFont[],
   options: PackageFontOptions = {},
 ): () => Promise<LoadedFont[]> {
-  let loaded: Promise<LoadedFont[]> | undefined;
-  return () => {
-    loaded ??= loadPackageFonts(fonts, options).catch((error: unknown) => {
-      loaded = undefined;
-      throw error;
-    });
-    return loaded;
-  };
+  return memoizedFontLoader(() => loadPackageFonts(fonts, options));
+}
+
+/** Memoizes Fontsource faces across renders. */
+export function fontsourceFontLoader(
+  fonts: readonly FontsourceFont[],
+  options: PackageFontOptions = {},
+): () => Promise<LoadedFont[]> {
+  return memoizedFontLoader(() => loadFontsourceFonts(fonts, options));
 }

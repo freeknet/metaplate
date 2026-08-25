@@ -51,6 +51,11 @@
       "import": "./dist/fonts.js",
       "default": "./dist/fonts.js"
     },
+    "./font-data": {
+      "types": "./dist/font-data.d.ts",
+      "import": "./dist/font-data.js",
+      "default": "./dist/font-data.js"
+    },
     "./png": {
       "types": "./dist/png.d.ts",
       "import": "./dist/png.js",
@@ -67,7 +72,8 @@
   },
   "scripts": {
     "build": "tsup",
-    "check": "npm run lint && npm run check:release-notes && npm run typecheck && npm run typecheck:examples && npm test && npm run build && npm pack --dry-run",
+    "check": "npm run lint && npm run check:duplicates && npm run check:release-notes && npm run typecheck && npm run typecheck:examples && npm test && npm run build && npm pack --dry-run",
+    "check:duplicates": "jscpd src scripts tests examples --min-lines 8 --min-tokens 60 --reporters console --ignore \"**/fixtures/**\" --threshold 0",
     "check:package": "node scripts/verify-package.mjs",
     "check:release-notes": "node scripts/validate-release-notes.mjs",
     "lint": "eslint .",
@@ -99,6 +105,7 @@
     "astro": "7.2.6",
     "eslint": "^10.0.0",
     "express": "5.2.1",
+    "jscpd": "5.0.16",
     "next": "16.3.2",
     "react": "19.2.8",
     "react-router": "7.18.2",
@@ -106,6 +113,7 @@
     "tsup": "^8.5.0",
     "typescript": "^5.9.0",
     "typescript-eslint": "^8.41.0",
+    "vite": "7.3.6",
     "vitest": "^4.1.0"
   },
   "overrides": {

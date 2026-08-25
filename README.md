@@ -11,8 +11,9 @@ Composable, framework-neutral Open Graph image tooling for TypeScript.
 Metaplate turns one branded JSX plate into a consistent image system: SVG and
 raster rendering (PNG by default, any format an encoder produces), Fetch API
 responses, predictable image URLs, configurable Open Graph and X metadata,
-package-based font loading, and image verification. It works with plain Node,
-Node-compatible framework adapters, static build scripts, and Next.js. Runtime
+project-, framework-, and package-managed font loading, and image verification.
+It works with plain Node, Node-compatible framework adapters, static build
+scripts, and Next.js. Runtime
 compatibility depends on both the framework and its deployment adapter.
 
 ## Contents
@@ -78,19 +79,12 @@ JSX, not browser DOM, so containers with multiple children should use flex.
 
 ```tsx
 // src/lib/og.tsx
-import { packageFontLoader } from "metaplate/fonts";
+import { fontsourceFontLoader } from "metaplate/fonts";
 import { createNodeOg } from "metaplate/node";
 
 export const og = createNodeOg<{ title: string; alt: string }>({
   alt: (copy) => copy.alt,
-  fonts: packageFontLoader([
-    {
-      name: "Inter",
-      package: "@fontsource/inter",
-      file: "files/inter-latin-700-normal.woff",
-      weight: 700,
-    },
-  ]),
+  fonts: fontsourceFontLoader([{ font: "inter", weight: 700 }]),
   headers: { "Cache-Control": "public, max-age=86400" },
   component: (copy) => (
     <div
@@ -121,7 +115,7 @@ const response: Response = await og.response(copy);
 ```
 
 Rendering is safe to call concurrently. Satori is a pure call, each render
-builds its own Resvg instance, and `packageFontLoader` memoizes one shared copy
+builds its own Resvg instance, and the font loaders memoize one shared copy
 of the font bytes, so a pool over `render` is the expected way to build many
 cards at once.
 
@@ -297,19 +291,12 @@ walks, so `createElement` is enough:
 // scripts/build-og.mjs
 import { writeFile } from "node:fs/promises";
 import { createElement as h } from "react";
-import { packageFontLoader } from "metaplate/fonts";
+import { fontsourceFontLoader } from "metaplate/fonts";
 import { createNodeOg } from "metaplate/node";
 
 const og = createNodeOg({
   alt: (copy) => copy.alt,
-  fonts: packageFontLoader([
-    {
-      name: "Inter",
-      package: "@fontsource/inter",
-      file: "files/inter-latin-700-normal.woff",
-      weight: 700,
-    },
-  ]),
+  fonts: fontsourceFontLoader([{ font: "inter", weight: 700 }]),
   component: (copy) =>
     h(
       "div",
@@ -372,7 +359,7 @@ and
 
 ```tsx
 // src/lib/og.tsx
-import { packageFontLoader } from "metaplate/fonts";
+import { fontsourceFontLoader } from "metaplate/fonts";
 import { createNextOg } from "metaplate/next";
 
 export type OgCopy = {
@@ -384,14 +371,7 @@ export type OgCopy = {
 
 export const og = createNextOg<OgCopy>({
   alt: (copy) => copy.alt,
-  fonts: packageFontLoader([
-    {
-      name: "Inter",
-      package: "@fontsource/inter",
-      file: "files/inter-latin-700-normal.woff",
-      weight: 700,
-    },
-  ]),
+  fonts: fontsourceFontLoader([{ font: "inter", weight: 700 }]),
   component: (copy) => (
     <div style={{ width: "100%", height: "100%", display: "flex" }}>
       {copy.title}
@@ -644,12 +624,85 @@ exported HTML to confirm its social tags carry the deployment prefix.
 
 ## Fonts
 
-Satori needs real font bytes and accepts TTF, OTF, and WOFF, but not WOFF2.
-`packageFontLoader` resolves faces from installed packages — through the
-active runtime resolver first (so npm, Yarn classic, and pnpm layouts work,
-including hoisted workspaces), falling back to an upward `node_modules` walk.
-It memoizes the bytes for repeated development requests, and a failed load is
-retried on the next call rather than poisoning the loader.
+[Satori](https://github.com/vercel/satori#fonts) needs the actual bytes of every
+rendered face and accepts TTF, OTF, and WOFF, but not WOFF2. This is separate
+from a framework's CSS font setup:
+[`next/font`](https://nextjs.org/docs/app/getting-started/fonts), for example,
+self-hosts and exposes class names but does not expose its transformed font
+bytes to `ImageResponse`. Reuse the same source file or npm package for the
+plate; do not attempt to extract it from the framework's generated CSS.
+
+Choose the loader that matches where the project already owns the font:
+
+| Existing source | Loader | What you specify |
+| --- | --- | --- |
+| Fontsource npm package | `fontsourceFontLoader` | Font id plus optional weight/style/subset |
+| Local project file | `fileFontLoader` | Relative/absolute path or co-located `file:` URL |
+| Existing bytes or framework fetch/import | `fontLoader` | Bytes or a lazy byte callback |
+| Any other npm package | `packageFontLoader` | Package name and package-relative file |
+
+All loaders memoize successful bytes across renders and retry after a failed
+load. Fontsource is the shortest npm-managed path; it reads the installed
+package's family and default subset from `metadata.json` and selects its WOFF
+face, so no internal filename needs to be copied into application code:
+
+```ts
+import { fontsourceFontLoader } from "metaplate/fonts";
+
+const fonts = fontsourceFontLoader([
+  { font: "inter", weight: 400 },
+  { font: "inter", weight: 700 },
+]);
+```
+
+Install the corresponding package once (`npm install @fontsource/inter`). This
+uses [Fontsource's official npm self-hosting model](https://fontsource.org/docs/getting-started/introduction)
+while selecting WOFF instead of the WOFF2 normally used by browser CSS.
+
+For a font already checked into the project, point at it directly in a
+Node-compatible renderer:
+
+```ts
+import { fileFontLoader } from "metaplate/fonts";
+
+const fonts = fileFontLoader([
+  {
+    name: "Brand Sans",
+    file: new URL("../assets/brand-sans.woff", import.meta.url),
+    weight: 700,
+  },
+]);
+```
+
+For an edge runtime or a framework that already resolves/fetches an asset,
+give Metaplate the resulting bytes. The callback stays lazy and is evaluated
+once:
+
+```ts
+import { fontLoader } from "metaplate/font-data";
+
+const fonts = fontLoader([
+  {
+    name: "Brand Sans",
+    weight: 700,
+    data: async () => {
+      const response = await fetch(new URL("../assets/brand-sans.woff", import.meta.url));
+      if (!response.ok) throw new Error(`Unable to load font: ${response.status}`);
+      return response.arrayBuffer();
+    },
+  },
+]);
+```
+
+[Vite documents asset URL imports](https://vite.dev/guide/assets.html), but also
+notes that `new URL(..., import.meta.url)` has different semantics in SSR. In
+Astro and React Router Node deployments, prefer `fileFontLoader` for
+server-owned files; use `fontLoader` only when the framework/deployment already
+gives the server a fetchable URL or bytes.
+
+`packageFontLoader` remains the escape hatch for other npm font packages. It
+resolves through the active runtime first (npm, Yarn classic, pnpm, and hoisted
+workspaces), then falls back to an upward `node_modules` walk:
 
 Install layouts without a physical `node_modules` — Yarn Plug'n'Play — cannot
 be read by path at all. Supply a `resolvePackage` hook that maps a package
@@ -763,7 +816,10 @@ for PNG-only checks.
   produces, plus Fetch API responses. Satori and Resvg are installed
   automatically.
 - `metaplate/next` — native Next.js `ImageResponse` adapter. Needs `next`.
-- `metaplate/fonts` — hoist-safe package font loading and memoization. No peers.
+- `metaplate/font-data` — runtime-neutral normalization and memoization for
+  application/framework-provided bytes. No peers or Node built-ins.
+- `metaplate/fonts` — project-file, Fontsource, generic npm-package, and
+  application-byte font loading for Node-compatible runtimes. No peers.
 - `metaplate/png` — PNG header inspection and dimension verification. No peers.
 - `metaplate/image` — dimension and structural verification for SVG, PNG,
   JPEG, and WebP. No peers.

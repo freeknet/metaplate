@@ -26,6 +26,11 @@ All notable changes to Metaplate are documented in this file. The project uses
   explicit error, warning, and unknown verdicts.
 - Node and Next plates expose `handlerFrom`, a framework-neutral sync/async
   resolver that forwards every route argument for dynamic copy.
+- Font loading now matches how applications already manage assets:
+  `fontsourceFontLoader` infers family, subset, and WOFF paths from installed
+  Fontsource metadata; `fileFontLoader` reads project-owned files; and the
+  runtime-neutral `metaplate/font-data` entry memoizes existing or lazily
+  fetched bytes for framework and edge runtimes.
 
 ### Changed
 
@@ -48,9 +53,17 @@ All notable changes to Metaplate are documented in this file. The project uses
   of leaving Metaplate's examples disconnected from upstream contracts. The
   pull-request and release templates now require those references for future
   framework-specific changes.
+- Centralize renderer plate assembly and route handlers, platform compatibility
+  facts, packed-package fixture definitions, and binary image test builders in
+  focused modules. A zero-tolerance clone scan now runs in `npm run check` to
+  prevent those contracts from drifting back into duplicated call sites.
 
 ### Fixed
 
+- Pin the certified React Router 7 fixture to Vite 7.3.6 instead of allowing
+  npm to select Vite 8. React Router 7 passes Vite's deprecated `envFile`
+  option internally under Vite 8; package verification now rejects that
+  warning if the mismatch returns.
 - Harden PNG structural validation: unsupported color/bit-depth combinations,
   invalid IHDR methods, oversized zlib windows, invalid indexed palettes, and
   unknown critical chunks now fail verification.
@@ -80,6 +93,9 @@ All notable changes to Metaplate are documented in this file. The project uses
 - Document Node-versus-edge runtime boundaries, dynamic-route resource and
   SSRF controls, channel-specific metadata, social compatibility profiles,
   and framework certification status.
+- Document how Satori's byte requirement differs from framework CSS loaders,
+  including `next/font`, and give explicit Fontsource, project-file, and
+  framework-provided byte recipes with upstream references.
 - Add reviewed, versioned GitHub release notes, a reusable highlights-first
   template, a draft-release workflow, and publish-time validation so a bare
   generated pull-request list cannot become the release landing page again.

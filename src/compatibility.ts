@@ -1,17 +1,15 @@
 import { assertImageSize, type SocialImageDescriptor } from "./core.js";
+import {
+  SOCIAL_COMPATIBILITY_PROFILES,
+  SOCIAL_TARGETS,
+  type ProfileSeverity,
+  type SocialCompatibilityProfile,
+  type SocialTarget,
+} from "./compatibility-profiles.js";
 
-export type SocialTarget =
-  | "universal"
-  | "openGraph"
-  | "facebook"
-  | "x"
-  | "linkedin"
-  | "slack"
-  | "mastodon"
-  | "discord"
-  | "instagram";
+export type { SocialTarget } from "./compatibility-profiles.js";
 
-export type CompatibilitySeverity = "error" | "warning" | "unknown";
+export type CompatibilitySeverity = ProfileSeverity | "unknown";
 
 export type SocialCompatibilityIssue = Readonly<{
   target: SocialTarget;
@@ -34,27 +32,7 @@ export type SocialCompatibilityReport = Readonly<{
   issues: readonly SocialCompatibilityIssue[];
 }>;
 
-const UNIVERSAL_TYPES = new Set(["image/png", "image/jpeg"]);
-const DOCUMENTED_RASTER_TYPES = new Set([...UNIVERSAL_TYPES, "image/gif"]);
-const ALL_TARGETS = new Set<SocialTarget>([
-  "universal",
-  "openGraph",
-  "facebook",
-  "x",
-  "linkedin",
-  "slack",
-  "mastodon",
-  "discord",
-  "instagram",
-]);
-const CRAWLER_TARGETS = new Set<SocialTarget>([
-  "universal",
-  "facebook",
-  "x",
-  "linkedin",
-  "slack",
-  "mastodon",
-]);
+const ALL_TARGETS = new Set<SocialTarget>(SOCIAL_TARGETS);
 
 function issue(
   target: SocialTarget,
@@ -100,8 +78,10 @@ export function socialImageCompatibility(
   const type = image.type?.toLowerCase();
 
   for (const target of targets) {
+    const profile: SocialCompatibilityProfile =
+      SOCIAL_COMPATIBILITY_PROFILES[target];
     if (
-      (options.crawlerReady || CRAWLER_TARGETS.has(target)) &&
+      (options.crawlerReady || profile.crawlerReady) &&
       !crawlerReadyUrl(image.url)
     ) {
       issues.push(
@@ -118,68 +98,55 @@ export function socialImageCompatibility(
       issues.push(issue(target, "error", "contract", "Social images require alt text."));
     }
 
-    if (target === "universal" || target === "facebook" || target === "linkedin") {
+    if (profile.format) {
       if (!type) {
         issues.push(
           issue(
             target,
-            target === "universal" ? "error" : "warning",
+            profile.format.missingSeverity,
             "format",
             "No media type is declared, so raster compatibility cannot be confirmed.",
           ),
         );
-      } else if (
-        !(target === "universal" ? UNIVERSAL_TYPES : DOCUMENTED_RASTER_TYPES).has(type)
-      ) {
+      } else if (!profile.format.accepted.includes(type)) {
         issues.push(
           issue(
             target,
             "error",
             "format",
-            `${type} is not a documented universal raster social-preview format; use PNG or JPEG.`,
+            `${type} ${profile.format.invalidMessage}`,
           ),
         );
       }
-    } else if (
-      (target === "openGraph" || target === "slack" || target === "mastodon") &&
-      type === "image/svg+xml"
-    ) {
+    } else if (profile.warnOnSvg && type === "image/svg+xml") {
       issues.push(
-        issue(
-          target,
-          "warning",
-          "format",
-          "SVG is structurally valid metadata but is not a safe cross-client social delivery format.",
-        ),
+        issue(target, "warning", "format", profile.warnOnSvg),
       );
     }
 
-    if (target === "linkedin") {
-      if (image.width < 1200 || image.height < 627) {
+    if (profile.minimumSize) {
+      if (
+        image.width < profile.minimumSize.width ||
+        image.height < profile.minimumSize.height
+      ) {
         issues.push(
-          issue(
-            target,
-            "error",
-            "dimensions",
-            "LinkedIn full-size previews require at least 1200x627 pixels.",
-          ),
-        );
-      }
-      if (options.fileSize !== undefined && options.fileSize > 5_000_000) {
-        issues.push(
-          issue(target, "error", "file-size", "LinkedIn social images must not exceed 5 MB."),
+          issue(target, "error", "dimensions", profile.minimumSize.message),
         );
       }
     }
+    if (
+      profile.maximumFileSize &&
+      options.fileSize !== undefined &&
+      options.fileSize > profile.maximumFileSize.bytes
+    ) {
+        issues.push(
+          issue(target, "error", "file-size", profile.maximumFileSize.message),
+        );
+    }
 
-    if (target === "discord" || target === "instagram") {
+    if (profile.unknownContract) {
       issues.push(
-        issue(
-          target,
-          "unknown",
-          "contract",
-          `${target === "discord" ? "Discord" : "Instagram"} does not publish a stable webpage image-tag compatibility contract.`,
-        ),
+        issue(target, "unknown", "contract", profile.unknownContract),
       );
     }
   }

@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   detectFormat,
@@ -7,132 +5,19 @@ import {
   imageDimensions,
   verifyImage,
 } from "../src/image.js";
-
-// The checked-in fixtures (card.jpg, icon.jpg, the .webp files, card.png) are
-// real encoder output rather than hand-built headers, so a misreading of a
-// format cannot be encoded into both parser and test. The helpers below build
-// synthetic bytes only for the specific shell/truncation cases a real encoder
-// would never emit.
-function fixture(name: string) {
-  return readFileSync(path.join(import.meta.dirname, "fixtures", name));
-}
-
-// A complete minimal PNG: signature, IHDR, one IDAT, and IEND. The zero CRC
-// passes structural validation, which deliberately does not re-implement the
-// CRC-32 algorithm.
-function pngChunk(type: string, payload: number[]): number[] {
-  const data = payload.length;
-  const length = [
-    (data >>> 24) & 0xff, (data >>> 16) & 0xff, (data >>> 8) & 0xff, data & 0xff,
-  ];
-  return [...length, ...type.split("").map((c) => c.charCodeAt(0)), ...payload, 0, 0, 0, 0];
-}
-
-function completePng(width: number, height: number): Uint8Array {
-  const ihdr = [
-    (width >>> 24) & 0xff, (width >>> 16) & 0xff, (width >>> 8) & 0xff, width & 0xff,
-    (height >>> 24) & 0xff, (height >>> 16) & 0xff, (height >>> 8) & 0xff, height & 0xff,
-    8, 6, 0, 0, 0,
-  ];
-  return Uint8Array.from([
-    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-    ...pngChunk("IHDR", ihdr),
-    ...pngChunk("IDAT", [0x78, 0x9c, 0x01, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01]),
-    ...pngChunk("IEND", []),
-  ]);
-}
-
-function uint24(value: number): number[] {
-  return [value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff];
-}
-
-function webpChunk(type: string, payload: number[]): number[] {
-  return [
-    ...type.split("").map((character) => character.charCodeAt(0)),
-    payload.length & 0xff,
-    (payload.length >>> 8) & 0xff,
-    (payload.length >>> 16) & 0xff,
-    (payload.length >>> 24) & 0xff,
-    ...payload,
-    ...(payload.length % 2 === 0 ? [] : [0]),
-  ];
-}
-
-function completeWebp(chunks: number[][]): Uint8Array {
-  const body = [0x57, 0x45, 0x42, 0x50, ...chunks.flat()];
-  return Uint8Array.from([
-    0x52, 0x49, 0x46, 0x46,
-    body.length & 0xff,
-    (body.length >>> 8) & 0xff,
-    (body.length >>> 16) & 0xff,
-    (body.length >>> 24) & 0xff,
-    ...body,
-  ]);
-}
-
-function vp8xChunk(width: number, height: number, flags = 0): number[] {
-  return webpChunk("VP8X", [flags, 0, 0, 0, ...uint24(width - 1), ...uint24(height - 1)]);
-}
-
-function animChunk(): number[] {
-  return webpChunk("ANIM", [0, 0, 0, 0, 0, 0]);
-}
-
-function vp8lChunk(): number[] {
-  return webpChunk("VP8L", [0x2f, 0, 0, 0, 0]);
-}
-
-function vp8KeyFrameChunk(firstPartitionLength: number, extraData: number[] = []): number[] {
-  const tag = firstPartitionLength << 5;
-  return webpChunk("VP8 ", [
-    tag & 0xff,
-    (tag >>> 8) & 0xff,
-    (tag >>> 16) & 0xff,
-    0x9d, 0x01, 0x2a,
-    0xb0, 0x04, // 1200 pixels wide
-    0x76, 0x02, // 630 pixels high
-    ...extraData,
-  ]);
-}
-
-function anmfChunk(
-  width: number,
-  height: number,
-  x = 0,
-  y = 0,
-  childChunks = [vp8lChunk()],
-): number[] {
-  return webpChunk("ANMF", [
-    ...uint24(x / 2),
-    ...uint24(y / 2),
-    ...uint24(width - 1),
-    ...uint24(height - 1),
-    0, 0, 0, // duration
-    0, // reserved, blend, disposal
-    ...childChunks.flat(),
-  ]);
-}
-
-// A complete baseline JPEG shell with one component, one scan, one
-// entropy-coded byte, and EOI. Its pixel data is intentionally synthetic: the
-// structural reader only needs an otherwise valid path to exercise SOF rules.
-function completeJpeg(width: number, height: number): Uint8Array {
-  return Uint8Array.from([
-    0xff, 0xd8, // SOI
-    0xff, 0xc0, // SOF0
-    0x00, 0x0b, // length 11 (Nf=1)
-    0x08,
-    (height >>> 8) & 0xff, height & 0xff,
-    (width >>> 8) & 0xff, width & 0xff,
-    0x01, // one component
-    0x01, 0x11, 0x00, // component id, sampling factors, quantization table
-    0xff, 0xda, // SOS
-    0x00, 0x08, // length 8 (Ns=1)
-    0x01, 0x01, 0x00, 0x00, 0x3f, 0x00,
-    0x01, // entropy-coded data
-    0xff, 0xd9, // EOI
-  ]);
-}
+import {
+  animChunk,
+  anmfChunk,
+  completeJpeg,
+  completePng,
+  completeWebp,
+  fixture,
+  pngChunk,
+  vp8KeyFrameChunk,
+  vp8lChunk,
+  vp8xChunk,
+  webpChunk,
+} from "./helpers/image-fixtures.js";
 
 describe("imageDimensions", () => {
   it("reads a Satori-compatible SVG with an XML declaration", () => {
@@ -285,18 +170,7 @@ describe("imageDimensions", () => {
   it("rejects a VP8X container with no image data", () => {
     // A structurally complete RIFF holding only the VP8X origin/size header
     // must not verify: it has dimensions but no usable pixels.
-    const canvas = (value: number) => [
-      value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff,
-    ];
-    const payload = [0, 0, 0, 0, ...canvas(1199), ...canvas(629)];
-    const webp = Uint8Array.from([
-      0x52, 0x49, 0x46, 0x46, // "RIFF"
-      0x16, 0x00, 0x00, 0x00, // declared size: 30 - 8
-      0x57, 0x45, 0x42, 0x50, // "WEBP"
-      0x56, 0x50, 0x38, 0x58, // "VP8X"
-      0x0a, 0x00, 0x00, 0x00, // chunk length 10
-      ...payload,
-    ]);
+    const webp = completeWebp([vp8xChunk(1200, 630)]);
     expect(() => imageDimensions(webp)).toThrow(/no image or animation data/);
   });
 
@@ -420,16 +294,7 @@ describe("imageDimensions", () => {
   it("rejects a VP8X container whose only payload chunk is empty", () => {
     // A zero-length VP8 header inside a VP8X container must not count as image
     // data, or the empty-chunk attitude would reopen the VP8X-only hole.
-    const canvas = (value: number) => [
-      value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff,
-    ];
-    const vp8x = [
-      0x56, 0x50, 0x38, 0x58, // "VP8X"
-      0x0a, 0x00, 0x00, 0x00, // chunk length 10
-      0x00, 0x00, 0x00, 0x00, // flags + reserved
-      ...canvas(1199), // width - 1
-      ...canvas(629), // height - 1
-    ];
+    const vp8x = vp8xChunk(1200, 630);
     // body = "WEBP" (4) + vp8x (18) + empty "VP8 " chunk (8); RIFF size = body + 4.
     const webp = Uint8Array.from([
       0x52, 0x49, 0x46, 0x46, // "RIFF"
@@ -445,16 +310,7 @@ describe("imageDimensions", () => {
   it("rejects a VP8X container with a stub VP8 frame", () => {
     // A ten-byte VP8 chunk of zeros claims the minimum frame header length but
     // carries no key-frame start code, so it must not count as image data.
-    const canvas = (value: number) => [
-      value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff,
-    ];
-    const vp8x = [
-      0x56, 0x50, 0x38, 0x58, // "VP8X"
-      0x0a, 0x00, 0x00, 0x00, // chunk length 10
-      0x00, 0x00, 0x00, 0x00, // flags + reserved
-      ...canvas(1199), // width - 1
-      ...canvas(629), // height - 1
-    ];
+    const vp8x = vp8xChunk(1200, 630);
     const stubVp8 = [
       0x56, 0x50, 0x38, 0x20, // "VP8 "
       0x0a, 0x00, 0x00, 0x00, // chunk length 10
@@ -473,16 +329,7 @@ describe("imageDimensions", () => {
   it("rejects a VP8X container with a junk VP8L payload", () => {
     // A five-byte VP8L chunk meets the old minimum-length gate, but its first
     // byte is not the 0x2F lossless signature, so it is not a VP8L bitstream.
-    const canvas = (value: number) => [
-      value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff,
-    ];
-    const vp8x = [
-      0x56, 0x50, 0x38, 0x58, // "VP8X"
-      0x0a, 0x00, 0x00, 0x00, // chunk length 10
-      0x00, 0x00, 0x00, 0x00, // flags + reserved
-      ...canvas(1199), // width - 1
-      ...canvas(629), // height - 1
-    ];
+    const vp8x = vp8xChunk(1200, 630);
     const junkVp8l = [
       0x56, 0x50, 0x38, 0x4c, // "VP8L"
       0x05, 0x00, 0x00, 0x00, // chunk length 5
@@ -502,16 +349,7 @@ describe("imageDimensions", () => {
   it("rejects a VP8X container with a header-only ANMF frame", () => {
     // A 16-byte ANMF is only the frame header; without a nested VP8/VP8L
     // bitstream it carries no image data.
-    const canvas = (value: number) => [
-      value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff,
-    ];
-    const vp8x = [
-      0x56, 0x50, 0x38, 0x58, // "VP8X"
-      0x0a, 0x00, 0x00, 0x00, // chunk length 10
-      0x00, 0x00, 0x00, 0x00, // flags + reserved
-      ...canvas(1199), // width - 1
-      ...canvas(629), // height - 1
-    ];
+    const vp8x = vp8xChunk(1200, 630);
     const headerOnlyAnmf = [
       0x41, 0x4e, 0x4d, 0x46, // "ANMF"
       0x10, 0x00, 0x00, 0x00, // chunk length 16
@@ -528,16 +366,7 @@ describe("imageDimensions", () => {
   });
 
   it("accepts a VP8X container whose ANMF frame nests a VP8L bitstream", () => {
-    const canvas = (value: number) => [
-      value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff,
-    ];
-    const vp8x = [
-      0x56, 0x50, 0x38, 0x58, // "VP8X"
-      0x0a, 0x00, 0x00, 0x00, // chunk length 10
-      0x00, 0x00, 0x00, 0x00, // flags + reserved
-      ...canvas(1199), // width - 1
-      ...canvas(629), // height - 1
-    ];
+    const vp8x = vp8xChunk(1200, 630);
     const nestedVp8l = [
       0x56, 0x50, 0x38, 0x4c, // "VP8L"
       0x05, 0x00, 0x00, 0x00, // chunk length 5
@@ -563,16 +392,7 @@ describe("imageDimensions", () => {
   });
 
   it("rejects an ANMF frame with multiple image bitstreams", () => {
-    const canvas = (value: number) => [
-      value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff,
-    ];
-    const vp8x = [
-      0x56, 0x50, 0x38, 0x58, // "VP8X"
-      0x0a, 0x00, 0x00, 0x00, // chunk length 10
-      0x00, 0x00, 0x00, 0x00, // flags + reserved
-      ...canvas(1199), // width - 1
-      ...canvas(629), // height - 1
-    ];
+    const vp8x = vp8xChunk(1200, 630);
     const vp8l = [
       0x56, 0x50, 0x38, 0x4c, // "VP8L"
       0x05, 0x00, 0x00, 0x00, // chunk length 5
@@ -597,16 +417,7 @@ describe("imageDimensions", () => {
   });
 
   it("rejects an ANMF frame with duplicate ALPH chunks", () => {
-    const canvas = (value: number) => [
-      value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff,
-    ];
-    const vp8x = [
-      0x56, 0x50, 0x38, 0x58, // "VP8X"
-      0x0a, 0x00, 0x00, 0x00, // chunk length 10
-      0x00, 0x00, 0x00, 0x00, // flags + reserved
-      ...canvas(1199), // width - 1
-      ...canvas(629), // height - 1
-    ];
+    const vp8x = vp8xChunk(1200, 630);
     const alph = [
       0x41, 0x4c, 0x50, 0x48, // "ALPH"
       0x01, 0x00, 0x00, 0x00, // chunk length 1
@@ -640,16 +451,7 @@ describe("imageDimensions", () => {
   it("rejects an ANMF frame whose second sub-chunk overruns the frame", () => {
     // A plausible first VP8L image must not let a malformed tail hide: the
     // whole frame is walked, so the second sub-chunk's overrun is caught.
-    const canvas = (value: number) => [
-      value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff,
-    ];
-    const vp8x = [
-      0x56, 0x50, 0x38, 0x58, // "VP8X"
-      0x0a, 0x00, 0x00, 0x00, // chunk length 10
-      0x00, 0x00, 0x00, 0x00, // flags + reserved
-      ...canvas(1199), // width - 1
-      ...canvas(629), // height - 1
-    ];
+    const vp8x = vp8xChunk(1200, 630);
     const goodVp8l = [
       0x56, 0x50, 0x38, 0x4c, // "VP8L"
       0x05, 0x00, 0x00, 0x00, // chunk length 5
@@ -679,16 +481,7 @@ describe("imageDimensions", () => {
   });
 
   it("rejects an ANMF frame nested inside another ANMF frame", () => {
-    const canvas = (value: number) => [
-      value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff,
-    ];
-    const vp8x = [
-      0x56, 0x50, 0x38, 0x58, // "VP8X"
-      0x0a, 0x00, 0x00, 0x00, // chunk length 10
-      0x00, 0x00, 0x00, 0x00, // flags + reserved
-      ...canvas(1199), // width - 1
-      ...canvas(629), // height - 1
-    ];
+    const vp8x = vp8xChunk(1200, 630);
     const nestedAnmf = [
       0x41, 0x4e, 0x4d, 0x46, // "ANMF"
       0x10, 0x00, 0x00, 0x00, // chunk length 16: a frame header only

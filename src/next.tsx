@@ -1,13 +1,7 @@
 import type { ReactElement } from "react";
-import {
-  OG_CONTENT_TYPE,
-  OG_SIZE,
-  assertImageSize,
-  socialImage,
-  socialImageMetadata,
-  type ImageSize,
-} from "./core.js";
+import { OG_CONTENT_TYPE, type ImageSize } from "./core.js";
 import { optionalPeer } from "./optional-peer.js";
+import { createPlateHandlers, createPlateSocial } from "./plate.js";
 
 type ImageResponseConstructor = typeof import("next/og").ImageResponse;
 type ImageResponseOptions = NonNullable<
@@ -44,11 +38,8 @@ export type NextOgDefinition<Copy> = {
  * and metadata helpers that consume it.
  */
 export function createNextOg<Copy>(definition: NextOgDefinition<Copy>) {
-  const size = Object.freeze({ ...(definition.size ?? OG_SIZE) });
-  assertImageSize(size);
-  const imagePath = definition.imagePath ?? "og-image";
-  const basePath = definition.basePath ?? "";
-  const origin = definition.origin ?? "";
+  const social = createPlateSocial(definition, OG_CONTENT_TYPE);
+  const { size } = social;
 
   async function render(copy: Copy) {
     const fonts = definition.fonts ? await definition.fonts() : undefined;
@@ -64,29 +55,9 @@ export function createNextOg<Copy>(definition: NextOgDefinition<Copy>) {
   }
 
   return Object.freeze({
-    size,
+    ...social,
     contentType: OG_CONTENT_TYPE,
     render,
-    handler: (copy: Copy) => () => render(copy),
-    handlerFrom: <Arguments extends unknown[]>(
-      resolve: (...arguments_: Arguments) => Copy | Promise<Copy>,
-    ) =>
-      async (...arguments_: Arguments) => render(await resolve(...arguments_)),
-    image: (route: string, copy: Copy) =>
-      socialImage(route, definition.alt(copy), {
-        size,
-        imagePath,
-        basePath,
-        origin,
-        type: OG_CONTENT_TYPE,
-      }),
-    metadata: (route: string, copy: Copy) =>
-      socialImageMetadata(route, definition.alt(copy), {
-        size,
-        imagePath,
-        basePath,
-        origin,
-        type: OG_CONTENT_TYPE,
-      }),
+    ...createPlateHandlers(render),
   });
 }
