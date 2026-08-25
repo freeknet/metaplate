@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -66,6 +67,14 @@ export function validateSocketReport(report, now = new Date()) {
   if (report.status === "complete") {
     if (!report.export || !report.export.artifact || !report.export.generatedAt || !report.export.sha256) {
       errors.push("complete reports require export artifact, generatedAt, and sha256 provenance");
+    } else {
+      const artifact = resolve(root, report.export.artifact);
+      try {
+        const digest = createHash("sha256").update(readFileSync(artifact)).digest("hex");
+        if (digest !== report.export.sha256) errors.push("complete report export sha256 does not match its artifact");
+      } catch {
+        errors.push(`complete report export artifact is not readable: ${report.export.artifact}`);
+      }
     }
   }
   if (report.status === "awaiting-alert-export" && report.alerts.length !== 0) {

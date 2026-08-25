@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "package": "metaplate",
+  "version": "0.6.0",
+  "captureKind": "official-socket-cli",
+  "capturedAt": "2026-08-25",
+  "source": "https://socket.dev/npm/package/metaplate/alerts/0.6.0?tab=dependencies",
+  "packageSizeBytes": 459066,
+  "shallow": {
+    "overall": 76,
+    "supplyChain": 76,
+    "maintenance": 92,
+    "quality": 99,
+    "vulnerability": 100,
+    "license": 100,
+    "capabilities": [],
+    "alerts": [
+      { "name": "recentlyPublished", "severity": "middle", "category": "supplyChainRisk", "example": "npm/metaplate@0.6.0" }
+    ]
+  },
+  "deep": {
+    "dependencyCount": 90,
+    "aggregation": "min",
+    "overall": 38,
+    "supplyChain": 60,
+    "maintenance": 54,
+    "quality": 38,
+    "vulnerability": 100,
+    "license": 70,
+    "lowest": {
+      "overall": "npm/@resvg/resvg-js-android-arm-eabi@2.6.2",
+      "supplyChain": "npm/next@16.3.3",
+      "maintenance": "npm/string.prototype.codepointat@0.2.1",
+      "quality": "npm/@resvg/resvg-js-android-arm-eabi@2.6.2",
+      "vulnerability": "npm/color-name@1.1.4",
+      "license": "npm/@resvg/resvg-js-android-arm-eabi@2.6.2"
+    },
+    "capabilities": ["env", "eval", "fs", "net", "shell", "unsafe", "url"],
+    "alerts": [
+      { "name": "socketUpgradeAvailable", "severity": "high", "category": "maintenance", "example": "npm/string.prototype.codepointat@0.2.1", "lockfilePath": "node_modules/string.prototype.codepointat", "dependencyPath": "metaplate > satori > @shuding/opentype.js > string.prototype.codepointat", "reachability": "runtime-peer" },
+      { "name": "gptSecurity", "severity": "middle", "category": "supplyChainRisk", "example": "npm/@shuding/opentype.js@1.4.0-beta.0", "reachability": "runtime-peer" },
+      { "name": "networkAccess", "severity": "middle", "category": "supplyChainRisk", "example": "npm/yoga-layout@3.2.1", "reachability": "runtime-peer" },
+      { "name": "potentialVulnerability", "severity": "middle", "category": "supplyChainRisk", "example": "npm/next@16.3.3", "reachability": "runtime-peer" },
+      { "name": "recentlyPublished", "severity": "middle", "category": "supplyChainRisk", "example": "npm/satori@0.33.4", "reachability": "runtime-peer" },
+      { "name": "shellAccess", "severity": "middle", "category": "supplyChainRisk", "example": "npm/@resvg/resvg-js@2.6.2", "reachability": "runtime-peer" },
+      { "name": "trivialPackage", "severity": "middle", "category": "supplyChainRisk", "example": "npm/@img/sharp-linux-arm@0.35.3", "reachability": "development-only" },
+      { "name": "usesEval", "severity": "middle", "category": "supplyChainRisk", "example": "npm/source-map-js@1.2.1", "reachability": "development-only" },
+      { "name": "copyleftLicense", "severity": "low", "category": "license", "example": "npm/@resvg/resvg-js-android-arm-eabi@2.6.2", "reachability": "runtime-peer" },
+      { "name": "debugAccess", "severity": "low", "category": "supplyChainRisk", "example": "npm/sharp@0.35.3", "reachability": "development-only" },
+      { "name": "dynamicRequire", "severity": "low", "category": "supplyChainRisk", "example": "npm/next@16.3.3", "reachability": "runtime-peer" },
+      { "name": "envVars", "severity": "low", "category": "supplyChainRisk", "example": "npm/css-to-react-native@3.2.0", "reachability": "development-only" },
+      { "name": "filesystemAccess", "severity": "low", "category": "supplyChainRisk", "example": "npm/@resvg/resvg-js@2.6.2", "reachability": "runtime-peer" },
+      { "name": "gptAnomaly", "severity": "low", "category": "supplyChainRisk", "example": "npm/fflate@0.7.3", "reachability": "development-only" },
+      { "name": "minifiedFile", "severity": "low", "category": "quality", "example": "npm/@resvg/resvg-js@2.6.2", "reachability": "runtime-peer" },
+      { "name": "newAuthor", "severity": "low", "category": "supplyChainRisk", "example": "npm/camelize@1.0.1", "reachability": "development-only" },
+      { "name": "nonpermissiveLicense", "severity": "low", "category": "license", "example": "npm/@resvg/resvg-js-android-arm-eabi@2.6.2", "reachability": "runtime-peer" },
+      { "name": "unmaintained", "severity": "low", "category": "maintenance", "example": "npm/metaplate@0.6.0", "reachability": "published-package-metadata" },
+      { "name": "urlStrings", "severity": "low", "category": "supplyChainRisk", "example": "npm/camelize@1.0.1", "reachability": "development-only" }
+    ]
+  },
+  "highCriticalDisposition": {
+    "high": [
+      {
+        "alert": "socketUpgradeAvailable",
+        "package": "string.prototype.codepointat",
+        "version": "0.2.1",
+        "path": "metaplate > satori > @shuding/opentype.js > string.prototype.codepointat",
+        "reachability": "runtime-peer",
+        "disposition": "accepted-with-evidence",
+        "reason": "Socket identifies a maintenance upgrade opportunity, not a vulnerability. The package is transitive to the release-tested Satori peer; the available 1.0.1 override was tested and rejected because Socket scores did not improve while the lockfile grew by 73 packages.",
+        "verification": "npm audit --audit-level=high; package-lock.json registry/integrity checks; packed artifact and Node 20/22/24 plus Linux/Windows/macOS tests",
+        "expiry": "2026-12-31"
+      }
+    ],
+    "critical": []
+  },
+  "limitations": [
+    "Socket CLI output exposes example package identities but not full physical dependency paths; lockfilePath and dependencyPath above are derived locally and labeled accordingly.",
+    "Download, popularity, package age, maintainer, and adoption metrics are external score mechanics and are not manipulated.",
+    "The deep report's next@16.3.3 example reflects Socket's analyzed peer graph; the repository lockfile currently pins next@16.3.2 for its fixture."
+  ]
+}

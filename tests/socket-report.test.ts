@@ -3,11 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-async function runImporter(input: unknown) {
+async function runImporter(input: unknown, encoding: "utf8" | "utf16le" = "utf8") {
   const directory = await mkdtemp(join(tmpdir(), "metaplate-socket-"));
   const inputPath = join(directory, "input.json");
   const outputPath = join(directory, "output.json");
-  await writeFile(inputPath, JSON.stringify(input));
+  const content = JSON.stringify(input);
+  await writeFile(inputPath, encoding === "utf16le" ? Buffer.from(`\uFEFF${content}`, "utf16le") : content);
   const child = await import("node:child_process");
   return new Promise<{ code: number | null; stdout: string; stderr: string; output?: string }>((resolve) => {
     const childProcess = child.spawn(globalThis.process.execPath, ["scripts/socket-report.mjs", outputPath, inputPath], { stdio: ["ignore", "pipe", "pipe"] });
@@ -35,6 +36,37 @@ describe("Socket report importer", () => {
     expect(result.code).toBe(0);
     expect(JSON.parse(result.output!).shallow).toEqual({ overall: 96 });
     expect(JSON.parse(result.output!).captureKind).toBe("official-export");
+  });
+
+  it("accepts UTF-16LE official exports", async () => {
+    const result = await runImporter({
+      data: { purl: "pkg:npm/metaplate@0.6.0", self: { purl: "npm/metaplate@0.6.0", score: { overall: 76 } } },
+    }, "utf16le");
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.output!).shallow).toEqual({ overall: 76 });
+  });
+
+  it("accepts the official Socket CLI data envelope", async () => {
+    const result = await runImporter({
+      data: {
+        purl: "pkg:npm/metaplate@0.6.0",
+        self: {
+          purl: "npm/metaplate@0.6.0",
+          score: { overall: 76 },
+          alerts: [{ name: "recentlyPublished", severity: "middle" }],
+        },
+        transitively: {
+          score: { overall: 38 },
+          alerts: [{ name: "socketUpgradeAvailable", severity: "high" }],
+        },
+      },
+    });
+    expect(result.code).toBe(0);
+    const report = JSON.parse(result.output!);
+    expect(report.source).toBe("https://socket.dev/npm/package/metaplate@0.6.0");
+    expect(report.shallow).toEqual({ overall: 76 });
+    expect(report.deep).toEqual({ overall: 38 });
+    expect(report.alerts).toHaveLength(2);
   });
 
   it("rejects reports without official provenance or the requested baseline", async () => {

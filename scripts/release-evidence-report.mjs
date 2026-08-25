@@ -21,6 +21,7 @@ export function createEvidenceReport({ commitSha = process.env.GITHUB_SHA ?? "lo
   const inventory = readJson("dependency-inventory.json");
   const deployment = readJson("deployment-evidence.json");
   const socket = readJson("socket-dispositions.json");
+  const socketScore = readJson("socket-score-report.json");
   const deploymentErrors = validateDeploymentManifest(deployment);
   const socketErrors = validateSocketReport(socket);
   const socketIncomplete = socket.status === "awaiting-alert-export";
@@ -35,6 +36,7 @@ export function createEvidenceReport({ commitSha = process.env.GITHUB_SHA ?? "lo
     "dependency-inventory.json",
     "deployment-evidence.json",
     "socket-dispositions.json",
+    "socket-score-report.json",
   ].map((file) => ({ file, sha256: sha256(join(root, file)) }));
   return {
     schemaVersion: 1,
@@ -59,6 +61,12 @@ export function createEvidenceReport({ commitSha = process.env.GITHUB_SHA ?? "lo
       status: socket.status,
       alertCount: socket.alerts.length,
       result: socketErrors.length > 0 ? "failed" : socketIncomplete ? "incomplete" : "passed",
+      baseline: {
+        version: socketScore.version,
+        captureKind: socketScore.captureKind,
+        shallow: socketScore.shallow,
+        deep: socketScore.deep,
+      },
     },
     artifacts,
   };
