@@ -132,16 +132,30 @@ exports. Put a function in `api/og.ts` and keep the route on the Node runtime:
 // api/og.ts
 import { og } from "../src/lib/og";
 
-export const GET = og.fetchableFrom((request: Request) => {
+// Named method handler: use handlerFrom for a GET export.
+export const GET = og.handlerFrom((request: Request) => {
   const slug = new URL(request.url).searchParams.get("slug")?.slice(0, 80) ?? "home";
   return { title: slug, alt: `${slug} card` };
 });
 ```
 
 The first resolver argument is the Web `Request`; route data is read from its
-URL or from the framework's documented request context. `fetchableFrom` returns
-an object with a `fetch` method, so it can be exported directly by Fetch-style
-runtimes without an adapter wrapper.
+URL or from the framework's documented request context. For a named method export
+such as `GET`, use `handlerFrom` as shown above. For a Fetch-style default export,
+use the object returned by `fetchableFrom` directly:
+
+```ts
+// api/og-fetch.ts
+import { og } from "../src/lib/og";
+
+export default og.fetchableFrom((request: Request) => {
+  const slug = new URL(request.url).searchParams.get("slug")?.slice(0, 80) ?? "home";
+  return { title: slug, alt: `${slug} card` };
+});
+```
+
+`fetchableFrom` returns an object with a `fetch` method, so it can be exported
+directly by Fetch-style runtimes without an adapter wrapper.
 
 If a framework supplies generated route types, use those types rather than the
 structural example above. Do not mark this function for Vercel Edge when the

@@ -78,7 +78,7 @@
     "dependencies:report": "node scripts/dependency-inventory.mjs > dependency-inventory.json",
     "check:dependencies": "node scripts/dependency-inventory.mjs --summary && node scripts/verify-dependency-inventory.mjs && node scripts/verify-socket-dispositions.mjs",
     "check:deployment": "node scripts/verify-deployment-evidence.mjs",
-    "release:evidence": "npm run dependencies:report && node scripts/release-evidence-report.mjs",
+    "release:evidence": "node scripts/release-checks.mjs && node scripts/release-evidence-report.mjs",
     "socket:report": "node scripts/socket-report.mjs",
     "check:package": "node scripts/verify-package.mjs",
     "check:release-notes": "node scripts/validate-release-notes.mjs",

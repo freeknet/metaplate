@@ -49,6 +49,25 @@ describe("verifySocialImage", () => {
     expect(report.issues.map(({ code }) => code)).toEqual(["dimensions", "format"]);
   });
 
+  it("uses actual bytes for platform limits and application limits", () => {
+    const bytes = completePng(1200, 630);
+    const report = verifySocialImage(bytes, pngDescriptor, {
+      targets: ["linkedin"],
+      maxFileSize: bytes.byteLength - 1,
+    });
+    expect(report.actual.byteLength).toBe(bytes.byteLength);
+    expect(report.issues.some(({ code }) => code === "file-size")).toBe(true);
+  });
+
+  it("does not expose compatibility fileSize as a caller option", () => {
+    const options: Parameters<typeof verifySocialImage>[2] = {
+      targets: ["universal"],
+      // @ts-expect-error fileSize is derived from encoded bytes
+      fileSize: 1,
+    };
+    expect(options).toBeDefined();
+  });
+
   it("reports target-specific aspect-ratio guidance as a warning", () => {
     const report = socialImageCompatibility(
       { ...pngDescriptor, width: 1300, height: 627 },

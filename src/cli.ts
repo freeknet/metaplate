@@ -47,7 +47,7 @@ async function main(args: string[]) {
       const issues: unknown[] = [];
       let compatible = true;
 
-      if (invocation.socialTargets.length > 0) {
+      if (invocation.socialTargets.length > 0 || invocation.maxFileSize !== undefined) {
         const descriptor = {
           url: invocation.url ?? "https://example.invalid/og-image",
           alt: invocation.alt ?? "",
@@ -58,7 +58,7 @@ async function main(args: string[]) {
             : `image/${dimensions.format === "jpeg" ? "jpeg" : dimensions.format}`,
         };
         const report = verifySocialImage(bytes, descriptor, {
-          targets: invocation.socialTargets,
+          ...(invocation.socialTargets.length > 0 ? { targets: invocation.socialTargets } : { targets: [] }),
           ...(invocation.maxFileSize !== undefined ? { maxFileSize: invocation.maxFileSize } : {}),
         });
         compatible = report.compatible;

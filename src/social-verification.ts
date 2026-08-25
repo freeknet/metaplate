@@ -7,8 +7,8 @@ import {
 } from "./compatibility.js";
 import { imageContentType, imageDimensions, type ImageFormat } from "./image.js";
 
-export type SocialImageVerificationOptions = SocialCompatibilityOptions & {
-  /** Optional application-specific byte ceiling. */
+export type SocialImageVerificationOptions = Omit<SocialCompatibilityOptions, "fileSize"> & {
+  /** Optional application-specific byte ceiling, measured from encoded bytes. */
   maxFileSize?: number;
 };
 
@@ -71,7 +71,7 @@ export function verifySocialImage(
   };
   const compatibility = socialImageCompatibility(compatibilityDescriptor, {
     ...(options.targets ? { targets: options.targets } : {}),
-    fileSize: options.fileSize ?? byteLength,
+    fileSize: byteLength,
     ...(options.crawlerReady !== undefined ? { crawlerReady: options.crawlerReady } : {}),
   });
   const issues: SocialImageVerificationIssue[] = [];

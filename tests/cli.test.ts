@@ -198,6 +198,16 @@ describe("verify CLI", () => {
     });
   });
 
+  it("enforces --max-file-size without requiring a social target", async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "metaplate-cli-"));
+    await writeFile(path.join(cwd, "good.png"), png());
+    const result = run(["verify", "--json", "--max-file-size", "1", "--size", "1200x630", "good.png"], cwd);
+    expect(result.status).toBe(1);
+    const report = JSON.parse(result.stdout) as { files: Array<{ compatible: boolean; issues: Array<{ code: string }> }> };
+    expect(report.files[0]?.compatible).toBe(false);
+    expect(report.files[0]?.issues.some(({ code }) => code === "file-size")).toBe(true);
+  });
+
   it("honors --format and rejects a format mismatch", async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "metaplate-cli-"));
     await writeFile(path.join(cwd, "good.png"), png());

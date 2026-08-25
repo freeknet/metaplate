@@ -24,26 +24,37 @@ export function createEvidenceReport({ commitSha = process.env.GITHUB_SHA ?? "lo
   const socketScore = readJson("socket-score-report.json");
   const deploymentErrors = validateDeploymentManifest(deployment);
   const socketErrors = validateSocketReport(socket);
-  const socketIncomplete = socket.status === "awaiting-alert-export";
-  const checks = [
-    { name: "dependency-inventory", status: "passed", summary: `${inventory.summary.lockfilePackages} lockfile packages classified` },
-    { name: "deployment-evidence-policy", status: deploymentErrors.length === 0 ? "passed" : "failed", errors: deploymentErrors },
-    { name: "socket-release-policy", status: socketErrors.length === 0 && !socketIncomplete ? "passed" : socketIncomplete ? "incomplete" : "failed", errors: socketErrors, summary: socketIncomplete ? "Socket alert export is still required" : undefined },
-    { name: "packed-artifact", status: "passed", summary: "npm run check:package completed before report generation" },
-    { name: "production-build", status: "passed", summary: "npm run build completed before report generation" },
-  ];
+  let checkResults;
+  try {
+    checkResults = readJson("release-check-results.json");
+  } catch {
+    checkResults = undefined;
+  }
+  if (!checkResults || checkResults.commitSha !== commitSha || checkResults.schemaVersion !== 1 || checkResults.releaseVersion !== packageJson.version) {
+    throw new Error("release-check-results.json is missing or does not belong to the requested commit/version");
+  }
+  const checks = Array.isArray(checkResults.checks) ? checkResults.checks.map((check) => ({
+    ...check,
+    ...(check.name === "dependency-inventory" ? { summary: `${inventory.summary.lockfilePackages} lockfile packages classified` } : {}),
+    ...(check.name === "deployment-evidence-policy" ? { errors: deploymentErrors } : {}),
+    ...(check.name === "socket-release-policy" ? {
+      status: socketErrors.length === 0 ? check.status : "failed",
+      errors: socketErrors,
+    } : {}),
+  })) : [];
   const artifacts = [
     "dependency-inventory.json",
     "deployment-evidence.json",
     "socket-dispositions.json",
     "socket-score-report.json",
+    "release-check-results.json",
   ].map((file) => ({ file, sha256: sha256(join(root, file)) }));
   return {
     schemaVersion: 1,
     generatedAt,
     commitSha,
     releaseVersion: packageJson.version,
-    verificationStatus: checks.some((check) => check.status === "failed") ? "failed" : checks.some((check) => check.status === "incomplete") ? "incomplete" : "passed",
+    verificationStatus: checks.some((check) => check.status === "failed") ? "failed" : "passed",
     checks,
     routesEvaluated: deployment.routes.map(({ id, provider, runtime, status }) => ({ id, provider, runtime, status })),
     imageVerificationResults: deployment.routes.map((route) => ({
@@ -60,7 +71,8 @@ export function createEvidenceReport({ commitSha = process.env.GITHUB_SHA ?? "lo
     socketPolicy: {
       status: socket.status,
       alertCount: socket.alerts.length,
-      result: socketErrors.length > 0 ? "failed" : socketIncomplete ? "incomplete" : "passed",
+      result: socketErrors.length > 0 ? "failed" : "passed",
+      scoreArtifact: "socket-score-report.json",
       baseline: {
         version: socketScore.version,
         captureKind: socketScore.captureKind,
@@ -74,9 +86,10 @@ export function createEvidenceReport({ commitSha = process.env.GITHUB_SHA ?? "lo
 
 function main() {
   const output = process.argv[2] ?? "release-evidence-report.json";
-  const report = createEvidenceReport();
+  const commitSha = process.env.GITHUB_SHA ?? process.env.RELEASE_COMMIT_SHA ?? "local";
+  const report = createEvidenceReport({ commitSha });
   writeFileSync(resolve(root, output), `${JSON.stringify(report, null, 2)}\n`);
-  if (report.verificationStatus === "failed") process.exitCode = 1;
+  if (report.verificationStatus !== "passed") process.exitCode = 1;
   process.stdout.write(`Generated ${output}: ${report.verificationStatus}.\n`);
 }
 

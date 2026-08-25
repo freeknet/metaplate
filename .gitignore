@@ -5,4 +5,5 @@ coverage/
 *.log
 dependency-inventory.json
 release-evidence-report.json
+release-check-results.json
 .DS_Store

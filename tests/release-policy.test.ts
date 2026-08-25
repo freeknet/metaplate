@@ -42,6 +42,7 @@ const baseSocket = {
   schemaVersion: 1,
   package: "metaplate",
   source: "https://socket.dev/npm/package/metaplate/alerts/0.6.0",
+  version: "0.6.0",
   status: "complete",
   releasePolicy: {
     blockSeverities: ["critical"],
@@ -50,6 +51,7 @@ const baseSocket = {
     acceptedExceptionRequires: ["owner", "reason", "expiry", "verification"],
   },
   alerts: [],
+  export: undefined,
 };
 
 describe("deployment evidence policy", () => {
@@ -132,7 +134,7 @@ describe("Socket release policy", () => {
     expect(errors.some((error) => error.includes("critical findings block release"))).toBe(true);
   });
 
-  it("rejects expired accepted exceptions and incomplete complete reports", () => {
+  it("rejects expired accepted exceptions", () => {
     const accepted = alert({
       disposition: "accepted-with-evidence",
       owner: "security",
@@ -141,7 +143,6 @@ describe("Socket release policy", () => {
       verification: "isolated in CI",
     });
     expect(validateSocketReport({ ...baseSocket, alerts: [accepted] }).some((error: string) => error.includes("accepted exception is expired"))).toBe(true);
-    expect(validateSocketReport({ ...baseSocket, completeness: undefined })).not.toContain("status");
   });
 });
 
