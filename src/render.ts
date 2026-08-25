@@ -1,10 +1,5 @@
-import {
-  OG_SIZE,
-  assertImageSize,
-  socialImage,
-  socialImageMetadata,
-  type ImageSize,
-} from "./core.js";
+import type { ImageSize } from "./core.js";
+import { createPlateSocial } from "./plate.js";
 import { loadSatori } from "./peers.js";
 
 export const SVG_CONTENT_TYPE = "image/svg+xml" as const;
@@ -109,11 +104,8 @@ export type SvgOgDefinition<Copy> = {
 
 /** Defines a framework-neutral social image renderer that emits SVG text. */
 export function createSvgOg<Copy>(definition: SvgOgDefinition<Copy>) {
-  const size = Object.freeze({ ...(definition.size ?? OG_SIZE) });
-  assertImageSize(size);
-  const imagePath = definition.imagePath ?? "og-image";
-  const basePath = definition.basePath ?? "";
-  const origin = definition.origin ?? "";
+  const social = createPlateSocial(definition, SVG_CONTENT_TYPE);
+  const { size } = social;
 
   async function renderSvg(copy: Copy) {
     const satori = await loadSatori();
@@ -140,24 +132,8 @@ export function createSvgOg<Copy>(definition: SvgOgDefinition<Copy>) {
   }
 
   return Object.freeze({
-    size,
+    ...social,
     contentType: SVG_CONTENT_TYPE,
     renderSvg,
-    image: (route: string, copy: Copy) =>
-      socialImage(route, definition.alt(copy), {
-        size,
-        imagePath,
-        basePath,
-        origin,
-        type: SVG_CONTENT_TYPE,
-      }),
-    metadata: (route: string, copy: Copy) =>
-      socialImageMetadata(route, definition.alt(copy), {
-        size,
-        imagePath,
-        basePath,
-        origin,
-        type: SVG_CONTENT_TYPE,
-      }),
   });
 }

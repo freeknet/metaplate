@@ -1,10 +1,7 @@
-import {
-  OG_CONTENT_TYPE,
-  socialImage,
-  socialImageMetadata,
-} from "./core.js";
+import { OG_CONTENT_TYPE } from "./core.js";
 import { detectFormat, imageContentType, type ImageFormat, type OutputFormat } from "./image.js";
 import { loadPeerPair } from "./optional-peer.js";
+import { createPlateHandlers, createPlateSocial } from "./plate.js";
 import { loadResvg, loadSatori } from "./peers.js";
 import {
   createSvgOg,
@@ -136,9 +133,7 @@ export function createNodeOg<Copy>(definition: NodeOgDefinition<Copy>) {
   const svg = createSvgOg(definition);
   assertDimensionPreservingResvgOptions(definition.resvg, svg.size);
   const contentType = outputContentType(definition.output);
-  const imagePath = definition.imagePath ?? "og-image";
-  const basePath = definition.basePath ?? "";
-  const origin = definition.origin ?? "";
+  const social = createPlateSocial(definition, contentType, svg.size);
 
   async function rasterize(copy: Copy) {
     // Both peers resolve before rendering so an install missing both is told
@@ -214,32 +209,11 @@ export function createNodeOg<Copy>(definition: NodeOgDefinition<Copy>) {
 
   return Object.freeze({
     ...svg,
+    ...social,
     contentType,
     render,
     renderPixels,
     response,
-    handler: (copy: Copy) => () => response(copy),
-    handlerFrom: <Arguments extends unknown[]>(
-      resolve: (...arguments_: Arguments) => Copy | Promise<Copy>,
-    ) =>
-      async (...arguments_: Arguments) => response(await resolve(...arguments_)),
-    // The plate advertises the output it actually serves, not the SVG it
-    // rasterizes, so metadata built from it carries the served media type.
-    image: (route: string, copy: Copy) =>
-      socialImage(route, definition.alt(copy), {
-        size: svg.size,
-        imagePath,
-        basePath,
-        origin,
-        type: contentType,
-      }),
-    metadata: (route: string, copy: Copy) =>
-      socialImageMetadata(route, definition.alt(copy), {
-        size: svg.size,
-        imagePath,
-        basePath,
-        origin,
-        type: contentType,
-      }),
+    ...createPlateHandlers(response),
   });
 }

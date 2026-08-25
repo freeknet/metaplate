@@ -2,6 +2,19 @@ import { expect, it } from "vitest";
 import { createNextOg } from "../src/next.js";
 import { verifyPng } from "../src/png.js";
 
+type HandlerCopy = { title: string; alt: string };
+
+function createHandlerPlate() {
+  return createNextOg<HandlerCopy>({
+    alt: (copy) => copy.alt,
+    component: (copy) => (
+      <div style={{ width: "100%", height: "100%", display: "flex", fontSize: 48 }}>
+        {copy.title}
+      </div>
+    ),
+  });
+}
+
 it("renders a real PNG through Next ImageResponse", async () => {
   const plate = createNextOg<{ title: string; alt: string }>({
     alt: (copy) => copy.alt,
@@ -42,14 +55,7 @@ it("keeps route and metadata helpers on the same definition", () => {
 });
 
 it("returns a route handler bound to one copy", async () => {
-  const plate = createNextOg<{ title: string; alt: string }>({
-    alt: (copy) => copy.alt,
-    component: (copy) => (
-      <div style={{ width: "100%", height: "100%", display: "flex", fontSize: 48 }}>
-        {copy.title}
-      </div>
-    ),
-  });
+  const plate = createHandlerPlate();
 
   const GET = plate.handler({ title: "Route", alt: "Route card" });
   const response = await GET();
@@ -59,14 +65,7 @@ it("returns a route handler bound to one copy", async () => {
 });
 
 it("resolves dynamic copy from promised Next route params", async () => {
-  const plate = createNextOg<{ title: string; alt: string }>({
-    alt: (copy) => copy.alt,
-    component: (copy) => (
-      <div style={{ width: "100%", height: "100%", display: "flex", fontSize: 48 }}>
-        {copy.title}
-      </div>
-    ),
-  });
+  const plate = createHandlerPlate();
   const GET = plate.handlerFrom(
     async (_request: Request, context: { params: Promise<{ slug: string }> }) => {
       const { slug } = await context.params;

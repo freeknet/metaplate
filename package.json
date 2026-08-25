@@ -67,7 +67,8 @@
   },
   "scripts": {
     "build": "tsup",
-    "check": "npm run lint && npm run check:release-notes && npm run typecheck && npm run typecheck:examples && npm test && npm run build && npm pack --dry-run",
+    "check": "npm run lint && npm run check:duplicates && npm run check:release-notes && npm run typecheck && npm run typecheck:examples && npm test && npm run build && npm pack --dry-run",
+    "check:duplicates": "jscpd src scripts tests examples --min-lines 8 --min-tokens 60 --reporters console --ignore \"**/fixtures/**\" --threshold 0",
     "check:package": "node scripts/verify-package.mjs",
     "check:release-notes": "node scripts/validate-release-notes.mjs",
     "lint": "eslint .",
@@ -99,6 +100,7 @@
     "astro": "7.2.6",
     "eslint": "^10.0.0",
     "express": "5.2.1",
+    "jscpd": "5.0.16",
     "next": "16.3.2",
     "react": "19.2.8",
     "react-router": "7.18.2",

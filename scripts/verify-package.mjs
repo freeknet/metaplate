@@ -16,6 +16,17 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath, URL } from "node:url";
+import {
+  CLI_IMAGE_FIXTURES,
+  FRAMEWORK_DEPENDENCIES,
+  PACKAGE_FONT_FIXTURE,
+  REQUIRED_RENDERER_PEERS,
+  SOCIAL_CARD_FIXTURE,
+  commonJsResolutionSmoke,
+  esmImportSmoke,
+  nextPeerGuidanceSmoke,
+  packageEntrySpecifiers,
+} from "./package-fixtures.mjs";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const temporary = mkdtempSync(join(tmpdir(), "metaplate-package-"));
@@ -28,6 +39,19 @@ const expressApp = join(temporary, "express-app");
 const routerApp = join(temporary, "router-app");
 const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const lockfile = JSON.parse(readFileSync(join(root, "package-lock.json"), "utf8"));
+const packageEntries = packageEntrySpecifiers(manifest.exports);
+const cardSize = Object.freeze({
+  width: SOCIAL_CARD_FIXTURE.width,
+  height: SOCIAL_CARD_FIXTURE.height,
+});
+const cardSizeSource = JSON.stringify(cardSize);
+const packageFontSource = JSON.stringify(PACKAGE_FONT_FIXTURE);
+const cardSizeArgument = `${cardSize.width}x${cardSize.height}`;
+const iconSizeArgument = `${CLI_IMAGE_FIXTURES.iconWidth}x${CLI_IMAGE_FIXTURES.iconHeight}`;
+const absoluteFixtureImage = new URL(
+  SOCIAL_CARD_FIXTURE.imagePath,
+  `${SOCIAL_CARD_FIXTURE.origin}/`,
+).href;
 const npmCli = process.env.npm_execpath;
 
 if (!npmCli) {
@@ -80,8 +104,8 @@ function findExportedFile(directory, name) {
   return undefined;
 }
 
-/** Links exactly the dependency tree npm ci verified from package-lock.json. */
-function linkLockedDependency(directory, name) {
+/** Resolves and verifies one installed dependency against package-lock.json. */
+function lockedDependency(name) {
   const entry = lockfile.packages[`node_modules/${name}`];
   if (!entry?.version) throw new Error(`No locked version available for ${name}.`);
   const source = join(root, "node_modules", ...name.split("/"));
@@ -91,8 +115,19 @@ function linkLockedDependency(directory, name) {
       `${name} installation ${installed.version} does not match lockfile ${entry.version}.`,
     );
   }
+  return { source, installed };
+}
+
+function dependencyDestination(directory, name) {
   const destination = join(directory, "node_modules", ...name.split("/"));
   mkdirSync(resolve(destination, ".."), { recursive: true });
+  return destination;
+}
+
+/** Links exactly the dependency tree npm ci verified from package-lock.json. */
+function linkLockedDependency(directory, name) {
+  const { source } = lockedDependency(name);
+  const destination = dependencyDestination(directory, name);
   symlinkSync(source, destination, process.platform === "win32" ? "junction" : "dir");
 }
 
@@ -102,17 +137,8 @@ function linkLockedDependency(directory, name) {
  * lockfile-verified package into the temporary workspace.
  */
 function copyLockedDependency(directory, name) {
-  const entry = lockfile.packages[`node_modules/${name}`];
-  if (!entry?.version) throw new Error(`No locked version available for ${name}.`);
-  const source = join(root, "node_modules", ...name.split("/"));
-  const installed = JSON.parse(readFileSync(join(source, "package.json"), "utf8"));
-  if (installed.version !== entry.version) {
-    throw new Error(
-      `${name} installation ${installed.version} does not match lockfile ${entry.version}.`,
-    );
-  }
-  const destination = join(directory, "node_modules", ...name.split("/"));
-  mkdirSync(resolve(destination, ".."), { recursive: true });
+  const { source } = lockedDependency(name);
+  const destination = dependencyDestination(directory, name);
   cpSync(source, destination, { recursive: true });
 }
 
@@ -122,8 +148,7 @@ function copyLockedDependencyTree(directory, name, copied = new Set()) {
   copyLockedDependency(directory, name);
   copied.add(name);
 
-  const source = join(root, "node_modules", ...name.split("/"));
-  const installed = JSON.parse(readFileSync(join(source, "package.json"), "utf8"));
+  const { installed } = lockedDependency(name);
   for (const dependency of Object.keys(installed.dependencies ?? {})) {
     copyLockedDependencyTree(directory, dependency, copied);
   }
@@ -162,7 +187,7 @@ try {
   // It also primes npm's cache so every framework fixture below stays offline.
   install(consumer, [archive], { offline: false });
 
-  for (const peer of ["satori", "@resvg/resvg-js", "react"]) {
+  for (const peer of REQUIRED_RENDERER_PEERS) {
     const peerDirectory = join(consumer, "node_modules", ...peer.split("/"));
     if (!existsSync(peerDirectory)) {
       throw new Error(`The one-command install did not provide required peer ${peer}.`);
@@ -181,31 +206,8 @@ try {
     throw new Error("The one-command install pulled optional framework peer next.");
   }
 
-  const smoke = `
-    await import("metaplate");
-    await import("metaplate/render");
-    await import("metaplate/node");
-    await import("metaplate/next");
-    await import("metaplate/fonts");
-    await import("metaplate/png");
-    await import("metaplate/image");
-  `;
-  runModule(smoke, consumer);
-
-  const nextGuidance = `
-    const { createNextOg } = await import("metaplate/next");
-    const plate = createNextOg({ component: () => null, alt: () => "card" });
-
-    try {
-      await plate.render({});
-    } catch (error) {
-      if (!error.message.includes("npm install next")) throw error;
-      process.exit(0);
-    }
-
-    throw new Error("metaplate/next rendered without its next peer.");
-  `;
-  runModule(nextGuidance, consumer);
+  runModule(esmImportSmoke(packageEntries), consumer);
+  runModule(nextPeerGuidanceSmoke(), consumer);
 
   // The Next adapter must work in an actual static export, not merely in a
   // mocked response or a plain Node process (which cannot resolve Next's
@@ -215,7 +217,7 @@ try {
   // outside its workspace root.
   install(nextApp, [archive]);
   const copiedNextPackages = new Set();
-  for (const dependency of ["next", "react-dom"]) {
+  for (const dependency of FRAMEWORK_DEPENDENCIES.next) {
     copyLockedDependencyTree(nextApp, dependency, copiedNextPackages);
   }
   const nextManifest = JSON.parse(
@@ -317,10 +319,10 @@ export default function Image() {
       import { verifyImage } from "metaplate/image";
       const result = verifyImage(
         await readFile(${JSON.stringify(exportedImage)}),
-        { width: 1200, height: 630 },
+        ${cardSizeSource},
         "png",
       );
-      if (result.format !== "png" || result.width !== 1200 || result.height !== 630) {
+      if (result.format !== "png" || result.width !== ${cardSize.width} || result.height !== ${cardSize.height}) {
         throw new Error("Next static export image dimensions or content type were incorrect.");
       }
     `,
@@ -331,10 +333,7 @@ export default function Image() {
   // the APIRoute handler contract, production bundling of the optional native
   // renderer boundary, emitted image path, bytes, dimensions, and page tags.
   install(astroApp, [archive]);
-  for (const dependency of [
-    "astro",
-    "@fontsource/inter",
-  ]) {
+  for (const dependency of FRAMEWORK_DEPENDENCIES.astro) {
     linkLockedDependency(astroApp, dependency);
   }
   mkdirSync(join(astroApp, "src", "lib"), { recursive: true });
@@ -347,14 +346,9 @@ import { createNodeOg } from "metaplate/node";
 
 export const og = createNodeOg({
   alt: (copy: { title: string }) => \`${"${copy.title}"} social card\`,
-  fonts: packageFontLoader([{
-    name: "Inter",
-    package: "@fontsource/inter",
-    file: "files/inter-latin-700-normal.woff",
-    weight: 700,
-  }]),
-  imagePath: "og-image.png",
-  origin: "https://example.com",
+  fonts: packageFontLoader([${packageFontSource}]),
+  imagePath: ${JSON.stringify(SOCIAL_CARD_FIXTURE.imagePath)},
+  origin: ${JSON.stringify(SOCIAL_CARD_FIXTURE.origin)},
   component: (copy: { title: string }) => ({
     type: "div",
     props: {
@@ -375,7 +369,7 @@ export const og = createNodeOg({
 `,
   );
   writeFileSync(
-    join(astroApp, "src", "pages", "og-image.png.ts"),
+    join(astroApp, "src", "pages", `${SOCIAL_CARD_FIXTURE.imagePath}.ts`),
     `import type { APIRoute } from "astro";
 import { og } from "../lib/og";
 
@@ -388,9 +382,9 @@ export const GET = og.handler({ title: "Metaplate Astro smoke" }) satisfies APIR
     `---
 import { socialImageMetadata } from "metaplate";
 const social = socialImageMetadata("/", "Metaplate Astro smoke card", {
-  origin: "https://example.com",
-  imagePath: "og-image.png",
-  type: "image/png",
+  origin: ${JSON.stringify(SOCIAL_CARD_FIXTURE.origin)},
+  imagePath: ${JSON.stringify(SOCIAL_CARD_FIXTURE.imagePath)},
+  type: ${JSON.stringify(SOCIAL_CARD_FIXTURE.contentType)},
 });
 const image = social.openGraph.images[0];
 ---
@@ -417,13 +411,13 @@ const image = social.openGraph.images[0];
     const details = error instanceof Error && "stderr" in error ? error.stderr : error;
     throw new Error(`Packed-package Astro static build failed: ${details}`, { cause: error });
   }
-  const astroImage = join(astroApp, "dist", "og-image.png");
+  const astroImage = join(astroApp, "dist", SOCIAL_CARD_FIXTURE.imagePath);
   const astroIndex = readFileSync(join(astroApp, "dist", "index.html"), "utf8");
   if (
-    !astroIndex.includes('content="https://example.com/og-image.png"') ||
-    !astroIndex.includes('content="1200"') ||
-    !astroIndex.includes('content="630"') ||
-    !astroIndex.includes('content="image/png"')
+    !astroIndex.includes(`content="${absoluteFixtureImage}"`) ||
+    !astroIndex.includes(`content="${cardSize.width}"`) ||
+    !astroIndex.includes(`content="${cardSize.height}"`) ||
+    !astroIndex.includes(`content="${SOCIAL_CARD_FIXTURE.contentType}"`)
   ) {
     throw new Error("Astro static build did not emit the expected absolute social metadata.");
   }
@@ -433,7 +427,7 @@ const image = social.openGraph.images[0];
       import { verifyImage } from "metaplate/image";
       const result = verifyImage(
         await readFile(${JSON.stringify(astroImage)}),
-        { width: 1200, height: 630 },
+        ${cardSizeSource},
         "png",
       );
       if (result.format !== "png") throw new Error("Astro endpoint did not emit PNG bytes.");
@@ -444,10 +438,7 @@ const image = social.openGraph.images[0];
   // Exercise the documented raw-byte bridge through a real Express 5 server,
   // including its async error boundary and externally observed headers.
   install(expressApp, [archive]);
-  for (const dependency of [
-    "express",
-    "@fontsource/inter",
-  ]) {
+  for (const dependency of FRAMEWORK_DEPENDENCIES.express) {
     linkLockedDependency(expressApp, dependency);
   }
   runModule(
@@ -459,12 +450,7 @@ const image = social.openGraph.images[0];
 
       const og = createNodeOg({
         alt: () => "Express smoke card",
-        fonts: packageFontLoader([{
-          name: "Inter",
-          package: "@fontsource/inter",
-          file: "files/inter-latin-700-normal.woff",
-          weight: 700,
-        }]),
+        fonts: packageFontLoader([${packageFontSource}]),
         component: () => ({
           type: "div",
           props: {
@@ -483,7 +469,7 @@ const image = social.openGraph.images[0];
         }),
       });
       const app = express();
-      app.get("/og-image.png", async (_request, response, next) => {
+      app.get(${JSON.stringify(`/${SOCIAL_CARD_FIXTURE.imagePath}`)}, async (_request, response, next) => {
         try {
           response.type(og.contentType);
           response.set("Cache-Control", "public, max-age=86400");
@@ -498,15 +484,15 @@ const image = social.openGraph.images[0];
       try {
         const address = server.address();
         if (!address || typeof address === "string") throw new Error("Express did not bind TCP.");
-        const response = await fetch(\`http://127.0.0.1:\${address.port}/og-image.png\`);
+        const response = await fetch(\`http://127.0.0.1:\${address.port}/${SOCIAL_CARD_FIXTURE.imagePath}\`);
         if (!response.ok) throw new Error(\`Express returned \${response.status}.\`);
-        if (response.headers.get("content-type") !== "image/png") {
+        if (response.headers.get("content-type") !== ${JSON.stringify(SOCIAL_CARD_FIXTURE.contentType)}) {
           throw new Error("Express returned the wrong image content type.");
         }
         if (response.headers.get("cache-control") !== "public, max-age=86400") {
           throw new Error("Express returned the wrong cache policy.");
         }
-        verifyImage(new Uint8Array(await response.arrayBuffer()), { width: 1200, height: 630 }, "png");
+        verifyImage(new Uint8Array(await response.arrayBuffer()), ${cardSizeSource}, "png");
       } finally {
         await new Promise((resolve, reject) =>
           server.close((error) => error ? reject(error) : resolve()),
@@ -520,22 +506,7 @@ const image = social.openGraph.images[0];
   // This verifies its loader(args) convention and generated route types from
   // the tarball instead of treating it as an old Remix-style GET handler.
   install(routerApp, [archive]);
-  const routerDependencies = [
-    "@react-router/dev",
-    "@react-router/node",
-    "@react-router/serve",
-    "@react-router/express",
-    "react-router",
-    "react-dom",
-    "express",
-    "vite",
-    "typescript",
-    "@types/node",
-    "@types/react",
-    "@fontsource/inter",
-    "isbot",
-  ];
-  for (const dependency of routerDependencies) {
+  for (const dependency of FRAMEWORK_DEPENDENCIES.reactRouter) {
     linkLockedDependency(routerApp, dependency);
   }
   writeFileSync(
@@ -546,7 +517,7 @@ const image = social.openGraph.images[0];
       dependencies: {
         metaplate: manifest.version,
         ...Object.fromEntries(
-          routerDependencies.map((dependency) => [
+          FRAMEWORK_DEPENDENCIES.reactRouter.map((dependency) => [
             dependency,
             lockfile.packages[`node_modules/${dependency}`].version,
           ]),
@@ -591,7 +562,7 @@ export default defineConfig({ plugins: [reactRouter()] });
     `import { type RouteConfig, index, route } from "@react-router/dev/routes";
 export default [
   index("routes/home.tsx"),
-  route(":slug/og-image.png", "routes/og-image.ts"),
+  route(${JSON.stringify(`:slug/${SOCIAL_CARD_FIXTURE.imagePath}`)}, "routes/og-image.ts"),
 ] satisfies RouteConfig;
 `,
   );
@@ -609,7 +580,9 @@ export default function Root() { return <Outlet />; }
     `import type { MetaFunction } from "react-router";
 import { socialImageMetadata } from "metaplate";
 const social = socialImageMetadata("/guide", "Guide card", {
-  origin: "https://example.com", imagePath: "og-image.png", type: "image/png",
+  origin: ${JSON.stringify(SOCIAL_CARD_FIXTURE.origin)},
+  imagePath: ${JSON.stringify(SOCIAL_CARD_FIXTURE.imagePath)},
+  type: ${JSON.stringify(SOCIAL_CARD_FIXTURE.contentType)},
 });
 const image = social.openGraph.images[0];
 export const meta: MetaFunction = () => [
@@ -627,10 +600,7 @@ export default function Home() { return <main>Metaplate React Router fixture</ma
 import { createNodeOg } from "metaplate/node";
 export const og = createNodeOg({
   alt: (copy: { title: string }) => \`${"${copy.title}"} social card\`,
-  fonts: packageFontLoader([{
-    name: "Inter", package: "@fontsource/inter",
-    file: "files/inter-latin-700-normal.woff", weight: 700,
-  }]),
+  fonts: packageFontLoader([${packageFontSource}]),
   component: (copy: { title: string }) => ({
     type: "div",
     props: {
@@ -690,14 +660,14 @@ export const loader = og.handlerFrom(({ params }: Route.LoaderArgs) => ({
         const base = \`http://127.0.0.1:\${address.port}\`;
         const page = await fetch(base);
         const html = await page.text();
-        if (!html.includes("https://example.com/guide/og-image.png")) {
+        if (!html.includes(${JSON.stringify(`${SOCIAL_CARD_FIXTURE.origin}/guide/${SOCIAL_CARD_FIXTURE.imagePath}`)})) {
           throw new Error("React Router page did not emit absolute social metadata.");
         }
-        const response = await fetch(base + "/guide/og-image.png");
-        if (!response.ok || response.headers.get("content-type") !== "image/png") {
+        const response = await fetch(base + ${JSON.stringify(`/guide/${SOCIAL_CARD_FIXTURE.imagePath}`)});
+        if (!response.ok || response.headers.get("content-type") !== ${JSON.stringify(SOCIAL_CARD_FIXTURE.contentType)}) {
           throw new Error("React Router resource route returned the wrong status or content type.");
         }
-        verifyImage(new Uint8Array(await response.arrayBuffer()), { width: 1200, height: 630 }, "png");
+        verifyImage(new Uint8Array(await response.arrayBuffer()), ${cardSizeSource}, "png");
       } finally {
         await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
       }
@@ -705,18 +675,9 @@ export const loader = og.handlerFrom(({ params }: Route.LoaderArgs) => ({
     routerApp,
   );
 
-  const requireSmoke = `
-    require.resolve("metaplate");
-    require.resolve("metaplate/render");
-    require.resolve("metaplate/node");
-    require.resolve("metaplate/next");
-    require.resolve("metaplate/fonts");
-    require.resolve("metaplate/png");
-    require.resolve("metaplate/image");
-  `;
   execFileSync(
     process.execPath,
-    ["--input-type=commonjs", "--eval", requireSmoke],
+    ["--input-type=commonjs", "--eval", commonJsResolutionSmoke(packageEntries)],
     { cwd: consumer, stdio: "inherit" },
   );
 
@@ -732,7 +693,11 @@ export const loader = og.handlerFrom(({ params }: Route.LoaderArgs) => ({
 
   // The CLI's happy path had never run against real files outside the repo.
   // Copy the fixtures beside the consumer and verify a mixed-format group.
-  for (const fixture of ["card.jpg", "icon.jpg", "card-lossy.webp"]) {
+  for (const fixture of [
+    CLI_IMAGE_FIXTURES.cardJpeg,
+    CLI_IMAGE_FIXTURES.iconJpeg,
+    CLI_IMAGE_FIXTURES.cardWebp,
+  ]) {
     copyFileSync(join(root, "tests", "fixtures", fixture), join(consumer, fixture));
   }
 
@@ -742,19 +707,19 @@ export const loader = og.handlerFrom(({ params }: Route.LoaderArgs) => ({
       cliPath,
       "verify",
       "--size",
-      "1200x630",
-      "card.jpg",
-      "card-lossy.webp",
+      cardSizeArgument,
+      CLI_IMAGE_FIXTURES.cardJpeg,
+      CLI_IMAGE_FIXTURES.cardWebp,
       "--size",
-      "512x512",
-      "icon.jpg",
+      iconSizeArgument,
+      CLI_IMAGE_FIXTURES.iconJpeg,
     ],
     { cwd: consumer, encoding: "utf8" },
   );
   const expected = [
-    "✓ card.jpg 1200x630",
-    "✓ card-lossy.webp 1200x630",
-    "✓ icon.jpg 512x512",
+    `✓ ${CLI_IMAGE_FIXTURES.cardJpeg} ${cardSizeArgument}`,
+    `✓ ${CLI_IMAGE_FIXTURES.cardWebp} ${cardSizeArgument}`,
+    `✓ ${CLI_IMAGE_FIXTURES.iconJpeg} ${iconSizeArgument}`,
   ];
   if (verified.status !== 0 || !expected.every((line) => verified.stdout.includes(line))) {
     throw new Error(
@@ -764,31 +729,41 @@ export const loader = og.handlerFrom(({ params }: Route.LoaderArgs) => ({
 
   const mismatch = spawnSync(
     process.execPath,
-    [cliPath, "verify", "--size", "1200x630", "icon.jpg"],
+    [cliPath, "verify", "--size", cardSizeArgument, CLI_IMAGE_FIXTURES.iconJpeg],
     { cwd: consumer, encoding: "utf8" },
   );
   if (
     mismatch.status !== 1 ||
-    !mismatch.stderr.includes("Expected 1200x630, received 512x512")
+    !mismatch.stderr.includes(`Expected ${cardSizeArgument}, received ${iconSizeArgument}`)
   ) {
     throw new Error("Installed CLI did not report a dimension mismatch.");
   }
 
   const formatCheck = spawnSync(
     process.execPath,
-    [cliPath, "verify", "--format", "jpeg", "--size", "1200x630", "card-lossy.webp"],
+    [
+      cliPath,
+      "verify",
+      "--format",
+      "jpeg",
+      "--size",
+      cardSizeArgument,
+      CLI_IMAGE_FIXTURES.cardWebp,
+    ],
     { cwd: consumer, encoding: "utf8" },
   );
   if (
     formatCheck.status !== 1 ||
-    !formatCheck.stderr.includes("Expected jpeg 1200x630, received webp")
+    !formatCheck.stderr.includes(`Expected jpeg ${cardSizeArgument}, received webp`)
   ) {
     throw new Error("Installed CLI did not reject a format mismatch.");
   }
 
   // Issue #55: one bad file must not hide the rest. A truncated WebP plus a
   // good JPEG in one run has to report both outcomes in one invocation.
-  const truncated = readFileSync(join(root, "tests", "fixtures", "card-lossy.webp")).subarray(
+  const truncated = readFileSync(
+    join(root, "tests", "fixtures", CLI_IMAGE_FIXTURES.cardWebp),
+  ).subarray(
     0,
     250,
   );
@@ -799,9 +774,9 @@ export const loader = og.handlerFrom(({ params }: Route.LoaderArgs) => ({
       cliPath,
       "verify",
       "--size",
-      "1200x630",
+      cardSizeArgument,
       "truncated.webp",
-      "card.jpg",
+      CLI_IMAGE_FIXTURES.cardJpeg,
       "does-not-exist.webp",
     ],
     { cwd: consumer, encoding: "utf8" },
@@ -809,7 +784,7 @@ export const loader = og.handlerFrom(({ params }: Route.LoaderArgs) => ({
   const report = `${aggregate.stdout}${aggregate.stderr}`;
   if (
     aggregate.status !== 1 ||
-    !report.includes("✓ card.jpg 1200x630") ||
+    !report.includes(`✓ ${CLI_IMAGE_FIXTURES.cardJpeg} ${cardSizeArgument}`) ||
     !report.includes("✗ truncated.webp") ||
     !report.includes("✗ does-not-exist.webp") ||
     !report.includes("2 of 3 files failed verification")
@@ -822,11 +797,7 @@ export const loader = og.handlerFrom(({ params }: Route.LoaderArgs) => ({
   // Shape two proves the one-command install can produce real PNG bytes from
   // the packed tarball; only the fixture font and compiler are test tooling.
   install(standalone, [archive]);
-  for (const dependency of [
-    "@fontsource/inter",
-    "typescript",
-    "@types/node",
-  ]) {
+  for (const dependency of FRAMEWORK_DEPENDENCIES.standalone) {
     linkLockedDependency(standalone, dependency);
   }
 
@@ -837,14 +808,7 @@ export const loader = og.handlerFrom(({ params }: Route.LoaderArgs) => ({
 
     const plate = createNodeOg({
       alt: () => "card",
-      fonts: packageFontLoader([
-        {
-          name: "Inter",
-          package: "@fontsource/inter",
-          file: "files/inter-latin-700-normal.woff",
-          weight: 700,
-        },
-      ]),
+      fonts: packageFontLoader([${packageFontSource}]),
       component: (copy) => ({
         type: "div",
         props: {
@@ -944,7 +908,7 @@ export const loader = og.handlerFrom(({ params }: Route.LoaderArgs) => ({
   // Compile that second consumer here with `skipLibCheck` off, so a hidden
   // Node or React type dependency is a hard error rather than a suppressed one.
   install(bare, [archive]);
-  for (const dependency of ["typescript"]) {
+  for (const dependency of FRAMEWORK_DEPENDENCIES.bare) {
     linkLockedDependency(bare, dependency);
   }
 
@@ -1013,7 +977,7 @@ export const loader = og.handlerFrom(({ params }: Route.LoaderArgs) => ({
 
     const resvg: ResvgRenderOptions = {
       background: "transparent",
-      fitTo: { mode: "width", value: 1200 },
+      fitTo: { mode: "width", value: ${cardSize.width} },
     };
     const nodePlate = createNodeOg({
       component: () => ({ type: "div", props: { children: "card" } }),
@@ -1047,15 +1011,10 @@ export const loader = og.handlerFrom(({ params }: Route.LoaderArgs) => ({
     const requireFrom = createRequire(import.meta.url);
 
     const loader = packageFontLoader(
-      [{
-        name: "Inter",
-        package: "@fontsource/inter",
-        file: "files/inter-latin-700-normal.woff",
-        weight: 700,
-      }],
+      [${packageFontSource}],
       {
         resolvePackage: () =>
-          requireFrom.resolve("@fontsource/inter/package.json").replace(
+          requireFrom.resolve(${JSON.stringify(`${PACKAGE_FONT_FIXTURE.package}/package.json`)}).replace(
             /[\\\\/]package\\.json$/,
             "",
           ),
