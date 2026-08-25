@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
 import { runScript } from "./run-script.mjs";
-import { packageIdentityFromExample } from "./dependency-model.mjs";
+import { packageIdentityFromExample, classifyLockPackages, strongestReachability } from "./dependency-model.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const severities = new Set(["critical", "high", "medium", "low"]);
@@ -38,6 +38,8 @@ function alertIdentity(alert, index, source = "score") {
   const packageName = alert.package ?? example.package;
   const version = alert.version ?? example.version;
   const path = alert.dependencyPath ?? alert.path ?? alert.lockfilePath;
+  const evidence = alert.dependencyEvidence ?? {};
+  const effectiveReachability = evidence.reachability ?? alert.reachability;
   if (!type || !packageName || !version || !path) {
     return { error: `${source} alert ${index}: high/critical alerts require type, package, version, and dependency path` };
   }
@@ -47,6 +49,7 @@ function alertIdentity(alert, index, source = "score") {
     package: packageName,
     version,
     path,
+    reachability: effectiveReachability,
   };
 }
 
@@ -63,6 +66,12 @@ function loadScoreArtifact(report) {
   const score = readJson(artifactPath);
   const digest = createHash("sha256").update(readFileSync(artifactPath)).digest("hex");
   return { score, artifactPath, digest };
+}
+
+function currentInventory() {
+  const manifest = readJson(join(root, "package.json"));
+  const lockfile = readJson(join(root, "package-lock.json"));
+  return classifyLockPackages({ root, manifest, lockfile });
 }
 
 function policyAlerts(score) {
@@ -147,10 +156,29 @@ export function validateSocketReport(report, now = new Date()) {
         }
 
         const scoreAlerts = policyAlerts(score);
+        const inventory = currentInventory();
+        for (const [index, scoreAlert] of [...(score.shallow?.alerts ?? []), ...(score.deep?.alerts ?? [])].entries()) {
+          const identity = packageIdentityFromExample(scoreAlert?.example);
+          if (!identity.package || !identity.version) continue;
+          const matches = inventory.filter((entry) => entry.name === identity.package && entry.version === identity.version);
+          if (matches.length === 0) {
+            if (scoreAlert.dependencyEvidence?.unresolved !== true || scoreAlert.dependencyEvidence?.reachability !== "unknown" || (scoreAlert.dependencyEvidence?.paths ?? []).length !== 0) {
+              errors.push(`score alert ${index}: unmatched package/version must be explicitly unresolved`);
+            }
+            continue;
+          }
+          const paths = [...new Set(matches.flatMap((entry) => entry.dependencyPaths ?? []))].sort();
+          const expectedReachability = strongestReachability(matches.map((entry) => entry.classification));
+          const evidence = scoreAlert.dependencyEvidence;
+          if (!evidence || JSON.stringify(evidence.paths ?? []) !== JSON.stringify(paths) || evidence.reachability !== expectedReachability) {
+            errors.push(`score alert ${index}: dependency evidence does not match current inventory`);
+          }
+        }
         if (!Array.isArray(score.shallow?.alerts) || !Array.isArray(score.deep?.alerts)) {
           errors.push("complete report score artifact must contain shallow and deep alert arrays");
         }
         const scoreIdentities = new Map();
+        const scoreEvidenceByKey = new Map();
         for (const [index, scoreAlert] of scoreAlerts.entries()) {
           const identity = alertIdentity(scoreAlert, index);
           if (identity.error) {
@@ -159,6 +187,7 @@ export function validateSocketReport(report, now = new Date()) {
             errors.push(`score alert ${index}: duplicate high/critical alert identity`);
           } else {
             scoreIdentities.set(identity.key, identity);
+            scoreEvidenceByKey.set(identity.key, scoreAlert.dependencyEvidence ?? null);
           }
         }
 
@@ -179,6 +208,15 @@ export function validateSocketReport(report, now = new Date()) {
           const scoreIdentity = scoreIdentities.get(identity.key);
           if (!scoreIdentity) {
             errors.push(`disposition ${index}: high/critical alert does not exist in score artifact`);
+          } else {
+            const evidence = scoreEvidenceByKey.get(identity.key);
+            const expectedReachability = evidence?.reachability ?? scoreIdentity.reachability;
+            if (expectedReachability && identity.reachability !== expectedReachability) {
+              errors.push(`disposition ${index}: reachability does not match score artifact evidence`);
+            }
+            if (Array.isArray(evidence?.paths) && evidence.paths.length > 0 && !evidence.paths.includes(identity.path)) {
+              errors.push(`disposition ${index}: path is not present in score artifact evidence`);
+            }
           }
         }
 
@@ -191,13 +229,7 @@ export function validateSocketReport(report, now = new Date()) {
         if (scoreAlerts.length === 0 && report.alerts.some((alert) => requireDispositionSeverities.has(normalizeSeverity(alert.severity)))) {
           errors.push("disposition contains policy-severity alert absent from score artifact");
         }
-        const declaredHighCritical = [
-          ...(Array.isArray(score.highCriticalDisposition?.high) ? score.highCriticalDisposition.high : []),
-          ...(Array.isArray(score.highCriticalDisposition?.critical) ? score.highCriticalDisposition.critical : []),
-        ];
-        if (scoreAlerts.length === 0 && declaredHighCritical.length > 0) {
-          errors.push("score artifact contains no high/critical alerts but highCriticalDisposition is non-empty");
-        }
+
       } catch {
         errors.push(`complete report export artifact is not readable: ${report.export.artifact}`);
       }

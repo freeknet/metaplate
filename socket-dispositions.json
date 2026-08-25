@@ -7,7 +7,7 @@
   "export": {
     "artifact": "socket-score-report.json",
     "generatedAt": "2026-08-25",
-    "sha256": "dbbc76b691710dcb69c0a419cdd3ee1a0b957235c206b41064f0fbbf3522f5e0"
+    "sha256": "8a5ff243224800887b59915fdbdc210ed751ef33db503351974b8be9656574e8"
   },
   "releasePolicy": {
     "blockSeverities": ["critical"],
@@ -48,7 +48,7 @@
     "package": "exact package name",
     "version": "exact resolved version",
     "path": "dependency path from metaplate",
-    "reachability": "published-runtime|runtime-peer|development-only|unknown",
+    "reachability": "published-runtime|runtime-peer|runtime-peer-optional|runtime-optional|development-only|development-optional|platform-binary|unknown|published-package-metadata",
     "disposition": "upgrade|replace|remove|isolate|accepted-with-evidence",
     "evidence": "Socket export/report URL or artifact",
     "verification": "commands/results proving the disposition"

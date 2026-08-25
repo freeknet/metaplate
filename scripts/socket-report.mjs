@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import process from "node:process";
 import { TextDecoder } from "node:util";
 import { fileURLToPath, URL } from "node:url";
-import { classifyLockPackages, packageIdentityFromExample } from "./dependency-model.mjs";
+import { classifyLockPackages, packageIdentityFromExample, strongestReachability } from "./dependency-model.mjs";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const output = process.argv[2] ?? "socket-score-report.json";
@@ -39,9 +39,7 @@ function assertAlerts(alerts, label, inventory) {
       ? inventory.filter((entry) => entry.name === packageName && entry.version === version)
       : [];
     const paths = [...new Set(matches.flatMap((entry) => entry.dependencyPaths ?? []))].sort();
-    const reachability = matches
-      .map((entry) => entry.classification)
-      .sort((a, b) => ({ "published-runtime": 5, "runtime-peer": 4, "runtime-peer-optional": 3, "runtime-optional": 2, "development-only": 1, "development-optional": 0 }[b] ?? -1) - ({ "published-runtime": 5, "runtime-peer": 4, "runtime-peer-optional": 3, "runtime-optional": 2, "development-only": 1, "development-optional": 0 }[a] ?? -1))[0];
+    const reachability = strongestReachability(matches.map((entry) => entry.classification));
     const enriched = {
       ...alert,
       scope: label,

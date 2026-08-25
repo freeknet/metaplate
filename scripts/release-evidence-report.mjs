@@ -50,7 +50,10 @@ export function createEvidenceReport({ commitSha = process.env.GITHUB_SHA ?? "lo
   const checks = rawChecks.map((check) => ({
     ...check,
     ...(check.name === "dependency-inventory" ? { summary: `${inventory.summary.lockfilePackages} lockfile packages classified` } : {}),
-    ...(check.name === "deployment-evidence-policy" ? { errors: deploymentErrors } : {}),
+    ...(check.name === "deployment-evidence-policy" ? {
+      status: deploymentErrors.length === 0 ? check.status : "failed",
+      errors: deploymentErrors,
+    } : {}),
     ...(check.name === "socket-release-policy" ? {
       status: socketErrors.length === 0 ? check.status : "failed",
       errors: socketErrors,

@@ -11,6 +11,7 @@ const lockfile = JSON.parse(readFileSync(join(root, "package-lock.json"), "utf8"
 const output = execFileSync(process.execPath, [join(root, "scripts/dependency-inventory.mjs")], {
   cwd: root,
   encoding: "utf8",
+  maxBuffer: 32 * 1024 * 1024,
 });
 const report = JSON.parse(output);
 

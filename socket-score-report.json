@@ -20,7 +20,14 @@
         "name": "recentlyPublished",
         "severity": "middle",
         "category": "supplyChainRisk",
-        "example": "npm/metaplate@0.6.0"
+        "example": "npm/metaplate@0.6.0",
+        "dependencyEvidence": {
+          "source": "package-lock.json",
+          "paths": [],
+          "reachability": "unknown",
+          "unresolved": true,
+          "reason": "No metaplate@0.6.0 node exists in package-lock.json."
+        }
       }
     ]
   },
@@ -57,96 +64,99 @@
         "severity": "high",
         "category": "maintenance",
         "example": "npm/string.prototype.codepointat@0.2.1",
-        "lockfilePath": "node_modules/string.prototype.codepointat",
-        "dependencyPath": "metaplate > satori > @shuding/opentype.js > string.prototype.codepointat",
-        "reachability": "runtime-peer",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [
             "metaplate > satori > @shuding/opentype.js > string.prototype.codepointat"
           ],
           "reachability": "runtime-peer"
-        }
+        },
+        "reachability": "runtime-peer",
+        "dependencyPath": "metaplate > satori > @shuding/opentype.js > string.prototype.codepointat",
+        "lockfilePath": "node_modules/string.prototype.codepointat"
       },
       {
         "name": "gptSecurity",
         "severity": "middle",
         "category": "supplyChainRisk",
         "example": "npm/@shuding/opentype.js@1.4.0-beta.0",
-        "reachability": "runtime-peer",
-        "dependencyPath": "metaplate > satori > @shuding/opentype.js",
-        "lockfilePath": "node_modules/@shuding/opentype.js",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [
             "metaplate > satori > @shuding/opentype.js"
           ],
           "reachability": "runtime-peer"
-        }
+        },
+        "reachability": "runtime-peer",
+        "dependencyPath": "metaplate > satori > @shuding/opentype.js",
+        "lockfilePath": "node_modules/@shuding/opentype.js"
       },
       {
         "name": "networkAccess",
         "severity": "middle",
         "category": "supplyChainRisk",
         "example": "npm/yoga-layout@3.2.1",
-        "reachability": "runtime-peer",
-        "dependencyPath": "metaplate > satori > yoga-layout",
-        "lockfilePath": "node_modules/yoga-layout",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [
             "metaplate > satori > yoga-layout"
           ],
           "reachability": "runtime-peer"
-        }
+        },
+        "reachability": "runtime-peer",
+        "dependencyPath": "metaplate > satori > yoga-layout",
+        "lockfilePath": "node_modules/yoga-layout"
       },
       {
         "name": "potentialVulnerability",
         "severity": "middle",
         "category": "supplyChainRisk",
         "example": "npm/next@16.3.3",
-        "reachability": "runtime-peer"
+        "dependencyEvidence": {
+          "source": "package-lock.json",
+          "paths": [],
+          "reachability": "unknown",
+          "unresolved": true,
+          "reason": "Socket analyzed next@16.3.3 while the release fixture lockfile contains next@16.3.2."
+        }
       },
       {
         "name": "recentlyPublished",
         "severity": "middle",
         "category": "supplyChainRisk",
         "example": "npm/satori@0.33.4",
-        "reachability": "runtime-peer",
-        "dependencyPath": "metaplate > satori",
-        "lockfilePath": "node_modules/satori",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [
             "metaplate > satori"
           ],
           "reachability": "runtime-peer"
-        }
+        },
+        "reachability": "runtime-peer",
+        "dependencyPath": "metaplate > satori",
+        "lockfilePath": "node_modules/satori"
       },
       {
         "name": "shellAccess",
         "severity": "middle",
         "category": "supplyChainRisk",
         "example": "npm/@resvg/resvg-js@2.6.2",
-        "reachability": "runtime-peer",
-        "dependencyPath": "metaplate > @resvg/resvg-js",
-        "lockfilePath": "node_modules/@resvg/resvg-js",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [
             "metaplate > @resvg/resvg-js"
           ],
           "reachability": "runtime-peer"
-        }
+        },
+        "reachability": "runtime-peer",
+        "dependencyPath": "metaplate > @resvg/resvg-js",
+        "lockfilePath": "node_modules/@resvg/resvg-js"
       },
       {
         "name": "trivialPackage",
         "severity": "middle",
         "category": "supplyChainRisk",
         "example": "npm/@img/sharp-linux-arm@0.35.3",
-        "reachability": "runtime-peer-optional",
-        "dependencyPath": "metaplate > astro > sharp > @img/sharp-linux-arm",
-        "lockfilePath": "node_modules/@img/sharp-linux-arm",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [
@@ -154,50 +164,61 @@
             "metaplate > next > sharp > @img/sharp-linux-arm"
           ],
           "reachability": "runtime-peer-optional"
-        }
+        },
+        "reachability": "runtime-peer-optional",
+        "dependencyPath": "metaplate > astro > sharp > @img/sharp-linux-arm",
+        "lockfilePath": "node_modules/@img/sharp-linux-arm"
       },
       {
         "name": "usesEval",
         "severity": "middle",
         "category": "supplyChainRisk",
         "example": "npm/source-map-js@1.2.1",
-        "reachability": "runtime-peer",
-        "dependencyPath": "metaplate > @react-router/dev > vite-node > vite > postcss > source-map-js",
-        "lockfilePath": "node_modules/source-map-js",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [
+            "metaplate > @react-router/dev > vite > postcss > source-map-js",
             "metaplate > @react-router/dev > vite-node > vite > postcss > source-map-js",
+            "metaplate > astro > magicast > source-map-js",
+            "metaplate > astro > svgo > css-tree > source-map-js",
+            "metaplate > astro > svgo > csso > css-tree > source-map-js",
+            "metaplate > astro > unifont > css-tree > source-map-js",
+            "metaplate > astro > vite > postcss > source-map-js",
             "metaplate > astro > vitefu > vite > postcss > source-map-js",
-            "metaplate > next > postcss > source-map-js"
+            "metaplate > next > postcss > source-map-js",
+            "metaplate > tsup > postcss > source-map-js",
+            "metaplate > tsup > postcss-load-config > postcss > source-map-js",
+            "metaplate > vite > postcss > source-map-js",
+            "metaplate > vitest > @vitest/mocker > vite > postcss > source-map-js",
+            "metaplate > vitest > vite > postcss > source-map-js"
           ],
-          "reachability": "runtime-peer"
-        }
+          "reachability": "runtime-peer-optional"
+        },
+        "reachability": "runtime-peer-optional",
+        "dependencyPath": "metaplate > @react-router/dev > vite > postcss > source-map-js",
+        "lockfilePath": "node_modules/source-map-js"
       },
       {
         "name": "copyleftLicense",
         "severity": "low",
         "category": "license",
         "example": "npm/@resvg/resvg-js-android-arm-eabi@2.6.2",
-        "reachability": "runtime-peer-optional",
-        "dependencyPath": "metaplate > @resvg/resvg-js > @resvg/resvg-js-android-arm-eabi",
-        "lockfilePath": "node_modules/@resvg/resvg-js-android-arm-eabi",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [
             "metaplate > @resvg/resvg-js > @resvg/resvg-js-android-arm-eabi"
           ],
           "reachability": "runtime-peer-optional"
-        }
+        },
+        "reachability": "runtime-peer-optional",
+        "dependencyPath": "metaplate > @resvg/resvg-js > @resvg/resvg-js-android-arm-eabi",
+        "lockfilePath": "node_modules/@resvg/resvg-js-android-arm-eabi"
       },
       {
         "name": "debugAccess",
         "severity": "low",
         "category": "supplyChainRisk",
         "example": "npm/sharp@0.35.3",
-        "reachability": "runtime-peer-optional",
-        "dependencyPath": "metaplate > astro > sharp",
-        "lockfilePath": "node_modules/sharp",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [
@@ -205,151 +226,151 @@
             "metaplate > next > sharp"
           ],
           "reachability": "runtime-peer-optional"
-        }
+        },
+        "reachability": "runtime-peer-optional",
+        "dependencyPath": "metaplate > astro > sharp",
+        "lockfilePath": "node_modules/sharp"
       },
       {
         "name": "dynamicRequire",
         "severity": "low",
         "category": "supplyChainRisk",
         "example": "npm/next@16.3.3",
-        "reachability": "runtime-peer"
+        "dependencyEvidence": {
+          "source": "package-lock.json",
+          "paths": [],
+          "reachability": "unknown",
+          "unresolved": true,
+          "reason": "Socket analyzed next@16.3.3 while the release fixture lockfile contains next@16.3.2."
+        }
       },
       {
         "name": "envVars",
         "severity": "low",
         "category": "supplyChainRisk",
         "example": "npm/css-to-react-native@3.2.0",
-        "reachability": "runtime-peer",
-        "dependencyPath": "metaplate > satori > css-to-react-native",
-        "lockfilePath": "node_modules/css-to-react-native",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [
             "metaplate > satori > css-to-react-native"
           ],
           "reachability": "runtime-peer"
-        }
+        },
+        "reachability": "runtime-peer",
+        "dependencyPath": "metaplate > satori > css-to-react-native",
+        "lockfilePath": "node_modules/css-to-react-native"
       },
       {
         "name": "filesystemAccess",
         "severity": "low",
         "category": "supplyChainRisk",
         "example": "npm/@resvg/resvg-js@2.6.2",
-        "reachability": "runtime-peer",
-        "dependencyPath": "metaplate > @resvg/resvg-js",
-        "lockfilePath": "node_modules/@resvg/resvg-js",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [
             "metaplate > @resvg/resvg-js"
           ],
           "reachability": "runtime-peer"
-        }
+        },
+        "reachability": "runtime-peer",
+        "dependencyPath": "metaplate > @resvg/resvg-js",
+        "lockfilePath": "node_modules/@resvg/resvg-js"
       },
       {
         "name": "gptAnomaly",
         "severity": "low",
         "category": "supplyChainRisk",
         "example": "npm/fflate@0.7.3",
-        "reachability": "runtime-peer",
-        "dependencyPath": "metaplate > satori > @shuding/opentype.js > fflate",
-        "lockfilePath": "node_modules/fflate",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [
-            "metaplate > satori > @shuding/opentype.js > fflate"
+            "metaplate > satori > @shuding/opentype.js > fflate",
+            "metaplate > satori > fflate"
           ],
           "reachability": "runtime-peer"
-        }
+        },
+        "reachability": "runtime-peer",
+        "dependencyPath": "metaplate > satori > @shuding/opentype.js > fflate",
+        "lockfilePath": "node_modules/fflate"
       },
       {
         "name": "minifiedFile",
         "severity": "low",
         "category": "quality",
         "example": "npm/@resvg/resvg-js@2.6.2",
-        "reachability": "runtime-peer",
-        "dependencyPath": "metaplate > @resvg/resvg-js",
-        "lockfilePath": "node_modules/@resvg/resvg-js",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [
             "metaplate > @resvg/resvg-js"
           ],
           "reachability": "runtime-peer"
-        }
+        },
+        "reachability": "runtime-peer",
+        "dependencyPath": "metaplate > @resvg/resvg-js",
+        "lockfilePath": "node_modules/@resvg/resvg-js"
       },
       {
         "name": "newAuthor",
         "severity": "low",
         "category": "supplyChainRisk",
         "example": "npm/camelize@1.0.1",
-        "reachability": "runtime-peer",
-        "dependencyPath": "metaplate > satori > css-to-react-native > camelize",
-        "lockfilePath": "node_modules/camelize",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [
             "metaplate > satori > css-to-react-native > camelize"
           ],
           "reachability": "runtime-peer"
-        }
+        },
+        "reachability": "runtime-peer",
+        "dependencyPath": "metaplate > satori > css-to-react-native > camelize",
+        "lockfilePath": "node_modules/camelize"
       },
       {
         "name": "nonpermissiveLicense",
         "severity": "low",
         "category": "license",
         "example": "npm/@resvg/resvg-js-android-arm-eabi@2.6.2",
-        "reachability": "runtime-peer-optional",
-        "dependencyPath": "metaplate > @resvg/resvg-js > @resvg/resvg-js-android-arm-eabi",
-        "lockfilePath": "node_modules/@resvg/resvg-js-android-arm-eabi",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [
             "metaplate > @resvg/resvg-js > @resvg/resvg-js-android-arm-eabi"
           ],
           "reachability": "runtime-peer-optional"
-        }
+        },
+        "reachability": "runtime-peer-optional",
+        "dependencyPath": "metaplate > @resvg/resvg-js > @resvg/resvg-js-android-arm-eabi",
+        "lockfilePath": "node_modules/@resvg/resvg-js-android-arm-eabi"
       },
       {
         "name": "unmaintained",
         "severity": "low",
         "category": "maintenance",
         "example": "npm/metaplate@0.6.0",
-        "reachability": "published-package-metadata"
+        "dependencyEvidence": {
+          "source": "package-lock.json",
+          "paths": [],
+          "reachability": "unknown",
+          "unresolved": true,
+          "reason": "No metaplate@0.6.0 node exists in package-lock.json."
+        }
       },
       {
         "name": "urlStrings",
         "severity": "low",
         "category": "supplyChainRisk",
         "example": "npm/camelize@1.0.1",
-        "reachability": "runtime-peer",
-        "dependencyPath": "metaplate > satori > css-to-react-native > camelize",
-        "lockfilePath": "node_modules/camelize",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [
             "metaplate > satori > css-to-react-native > camelize"
           ],
           "reachability": "runtime-peer"
-        }
+        },
+        "reachability": "runtime-peer",
+        "dependencyPath": "metaplate > satori > css-to-react-native > camelize",
+        "lockfilePath": "node_modules/camelize"
       }
     ]
-  },
-  "highCriticalDisposition": {
-    "high": [
-      {
-        "alert": "socketUpgradeAvailable",
-        "package": "string.prototype.codepointat",
-        "version": "0.2.1",
-        "path": "metaplate > satori > @shuding/opentype.js > string.prototype.codepointat",
-        "reachability": "runtime-peer",
-        "disposition": "accepted-with-evidence",
-        "reason": "Socket identifies a maintenance upgrade opportunity, not a vulnerability. The package is transitive to the release-tested Satori peer; the available 1.0.1 override was tested and rejected because Socket scores did not improve while the lockfile grew by 73 packages.",
-        "verification": "npm audit --audit-level=high; package-lock.json registry/integrity checks; packed artifact and Node 20/22/24 plus Linux/Windows/macOS tests",
-        "expiry": "2026-12-31"
-      }
-    ],
-    "critical": []
   },
   "provenance": {
     "source": "Socket CLI",

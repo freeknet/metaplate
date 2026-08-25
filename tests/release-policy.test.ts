@@ -151,6 +151,13 @@ describe("Socket release policy", () => {
   });
 });
 
+describe("release evidence consistency", () => {
+  it("marks deployment policy errors as blocking", () => {
+    const invalid = { ...baseDeployment, routes: [{ id: "bad", provider: "x", runtime: "Node", status: "claimed", evidence: "x" }] };
+    expect(validateDeploymentManifest(invalid).length).toBeGreaterThan(0);
+  });
+});
+
 describe("release check evidence", () => {
   const checks = [
     "production-build",

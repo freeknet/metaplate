@@ -57,6 +57,38 @@ describe("dependency reachability model", () => {
     expect(byName("shared")?.classification).toBe("development-only");
   });
 
+  it("preserves same-state paths and descendants while terminating cycles", () => {
+    const rows = classify({
+      name: "metaplate",
+      dependencies: {},
+      peerDependencies: { peerA: "1", peerB: "1", optionalA: "1", optionalB: "1" },
+      peerDependenciesMeta: { optionalA: { optional: true }, optionalB: { optional: true } },
+    }, {
+      "node_modules/peerA": packageEntry({ dependencies: { shared: "1" } }),
+      "node_modules/peerB": packageEntry({ dependencies: { shared: "1" } }),
+      "node_modules/optionalA": packageEntry({ dependencies: { optionalShared: "1" } }),
+      "node_modules/optionalB": packageEntry({ dependencies: { optionalShared: "1" } }),
+      "node_modules/shared": packageEntry({ dependencies: { nested: "1" } }),
+      "node_modules/nested": packageEntry({ dependencies: { shared: "1" } }),
+      "node_modules/optionalShared": packageEntry({ dependencies: { optionalNested: "1" } }),
+      "node_modules/optionalNested": packageEntry(),
+    });
+    const row = (name: string) => rows.find((entry) => entry.name === name);
+    expect(row("shared")?.dependencyPaths).toEqual([
+      "metaplate > peerA > shared",
+      "metaplate > peerB > shared",
+    ]);
+    expect(row("nested")?.dependencyPaths).toEqual([
+      "metaplate > peerA > shared > nested",
+      "metaplate > peerB > shared > nested",
+    ]);
+    expect(row("optionalShared")?.dependencyPaths).toEqual([
+      "metaplate > optionalA > optionalShared",
+      "metaplate > optionalB > optionalShared",
+    ]);
+    expect(row("optionalShared")?.classification).toBe("runtime-peer-optional");
+  });
+
   it("lets the strongest consumer path win deterministically", () => {
     const rows = classify({
       name: "metaplate",

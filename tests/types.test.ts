@@ -5,7 +5,9 @@ import type { ResvgRenderOptions } from "../src/node.js";
 import type { SatoriNode, SatoriOptions } from "../src/render.js";
 import {
   socialImageMetadata,
+  type SocialCompatibilityImage,
   type SocialImageMetadata,
+  type SocialImageVerificationDescriptor,
   type TwitterCard,
   type TwitterImageOptions,
   type XCard,
@@ -47,6 +49,11 @@ const twitterOptions: TwitterImageOptions = xOptions;
 void defaultCard;
 void summaryCard;
 void twitterOptions;
+
+const compatibilityInput: SocialCompatibilityImage = { width: 1200, height: 630, type: "image/png" };
+const verificationInput: SocialImageVerificationDescriptor = { type: "image/png" };
+void compatibilityInput;
+void verificationInput;
 
 describe("React-free type mirror", () => {
   it("is exercised by the type-level assertions above", () => {

@@ -103,16 +103,27 @@ function directDependencyKinds(manifest) {
   return kinds;
 }
 
-const ORIGIN_RANK = new Map([
-  ["development", 0],
-  ["runtime-peer", 1],
-  ["published-runtime", 2],
-]);
+export const REACHABILITY_RANK = Object.freeze({
+  "development-optional": 0,
+  "development-only": 1,
+  "runtime-optional": 2,
+  "runtime-peer-optional": 3,
+  "runtime-peer": 4,
+  "published-runtime": 5,
+});
+
+export function compareReachability(left, right) {
+  return (REACHABILITY_RANK[left] ?? -1) - (REACHABILITY_RANK[right] ?? -1);
+}
+
+export function strongestReachability(values) {
+  return [...values].sort((left, right) => compareReachability(right, left))[0];
+}
 
 function mergeState(current, next) {
   if (!current) return next;
-  const currentRank = ORIGIN_RANK.get(current.origin) ?? -1;
-  const nextRank = ORIGIN_RANK.get(next.origin) ?? -1;
+  const currentRank = REACHABILITY_RANK[displayClassification(current)] ?? -1;
+  const nextRank = REACHABILITY_RANK[displayClassification(next)] ?? -1;
   if (nextRank > currentRank) return next;
   if (nextRank < currentRank) return current;
   return { origin: current.origin, optional: current.optional && next.optional };
@@ -137,10 +148,11 @@ export function classifyLockPackages({ root, manifest, lockfile }) {
   const dependencyPaths = new Map();
   const visited = new Set();
 
-  function walk(path, state, edgeOptional = false, lineage = "") {
+  function walk(path, state, edgeOptional = false, lineage = "", ancestry = new Set()) {
     const nextState = { ...state, optional: state.optional || edgeOptional };
+    if (ancestry.has(path)) return;
     const key = `${nextState.origin}:${path}:${nextState.optional}`;
-    if (visited.has(key)) return;
+    const nextAncestry = new Set(ancestry).add(path);
     visited.add(key);
     const entry = packages[path];
     if (!entry) return;
@@ -161,19 +173,19 @@ export function classifyLockPackages({ root, manifest, lockfile }) {
     for (const [dependency, specifier] of Object.entries(entry.dependencies ?? {})) {
       const child = resolveLockPackage(packages, path, dependency);
       if (child) {
-        walk(child, nextState, false, currentPath);
+        walk(child, nextState, false, currentPath, nextAncestry);
       } else if (isRemoteSpecifier(specifier)) {
         classifications.set(`${path}:${dependency}`, "unknown");
       }
     }
     for (const dependency of Object.keys(entry.optionalDependencies ?? {})) {
       const child = resolveLockPackage(packages, path, dependency);
-      if (child) walk(child, nextState, true, currentPath);
+      if (child) walk(child, nextState, true, currentPath, nextAncestry);
     }
     for (const dependency of Object.keys(entry.peerDependencies ?? {})) {
       const child = resolveLockPackage(packages, path, dependency);
       const optionalPeer = entry.peerDependenciesMeta?.[dependency]?.optional === true;
-      if (child) walk(child, { ...nextState, optional: nextState.optional || optionalPeer }, false, currentPath);
+      if (child) walk(child, { ...nextState, optional: nextState.optional || optionalPeer }, false, currentPath, nextAncestry);
     }
   }
 

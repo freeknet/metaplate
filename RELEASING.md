@@ -55,11 +55,15 @@ provenance attestation. A release is not complete until **Verify published
 artifact** passes.
 
 Then update version-specific badges when applicable and confirm the GitHub
-release remains the best single overview of the version. For 0.7.0 deployment claims, retain the checked-in
-`deployment-evidence.json`, the provider/runtime evidence table, the generated
-`release-evidence-report.json`, and the dependency inventory with the release
-artifacts. A route is certified only after its packed-artifact,production-build, served/published output, image, and response-header evidence is
-   recorded in a structured certification object. The packed Node fixtures verify
-   response headers and route resolution; they do not claim page-level social
-   metadata unless a page fixture emits and checks those tags. Local contract evidence must not
-be described as hosted provider certification.
+release remains the best single overview of the version. For 0.7.0 deployment
+claims, retain the complete evidence bundle:
+`dependency-inventory.json`, `release-evidence-report.json`,
+`release-check-results.json`, `deployment-contract-evidence.json`,
+`deployment-evidence.json`, `socket-score-report.json`, and
+`socket-dispositions.json`. A route is certified only after its
+packed-artifact, production-build, served/published output, image, and
+response-header evidence is recorded in a structured certification object. The
+packed Node fixtures verify response headers and route resolution; they do not
+claim page-level social metadata unless a page fixture emits and checks those
+tags. Local contract evidence must not be described as hosted provider
+certification.

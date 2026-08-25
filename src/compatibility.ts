@@ -1,4 +1,4 @@
-import { assertImageSize, type SocialImageDescriptor, type SocialImageVerificationDescriptor } from "./core.js";
+import { assertImageSize, type SocialImageDescriptor } from "./core.js";
 import {
   SOCIAL_COMPATIBILITY_PROFILES,
   SOCIAL_TARGETS,
@@ -68,7 +68,7 @@ function crawlerReadyUrl(value: string): boolean {
  * verification with SSRF controls and are not inferred here.
  */
 export function socialImageCompatibility(
-  image: SocialImageDescriptor | SocialImageVerificationDescriptor,
+  image: SocialCompatibilityImage,
   options: SocialCompatibilityOptions = {},
 ): SocialCompatibilityReport {
   if (image.width === undefined || image.height === undefined) {
