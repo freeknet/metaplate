@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "package": "metaplate",
+  "version": "0.6.0",
+  "source": "https://socket.dev/npm/package/metaplate/alerts/0.6.0?tab=dependencies",
+  "status": "awaiting-alert-export",
+  "releasePolicy": {
+    "blockSeverities": ["critical"],
+    "requireDispositionSeverities": ["high", "critical"],
+    "allowedDispositionTypes": [
+      "upgrade",
+      "replace",
+      "remove",
+      "isolate",
+      "accepted-with-evidence"
+    ],
+    "acceptedExceptionRequires": [
+      "owner",
+      "reason",
+      "expiry",
+      "verification"
+    ]
+  },
+  "alerts": [],
+  "requiredAlertShape": {
+    "type": "Socket alert category",
+    "severity": "critical|high|medium|low",
+    "package": "exact package name",
+    "version": "exact resolved version",
+    "path": "dependency path from metaplate",
+    "reachability": "published-runtime|runtime-peer|development-only|unknown",
+    "disposition": "upgrade|replace|remove|isolate|accepted-with-evidence",
+    "evidence": "Socket export/report URL or artifact",
+    "verification": "commands/results proving the disposition"
+  }
+}

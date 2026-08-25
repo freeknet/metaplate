@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "release": "0.7.0",
+  "status": "in-progress",
+  "policy": {
+    "certifiedRequires": [
+      "packed-artifact",
+      "production-build",
+      "served-or-published-output",
+      "image-format-and-dimension-check",
+      "page-metadata-check"
+    ],
+    "edgeNativeRendererRequired": true
+  },
+  "routes": [
+    {
+      "id": "static-build",
+      "provider": "generic-static-host",
+      "runtime": "Node.js build-time",
+      "api": "metaplate/node render",
+      "status": "documented",
+      "evidence": "docs/deployment.md"
+    },
+    {
+      "id": "vercel-node",
+      "provider": "Vercel",
+      "runtime": "Node.js Functions",
+      "api": "Web Standard GET/Response",
+      "status": "documented-recipe",
+      "evidence": "docs/deployment.md",
+      "officialDocs": "https://vercel.com/docs/functions/runtimes/node-js"
+    },
+    {
+      "id": "netlify-node",
+      "provider": "Netlify",
+      "runtime": "Node.js Functions",
+      "api": "Function/Response",
+      "status": "documented-recipe",
+      "evidence": "docs/deployment.md",
+      "officialDocs": "https://docs.netlify.com/build/functions/configuration/"
+    },
+    {
+      "id": "github-pages",
+      "provider": "GitHub Pages",
+      "runtime": "static files",
+      "api": "build output",
+      "status": "documented-recipe",
+      "evidence": "docs/deployment.md",
+      "officialDocs": "https://docs.github.com/en/pages/getting-started-with-github-pages/creating-a-github-pages-site"
+    },
+    {
+      "id": "node-service",
+      "provider": "Railway/Render/generic",
+      "runtime": "long-lived Node.js",
+      "api": "Express/raw bytes",
+      "status": "documented-recipe",
+      "evidence": "docs/deployment.md"
+    },
+    {
+      "id": "edge",
+      "provider": "Cloudflare Workers/Vercel Edge/Netlify Edge",
+      "runtime": "edge",
+      "api": "not supported by metaplate/node",
+      "status": "not-supported",
+      "evidence": "docs/deployment.md",
+      "reason": "The current renderer uses native @resvg/resvg-js; no edge/Wasm renderer is certified."
+    }
+  ]
+}

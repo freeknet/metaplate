@@ -770,7 +770,9 @@ A JPEG plate uses `Content-Type = "image/jpeg"` for the same two paths.
 
 For provider-neutral guidance covering static generation, Vercel and Netlify Node
 functions, Railway and Render services, GitHub Pages, and edge-runtime limits,
-see the [deployment routes guide](docs/deployment.md). The short version is:
+see the [deployment routes guide](docs/deployment.md). The release's current
+route evidence and certification status lives in
+[`deployment-evidence.json`](deployment-evidence.json). The short version is:
 use a real `.png`/`.jpg` file for static hosts, use the provider's Node runtime
 for `metaplate/node`, and do not deploy the native renderer to an Edge/Workers
 runtime without a separately tested Wasm-compatible renderer.

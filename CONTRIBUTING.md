@@ -45,6 +45,7 @@ npm run typecheck
 npm test
 npm run build
 npm run check:dependencies
+npm run check:deployment
 ```
 
 ## Design constraints

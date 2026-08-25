@@ -11,10 +11,11 @@ GitHub Releases are the user-facing home for each version. They must explain why
    upstream page that defines the routing, metadata, build, adapter, runtime, or
    deployment behavior. Keep Metaplate's tested runtime/version boundary next
    to that link.
-5. Review the dependency inventory and record every Socket high/critical alert
-   disposition. Do not describe `npm audit` as equivalent to Socket analysis;
-   behavioral and native-code signals need their own evidence or an explicit
-   time-bounded exception.
+5. Review `dependency-inventory.json` and record every Socket high/critical
+   alert in `socket-dispositions.json`. Do not describe `npm audit` as
+   equivalent to Socket analysis; behavioral and native-code signals need their
+   own evidence or an explicit time-bounded exception. An incomplete Socket
+   report must not be presented as clean.
 6. Include explicit upgrade advice and write `None.` under breaking changes when there is no migration.
 7. Run the complete local gate:
 
@@ -22,6 +23,8 @@ GitHub Releases are the user-facing home for each version. They must explain why
    npm run check
    npm run check:package
    npm run check:dependencies
+   npm run check:deployment
+   node scripts/verify-socket-dispositions.mjs
    ```
 
    `npm run check` validates the current version's release notes and rejects missing sections, placeholders, mismatched install commands, and generated-note-only bodies.
@@ -49,5 +52,7 @@ artifact** passes.
 
 Then update version-specific badges when applicable and confirm the GitHub
 release remains the best single overview of the version. For 0.7.0 deployment
-claims, retain the provider/runtime evidence table and the dependency inventory
-with the release artifacts.
+claims, retain `deployment-evidence.json`, the provider/runtime evidence table,
+and the dependency inventory with the release artifacts. A route is certified
+only after its packed-artifact, production-build, output, image, and metadata
+evidence is recorded.

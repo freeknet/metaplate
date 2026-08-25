@@ -29,12 +29,18 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run check
       - run: npm run check:package
-      - name: Write dependency inventory
-        run: node scripts/dependency-inventory.mjs > dependency-inventory.json
+      - name: Write dependency and release evidence
+        run: |
+          node scripts/dependency-inventory.mjs > dependency-inventory.json
+          cp deployment-evidence.json deployment-evidence-report.json
+          cp socket-dispositions.json socket-dispositions-report.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: dependency-inventory
-          path: dependency-inventory.json
+          name: dependency-and-release-evidence
+          path: |
+            dependency-inventory.json
+            deployment-evidence-report.json
+            socket-dispositions-report.json
           if-no-files-found: error
       - name: Exercise the post-publication verifier against the local artifact
         shell: bash
