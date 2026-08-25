@@ -156,3 +156,44 @@ jobs:
         run: npm publish ./release/*.tgz --access public --provenance --tag "${{ needs.verify.outputs.dist_tag }}"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  verify-publication:
+    name: Verify published artifact
+    needs: [verify, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.verify.outputs.tag }}
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      # npm recommends the latest CLI when verifying evolving Sigstore
+      # attestation formats.
+      - run: npm install --global npm@latest --ignore-scripts
+
+      - name: Wait for registry propagation
+        shell: bash
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          set -euo pipefail
+          for attempt in {1..12}; do
+            if published=$(npm view "metaplate@$VERSION" version 2>/dev/null) && [[ "$published" == "$VERSION" ]]; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::metaplate@$VERSION did not become visible on the npm registry"
+          exit 1
+
+      - name: Verify registry artifact, signatures, and provenance
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: node scripts/verify-published-package.mjs "$VERSION"

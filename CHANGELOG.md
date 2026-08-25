@@ -57,6 +57,9 @@ All notable changes to Metaplate are documented in this file. The project uses
   facts, packed-package fixture definitions, and binary image test builders in
   focused modules. A zero-tolerance clone scan now runs in `npm run check` to
   prevent those contracts from drifting back into duplicated call sites.
+- Automate the post-publish clean registry install, public export/peer/CLI
+  smoke, npm registry-signature verification, and SLSA provenance check. CI
+  replays the verifier against the local tarball before it can reach a release.
 
 ### Fixed
 
