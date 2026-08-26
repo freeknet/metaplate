@@ -341,6 +341,182 @@ describe("Socket report importer", () => {
     })).resolves.toMatchObject({ code: 1 });
   });
 
+  // --- Official envelope enforcement ---
+
+  it("rejects top-level self/transitively without report.data", async () => {
+    await expect(runImporter({
+      self: { score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 } },
+      transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } },
+      source: "https://socket.dev/npm/package/metaplate@0.6.0",
+      version: "0.6.0",
+    })).resolves.toMatchObject({ code: 1 });
+  });
+
+  it("rejects data without data.purl", async () => {
+    await expect(runImporter({
+      data: {
+        self: { score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 } },
+        transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } },
+      },
+      source: "https://socket.dev/npm/package/metaplate@0.6.0",
+      version: "0.6.0",
+    })).resolves.toMatchObject({ code: 1 });
+  });
+
+  // --- Malformed present identity fields ---
+
+  /** Helper: minimal valid envelope with optional report-level overrides. */
+  function minimalEnvelope(overrides?: Record<string, unknown>) {
+    return {
+      data: {
+        purl: "pkg:npm/metaplate@0.6.0",
+        self: { score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 } },
+        transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } },
+      },
+      ...overrides,
+    };
+  }
+
+  it("rejects malformed present identity fields (non-string types)", async () => {
+    await expect(runImporter(minimalEnvelope({ data: { ...minimalEnvelope().data, self: { purl: 123, score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 } }, transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } } } }))).resolves.toMatchObject({ code: 1 });
+    await expect(runImporter(minimalEnvelope({ version: 0.6 }))).resolves.toMatchObject({ code: 1 });
+    await expect(runImporter(minimalEnvelope({ version: { fake: true } }))).resolves.toMatchObject({ code: 1 });
+    await expect(runImporter(minimalEnvelope({ data: { ...minimalEnvelope().data, version: null } }))).resolves.toMatchObject({ code: 1 });
+    await expect(runImporter(minimalEnvelope({ source: 42 }))).resolves.toMatchObject({ code: 1 });
+  });
+
+  // --- Package/version claim conflicts ---
+
+  it("rejects conflicting package claims between data.purl and data.self.purl", async () => {
+    await expect(runImporter({
+      data: {
+        purl: "pkg:npm/metaplate@0.6.0",
+        self: { purl: "npm/metaplate@0.6.1", score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 } },
+        transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } },
+      },
+    })).resolves.toMatchObject({ code: 1 });
+
+    await expect(runImporter({
+      data: {
+        purl: "pkg:npm/metaplate@0.6.0",
+        self: { purl: "npm/other-package@0.6.0", score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 } },
+        transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } },
+      },
+    })).resolves.toMatchObject({ code: 1 });
+  });
+
+  it("rejects conflicting version claims between report.version and data.version", async () => {
+    await expect(runImporter({
+      data: {
+        purl: "pkg:npm/metaplate@0.6.0",
+        self: { score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 } },
+        transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } },
+        version: "0.7.0",
+      },
+    })).resolves.toMatchObject({ code: 1 });
+  });
+
+  // --- Score vector validation (importer) ---
+
+  /** Helper: build envelope with a specific shallow score override. */
+  function envelopeWithScore(selfScore: Record<string, unknown>, deepScore?: Record<string, unknown>) {
+    return cliEnvelope({
+      self: { score: selfScore },
+      transitively: { score: deepScore ?? { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } },
+    });
+  }
+
+  const VALID_SHALLOW = { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 };
+
+  it("rejects invalid score vectors (importer)", async () => {
+    await expect(runImporter(envelopeWithScore({ ...VALID_SHALLOW, overall: 101 }))).resolves.toMatchObject({ code: 1 });
+    await expect(runImporter(envelopeWithScore({ ...VALID_SHALLOW, overall: -1 }))).resolves.toMatchObject({ code: 1 });
+    await expect(runImporter(envelopeWithScore({ ...VALID_SHALLOW, overall: "76" }))).resolves.toMatchObject({ code: 1 });
+    await expect(runImporter(envelopeWithScore({ overall: 76, supplyChain: 76, quality: 99, vulnerability: 100, license: 100 }))).resolves.toMatchObject({ code: 1 });
+    await expect(runImporter(envelopeWithScore({ ...VALID_SHALLOW, license: null }))).resolves.toMatchObject({ code: 1 });
+    await expect(runImporter({ data: { purl: "pkg:npm/metaplate@0.6.0", self: { score: VALID_SHALLOW }, transitively: { score: null } } })).resolves.toMatchObject({ code: 1 });
+  });
+
+  // --- Double-version URL ---
+
+  it("rejects double-version URL patterns", async () => {
+    await expect(runImporter({
+      data: {
+        purl: "pkg:npm/metaplate@0.6.0",
+        self: { score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 } },
+        transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } },
+      },
+      source: "https://socket.dev/npm/package/metaplate@0.6.0@0.6.0",
+    })).resolves.toMatchObject({ code: 1 });
+
+    await expect(runImporter({
+      data: {
+        purl: "pkg:npm/metaplate@0.6.0",
+        self: { score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 } },
+        transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } },
+      },
+      source: "https://socket.dev/npm/package/metaplate@0.6.0@9.9.9",
+    })).resolves.toMatchObject({ code: 1 });
+  });
+
+  // --- Derived-field poisoning ---
+
+  it("does not preserve malicious derived fields from raw CLI alerts", async () => {
+    const result = await runImporter({
+      data: {
+        purl: "pkg:npm/metaplate@0.6.0",
+        self: { purl: "npm/metaplate@0.6.0", score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 } },
+        transitively: {
+          score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 },
+          alerts: [{
+            name: "socketUpgradeAvailable",
+            severity: "high",
+            example: "npm/string.prototype.codepointat@0.2.1",
+            reachability: "development-only",
+            dependencyPath: "metaplate > fake",
+            lockfilePath: "node_modules/fake",
+            scope: "fake",
+          }],
+        },
+      },
+    });
+    expect(result.code).toBe(0);
+    const normalized = JSON.parse(result.output!);
+    const alert = normalized.deep.alerts[0];
+    // scope must be the real derived scope, not the malicious input
+    expect(alert.scope).toBe("deep");
+    // reachability must come from inventory, not from input
+    expect(alert.dependencyEvidence.reachability).not.toBe("development-only");
+    // lockfilePath must not exist
+    expect(alert.lockfilePath).toBeUndefined();
+    // dependencyPath must be a real path from the inventory
+    expect(alert.dependencyPath).not.toBe("metaplate > fake");
+  });
+
+  // --- Alert containers by presence ---
+
+  it("rejects report.alerts even when non-array (object)", async () => {
+    const result = await runImporter({
+      ...cliEnvelope(),
+      alerts: { severity: "critical" },
+    });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("report.alerts");
+  });
+
+  it("rejects data.alerts even when non-array (object)", async () => {
+    const result = await runImporter({
+      data: {
+        purl: "pkg:npm/metaplate@0.6.0",
+        self: { purl: "npm/metaplate@0.6.0", score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 } },
+        transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } },
+        alerts: { severity: "critical" },
+      },
+    });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("data.alerts");
+  });
+
   // --- Explicit-only identity (no example) ---
 
   it("accepts explicit-only alert identity (no example) and enriches from inventory", async () => {

@@ -28,6 +28,14 @@ function findResolvedAlert(score: JsonObject): Record<string, unknown> | undefin
   });
 }
 
+function findUnresolvedAlert(score: JsonObject): Record<string, unknown> | undefined {
+  const deep = score.deep as { alerts: Array<Record<string, unknown>> };
+  return deep.alerts.find((a) => {
+    const ev = a.dependencyEvidence as Record<string, unknown> | undefined;
+    return ev?.unresolved === true;
+  });
+}
+
 describe("Socket evidence integrity", () => {
   it("accepts the committed report and matching score artifact", () => {
     expect(validateSocketReport(dispositionReport)).toEqual([]);
@@ -205,11 +213,7 @@ describe("Socket evidence integrity", () => {
 
   it("rejects unresolved alert that claims resolved evidence", async () => {
     const tampered = await withScore(scoreReport, (score) => {
-      const deep = score.deep as { alerts: Array<Record<string, unknown>> };
-      const unresolved = deep.alerts.find((a) => {
-        const ev = a.dependencyEvidence as Record<string, unknown> | undefined;
-        return ev?.unresolved === true;
-      });
+      const unresolved = findUnresolvedAlert(score);
       if (unresolved) {
         const evidence = unresolved.dependencyEvidence as Record<string, unknown>;
         delete evidence.unresolved;
@@ -236,5 +240,78 @@ describe("Socket evidence integrity", () => {
       return score;
     });
     expect(validateSocketReport(tampered.report).some((error) => error.includes("dependencyPath") || error.includes("dependency evidence") || error.includes("path"))).toBe(true);
+  });
+
+  // --- Score vector validation (release verifier) ---
+
+  it("rejects invalid score vectors in score artifact (verifier)", async () => {
+    // shallow.score.overall = 101
+    const t1 = await withScore(scoreReport, (score) => {
+      (score.shallow as Record<string, unknown>).score = { overall: 101, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 };
+      return score;
+    });
+    expect(validateSocketReport(t1.report).some((e) => e.includes("score artifact") && e.includes("overall"))).toBe(true);
+
+    // shallow.score.overall = "76"
+    const t2 = await withScore(scoreReport, (score) => {
+      (score.shallow as Record<string, unknown>).score = { overall: "76", supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 };
+      return score;
+    });
+    expect(validateSocketReport(t2.report).some((e) => e.includes("score artifact") && e.includes("overall"))).toBe(true);
+
+    // delete shallow.score.maintenance
+    const t3 = await withScore(scoreReport, (score) => {
+      const s = (score.shallow as Record<string, unknown>).score as Record<string, unknown>;
+      delete s.maintenance;
+      return score;
+    });
+    expect(validateSocketReport(t3.report).some((e) => e.includes("score artifact") && e.includes("maintenance"))).toBe(true);
+
+    // deep.score.quality = -1
+    const t4 = await withScore(scoreReport, (score) => {
+      (score.deep as Record<string, unknown>).score = { overall: 38, supplyChain: 60, maintenance: 54, quality: -1, vulnerability: 100, license: 70 };
+      return score;
+    });
+    expect(validateSocketReport(t4.report).some((e) => e.includes("score artifact") && e.includes("quality"))).toBe(true);
+
+    // deep.score.license = null
+    const t5 = await withScore(scoreReport, (score) => {
+      (score.deep as Record<string, unknown>).score = { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: null };
+      return score;
+    });
+    expect(validateSocketReport(t5.report).some((e) => e.includes("score artifact") && e.includes("license"))).toBe(true);
+
+    // delete deep.score entirely
+    const t6 = await withScore(scoreReport, (score) => {
+      delete (score.deep as Record<string, unknown>).score;
+      return score;
+    });
+    expect(validateSocketReport(t6.report).some((e) => e.includes("score artifact") && e.includes("deep"))).toBe(true);
+  });
+
+  // --- Unresolved evidence source validation ---
+
+  it("rejects unresolved alert with fake dependencyEvidence source", async () => {
+    const tampered = await withScore(scoreReport, (score) => {
+      const unresolved = findUnresolvedAlert(score);
+      if (unresolved) {
+        const ev = unresolved.dependencyEvidence as Record<string, unknown>;
+        ev.source = "fake-source.json";
+      }
+      return score;
+    });
+    expect(validateSocketReport(tampered.report).some((e) => e.includes("source") || e.includes("package-lock"))).toBe(true);
+  });
+
+  // --- lockfilePath removal ---
+
+  it("the committed score artifact no longer contains lockfilePath", () => {
+    const allAlerts = [
+      ...(scoreReport.shallow?.alerts ?? []),
+      ...(scoreReport.deep?.alerts ?? []),
+    ];
+    for (const alert of allAlerts) {
+      expect((alert as Record<string, unknown>).lockfilePath).toBeUndefined();
+    }
   });
 });

@@ -18,7 +18,7 @@
     "alerts": [
       {
         "name": "recentlyPublished",
-        "severity": "middle",
+        "severity": "medium",
         "category": "supplyChainRisk",
         "example": "npm/metaplate@0.6.0",
         "dependencyEvidence": {
@@ -73,12 +73,11 @@
           "reachability": "runtime-peer"
         },
         "reachability": "runtime-peer",
-        "dependencyPath": "metaplate > satori > @shuding/opentype.js > string.prototype.codepointat",
-        "lockfilePath": "node_modules/string.prototype.codepointat"
+        "dependencyPath": "metaplate > satori > @shuding/opentype.js > string.prototype.codepointat"
       },
       {
         "name": "gptSecurity",
-        "severity": "middle",
+        "severity": "medium",
         "category": "supplyChainRisk",
         "example": "npm/@shuding/opentype.js@1.4.0-beta.0",
         "dependencyEvidence": {
@@ -89,12 +88,11 @@
           "reachability": "runtime-peer"
         },
         "reachability": "runtime-peer",
-        "dependencyPath": "metaplate > satori > @shuding/opentype.js",
-        "lockfilePath": "node_modules/@shuding/opentype.js"
+        "dependencyPath": "metaplate > satori > @shuding/opentype.js"
       },
       {
         "name": "networkAccess",
-        "severity": "middle",
+        "severity": "medium",
         "category": "supplyChainRisk",
         "example": "npm/yoga-layout@3.2.1",
         "dependencyEvidence": {
@@ -105,12 +103,11 @@
           "reachability": "runtime-peer"
         },
         "reachability": "runtime-peer",
-        "dependencyPath": "metaplate > satori > yoga-layout",
-        "lockfilePath": "node_modules/yoga-layout"
+        "dependencyPath": "metaplate > satori > yoga-layout"
       },
       {
         "name": "potentialVulnerability",
-        "severity": "middle",
+        "severity": "medium",
         "category": "supplyChainRisk",
         "example": "npm/next@16.3.3",
         "dependencyEvidence": {
@@ -124,7 +121,7 @@
       },
       {
         "name": "recentlyPublished",
-        "severity": "middle",
+        "severity": "medium",
         "category": "supplyChainRisk",
         "example": "npm/satori@0.33.4",
         "dependencyEvidence": {
@@ -135,12 +132,11 @@
           "reachability": "runtime-peer"
         },
         "reachability": "runtime-peer",
-        "dependencyPath": "metaplate > satori",
-        "lockfilePath": "node_modules/satori"
+        "dependencyPath": "metaplate > satori"
       },
       {
         "name": "shellAccess",
-        "severity": "middle",
+        "severity": "medium",
         "category": "supplyChainRisk",
         "example": "npm/@resvg/resvg-js@2.6.2",
         "dependencyEvidence": {
@@ -151,12 +147,11 @@
           "reachability": "runtime-peer"
         },
         "reachability": "runtime-peer",
-        "dependencyPath": "metaplate > @resvg/resvg-js",
-        "lockfilePath": "node_modules/@resvg/resvg-js"
+        "dependencyPath": "metaplate > @resvg/resvg-js"
       },
       {
         "name": "trivialPackage",
-        "severity": "middle",
+        "severity": "medium",
         "category": "supplyChainRisk",
         "example": "npm/@img/sharp-linux-arm@0.35.3",
         "dependencyEvidence": {
@@ -168,12 +163,11 @@
           "reachability": "runtime-peer-optional"
         },
         "reachability": "runtime-peer-optional",
-        "dependencyPath": "metaplate > astro > sharp > @img/sharp-linux-arm",
-        "lockfilePath": "node_modules/@img/sharp-linux-arm"
+        "dependencyPath": "metaplate > astro > sharp > @img/sharp-linux-arm"
       },
       {
         "name": "usesEval",
-        "severity": "middle",
+        "severity": "medium",
         "category": "supplyChainRisk",
         "example": "npm/source-map-js@1.2.1",
         "dependencyEvidence": {
@@ -197,8 +191,7 @@
           "reachability": "runtime-peer-optional"
         },
         "reachability": "runtime-peer-optional",
-        "dependencyPath": "metaplate > @react-router/dev > vite > postcss > source-map-js",
-        "lockfilePath": "node_modules/source-map-js"
+        "dependencyPath": "metaplate > @react-router/dev > vite > postcss > source-map-js"
       },
       {
         "name": "copyleftLicense",
@@ -213,8 +206,7 @@
           "reachability": "runtime-peer-optional"
         },
         "reachability": "runtime-peer-optional",
-        "dependencyPath": "metaplate > @resvg/resvg-js > @resvg/resvg-js-android-arm-eabi",
-        "lockfilePath": "node_modules/@resvg/resvg-js-android-arm-eabi"
+        "dependencyPath": "metaplate > @resvg/resvg-js > @resvg/resvg-js-android-arm-eabi"
       },
       {
         "name": "debugAccess",
@@ -230,8 +222,7 @@
           "reachability": "runtime-peer-optional"
         },
         "reachability": "runtime-peer-optional",
-        "dependencyPath": "metaplate > astro > sharp",
-        "lockfilePath": "node_modules/sharp"
+        "dependencyPath": "metaplate > astro > sharp"
       },
       {
         "name": "dynamicRequire",
@@ -260,8 +251,7 @@
           "reachability": "runtime-peer"
         },
         "reachability": "runtime-peer",
-        "dependencyPath": "metaplate > satori > css-to-react-native",
-        "lockfilePath": "node_modules/css-to-react-native"
+        "dependencyPath": "metaplate > satori > css-to-react-native"
       },
       {
         "name": "filesystemAccess",
@@ -276,8 +266,7 @@
           "reachability": "runtime-peer"
         },
         "reachability": "runtime-peer",
-        "dependencyPath": "metaplate > @resvg/resvg-js",
-        "lockfilePath": "node_modules/@resvg/resvg-js"
+        "dependencyPath": "metaplate > @resvg/resvg-js"
       },
       {
         "name": "gptAnomaly",
@@ -293,8 +282,7 @@
           "reachability": "runtime-peer"
         },
         "reachability": "runtime-peer",
-        "dependencyPath": "metaplate > satori > @shuding/opentype.js > fflate",
-        "lockfilePath": "node_modules/fflate"
+        "dependencyPath": "metaplate > satori > @shuding/opentype.js > fflate"
       },
       {
         "name": "minifiedFile",
@@ -309,8 +297,7 @@
           "reachability": "runtime-peer"
         },
         "reachability": "runtime-peer",
-        "dependencyPath": "metaplate > @resvg/resvg-js",
-        "lockfilePath": "node_modules/@resvg/resvg-js"
+        "dependencyPath": "metaplate > @resvg/resvg-js"
       },
       {
         "name": "newAuthor",
@@ -325,8 +312,7 @@
           "reachability": "runtime-peer"
         },
         "reachability": "runtime-peer",
-        "dependencyPath": "metaplate > satori > css-to-react-native > camelize",
-        "lockfilePath": "node_modules/camelize"
+        "dependencyPath": "metaplate > satori > css-to-react-native > camelize"
       },
       {
         "name": "nonpermissiveLicense",
@@ -341,8 +327,7 @@
           "reachability": "runtime-peer-optional"
         },
         "reachability": "runtime-peer-optional",
-        "dependencyPath": "metaplate > @resvg/resvg-js > @resvg/resvg-js-android-arm-eabi",
-        "lockfilePath": "node_modules/@resvg/resvg-js-android-arm-eabi"
+        "dependencyPath": "metaplate > @resvg/resvg-js > @resvg/resvg-js-android-arm-eabi"
       },
       {
         "name": "unmaintained",
@@ -371,8 +356,7 @@
           "reachability": "runtime-peer"
         },
         "reachability": "runtime-peer",
-        "dependencyPath": "metaplate > satori > css-to-react-native > camelize",
-        "lockfilePath": "node_modules/camelize"
+        "dependencyPath": "metaplate > satori > css-to-react-native > camelize"
       }
     ]
   },

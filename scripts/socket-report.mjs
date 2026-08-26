@@ -38,6 +38,47 @@ function assertScore(score, label) {
 }
 
 /**
+ * Validate the auxiliary deep-dependency fields: dependencyCount, capabilities, lowest.
+ * Malformed supplied values cause import failure rather than silent coercion.
+ */
+function validateDeepAuxiliary(data, errors) {
+  const deep = data.transitively;
+
+  // dependencyCount: absent -> null, present -> non-negative integer
+  if (deep.dependencyCount !== undefined && deep.dependencyCount !== null) {
+    if (typeof deep.dependencyCount !== "number" || !Number.isInteger(deep.dependencyCount) || deep.dependencyCount < 0) {
+      errors.push("transitively.dependencyCount must be a non-negative integer when present");
+    }
+  }
+
+  // capabilities: absent -> [], present -> array of non-empty strings
+  if (deep.capabilities !== undefined && deep.capabilities !== null) {
+    if (!Array.isArray(deep.capabilities)) {
+      errors.push("transitively.capabilities must be an array when present");
+    } else {
+      for (let i = 0; i < deep.capabilities.length; i++) {
+        if (typeof deep.capabilities[i] !== "string" || !deep.capabilities[i]) {
+          errors.push(`transitively.capabilities[${i}] must be a non-empty string`);
+        }
+      }
+    }
+  }
+
+  // lowest: absent -> null, present -> plain object with string values
+  if (deep.lowest !== undefined && deep.lowest !== null) {
+    if (typeof deep.lowest !== "object" || Array.isArray(deep.lowest)) {
+      errors.push("transitively.lowest must be a plain object when present");
+    } else {
+      for (const [key, value] of Object.entries(deep.lowest)) {
+        if (typeof value !== "string" || !value) {
+          errors.push(`transitively.lowest.${key} must be a non-empty string`);
+        }
+      }
+    }
+  }
+}
+
+/**
  * Normalize alerts from the official envelope. Only copies Socket-originated
  * fields; all locally-derived fields are constructed from canonical parsing
  * and dependency inventory, never preserved from raw input.
@@ -114,6 +155,20 @@ function assertAlerts(alerts, scope, inventory) {
 }
 
 /**
+ * Validate capturedAt is a valid ISO-8601 timestamp string.
+ */
+function validateCapturedAt(value) {
+  if (value === undefined || value === null) return;
+  if (typeof value !== "string") {
+    throw new Error("capturedAt must be a string when present");
+  }
+  const parsed = new Date(value);
+  if (!Number.isFinite(parsed.getTime())) {
+    throw new Error(`capturedAt is not a valid ISO-8601 timestamp: ${value}`);
+  }
+}
+
+/**
  * Detect and validate the official Socket CLI envelope.
  * Only the official envelope is accepted for socket-cli-import.
  * Normalized (schemaVersion 2) artifacts are rejected — the importer
@@ -155,15 +210,18 @@ function validateEnvelopeIdentity(data, report) {
   const claims = [];
   const errors = [];
 
-  // data.purl is mandatory
+  // data.purl is mandatory (already validated as string by extractOfficialEnvelope)
   const purlMatch = /^pkg:npm\/([^@]+)@(\d+\.\d+\.\d+)$/.exec(data.purl);
   if (!purlMatch) {
     return { pkg: undefined, version: undefined, errors: ["data.purl must be a valid PURL of the form pkg:npm/<package>@<version>"] };
   }
   claims.push({ field: "data.purl", pkg: purlMatch[1], version: purlMatch[2] });
 
-  // data.self.purl if present must agree
-  if (typeof data.self?.purl === "string") {
+  // data.self.purl if present must be a string and must agree
+  if (data.self?.purl !== undefined) {
+    if (typeof data.self.purl !== "string") {
+      throw new Error(`data.self.purl must be a string when present, got ${typeof data.self.purl}`);
+    }
     const selfPurlMatch = /^(?:(?:pkg:npm|npm)\/)?([^/@]+)@(\d+\.\d+\.\d+)$/.exec(data.self.purl);
     if (selfPurlMatch) {
       claims.push({ field: "data.self.purl", pkg: selfPurlMatch[1], version: selfPurlMatch[2] });
@@ -172,13 +230,19 @@ function validateEnvelopeIdentity(data, report) {
     }
   }
 
-  // report.version if present must agree
-  if (typeof report.version === "string") {
+  // report.version if present must be a string and must agree
+  if (report.version !== undefined) {
+    if (typeof report.version !== "string") {
+      throw new Error(`report.version must be a string when present, got ${typeof report.version}`);
+    }
     claims.push({ field: "report.version", pkg: undefined, version: report.version });
   }
 
-  // data.version if present must agree
-  if (typeof data.version === "string") {
+  // data.version if present must be a string and must agree
+  if (data.version !== undefined) {
+    if (typeof data.version !== "string") {
+      throw new Error(`data.version must be a string when present, got ${typeof data.version}`);
+    }
     claims.push({ field: "data.version", pkg: undefined, version: data.version });
   }
 
@@ -216,24 +280,26 @@ function normalize(report, inputSha256) {
 
   const { data } = envelope;
 
-  // Reject hidden alert containers in the official envelope.
+  // Reject unsupported alert containers by presence, not just non-empty arrays.
   // The only legal alert locations are data.self.alerts and data.transitively.alerts.
-  if (Array.isArray(report.alerts) && report.alerts.length > 0) {
-    throw new Error(
-      "Top-level report.alerts is not a supported alert source. " +
-        "Use the official Socket CLI envelope with data.self.alerts / data.transitively.alerts.",
-    );
-  }
-  if (Array.isArray(data.alerts) && data.alerts.length > 0) {
-    throw new Error(
-      "data.alerts is not a supported alert source. " +
-        "Use the official Socket CLI envelope with data.self.alerts / data.transitively.alerts.",
-    );
+  for (const field of ["alerts"]) {
+    if (Object.hasOwn(report, field)) {
+      throw new Error(
+        `report.${field} is not a supported field on a raw CLI export. ` +
+          "Use the official Socket CLI envelope with data.self.alerts / data.transitively.alerts.",
+      );
+    }
+    if (Object.hasOwn(data, field)) {
+      throw new Error(
+        `data.${field} is not a supported field on a raw CLI export. ` +
+          "Use the official Socket CLI envelope with data.self.alerts / data.transitively.alerts.",
+      );
+    }
   }
   // report.shallow and report.deep are normalized-artifact fields.
   // They must not appear on raw CLI input.
   for (const field of ["shallow", "deep"]) {
-    if (report[field] && typeof report[field] === "object") {
+    if (Object.hasOwn(report, field)) {
       throw new Error(
         `report.${field} is not a valid field on a raw CLI export. ` +
           "Use the official Socket CLI envelope with data.self / data.transitively.",
@@ -256,12 +322,26 @@ function normalize(report, inputSha256) {
     throw new Error("Socket report package must be metaplate");
   }
 
-  // Source URL: derive from canonical identity, but validate report.source if present
-  if (typeof report.source === "string") {
+  // Validate report.source if present, then preserve the actual validated URL
+  if (report.source !== undefined) {
+    if (typeof report.source !== "string") {
+      throw new Error(`report.source must be a string when present, got ${typeof report.source}`);
+    }
     const sourceError = validateSocketSource(report.source, identity.pkg, version);
     if (sourceError) throw new Error(sourceError);
   }
-  const source = `https://socket.dev/npm/package/metaplate@${version}`;
+  const canonicalSource = `https://socket.dev/npm/package/metaplate@${version}`;
+  const source = report.source ?? canonicalSource;
+
+  // Validate capturedAt if present
+  validateCapturedAt(report.capturedAt);
+
+  // Validate auxiliary deep fields
+  const validationErrors = [];
+  validateDeepAuxiliary(data, validationErrors);
+  if (validationErrors.length > 0) {
+    throw new Error(`Socket envelope validation failed: ${validationErrors.join("; ")}`);
+  }
 
   const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
   const lockfile = JSON.parse(readFileSync(join(root, "package-lock.json"), "utf8"));
@@ -284,10 +364,9 @@ function normalize(report, inputSha256) {
     shallow: { score: shallowScore, alerts: shallowAlerts },
     deep: {
       score: deepScore,
-      dependencyCount: typeof data.transitively.dependencyCount === "number" && data.transitively.dependencyCount >= 0
-        ? data.transitively.dependencyCount : null,
-      capabilities: Array.isArray(data.transitively.capabilities) ? data.transitively.capabilities : [],
-      lowest: data.transitively.lowest && typeof data.transitively.lowest === "object" ? data.transitively.lowest : null,
+      dependencyCount: data.transitively.dependencyCount ?? null,
+      capabilities: data.transitively.capabilities ?? [],
+      lowest: data.transitively.lowest ?? null,
       alerts: deepAlerts,
     },
     provenance: {
