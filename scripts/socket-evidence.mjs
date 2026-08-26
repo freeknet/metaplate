@@ -34,14 +34,51 @@ export const SCORE_KEYS = Object.freeze([
 ]);
 
 /**
- * A strict but pragmatic ISO-8601 check: date-only (YYYY-MM-DD) or a full
- * timestamp with time and a Z / ±hh:mm zone designator. Rejects free-form
- * strings that `new Date()` would otherwise accept (e.g. "Aug 25, 2026").
+ * Strict ISO-8601 subset used by release evidence: date-only (YYYY-MM-DD) or a
+ * full timestamp with seconds and an explicit Z / ±hh:mm zone designator.
+ * Validation is both lexical and semantic so impossible calendar/time values
+ * are rejected rather than merely matching the shape.
  */
-const ISO_8601_TIMESTAMP = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2}))?$/;
+const ISO_8601_TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|([+-])(\d{2}):(\d{2})))?$/;
+
+function daysInMonth(year, month) {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
 
 export function isIso8601Timestamp(value) {
-  return typeof value === "string" && ISO_8601_TIMESTAMP.test(value);
+  if (typeof value !== "string") return false;
+  const match = ISO_8601_TIMESTAMP.exec(value);
+  if (!match) return false;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (month < 1 || month > 12) return false;
+  if (day < 1 || day > daysInMonth(year, month)) return false;
+
+  const hourText = match[4];
+  if (hourText === undefined) return true;
+
+  const hour = Number(hourText);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  if (hour < 0 || hour > 23) return false;
+  if (minute < 0 || minute > 59) return false;
+  if (second < 0 || second > 59) return false;
+
+  const zone = match[8];
+  if (zone !== "Z") {
+    const offsetHour = Number(match[10]);
+    const offsetMinute = Number(match[11]);
+    if (offsetHour < 0 || offsetHour > 23) return false;
+    if (offsetMinute < 0 || offsetMinute > 59) return false;
+  }
+
+  return true;
+}
+
+export function isFullIso8601Timestamp(value) {
+  return isIso8601Timestamp(value) && value.includes("T");
 }
 
 /**
@@ -68,10 +105,15 @@ export const SOCKET_RELEASE_POLICY = Object.freeze({
 });
 
 /**
- * Validate that two sorted string arrays are exactly equal (same elements,
+ * Validate that two string arrays are exactly equal as sets (same elements,
  * no extras, no missing, no duplicates).
  */
 function validateExactStringSet(actual, expected, fieldName) {
+  if (!Array.isArray(actual)) return `${fieldName} must be an array`;
+  if (actual.some((value) => typeof value !== "string" || !value.trim())) {
+    return `${fieldName} must contain only non-empty strings`;
+  }
+
   const sorted = [...actual].sort();
   const expectedSorted = [...expected].sort();
   if (sorted.length !== expectedSorted.length) {
@@ -82,7 +124,6 @@ function validateExactStringSet(actual, expected, fieldName) {
       return `${fieldName} entry ${sorted[i]} is not in the expected set`;
     }
   }
-  // Check for duplicates
   const unique = new Set(actual);
   if (unique.size !== actual.length) {
     return `${fieldName} contains duplicate entries`;
@@ -92,32 +133,35 @@ function validateExactStringSet(actual, expected, fieldName) {
 
 /**
  * Validate that a disposition report's releasePolicy matches the pinned
- * executable policy exactly. Returns an array of error strings.
+ * executable policy exactly. Returns an array of error strings and never
+ * throws for malformed JSON field types.
  */
 export function validateReleasePolicy(policy) {
-  if (!policy || typeof policy !== "object") return ["releasePolicy is missing"];
+  if (!policy || typeof policy !== "object" || Array.isArray(policy)) {
+    return ["releasePolicy is missing"];
+  }
   const errors = [];
   let err;
   err = validateExactStringSet(
-    policy.blockSeverities ?? [],
+    policy.blockSeverities,
     SOCKET_RELEASE_POLICY.blockSeverities,
     "blockSeverities",
   );
   if (err) errors.push(err);
   err = validateExactStringSet(
-    policy.requireDispositionSeverities ?? [],
+    policy.requireDispositionSeverities,
     SOCKET_RELEASE_POLICY.requireDispositionSeverities,
     "requireDispositionSeverities",
   );
   if (err) errors.push(err);
   err = validateExactStringSet(
-    policy.allowedDispositionTypes ?? [],
+    policy.allowedDispositionTypes,
     SOCKET_RELEASE_POLICY.allowedDispositionTypes,
     "allowedDispositionTypes",
   );
   if (err) errors.push(err);
   err = validateExactStringSet(
-    policy.acceptedExceptionRequires ?? [],
+    policy.acceptedExceptionRequires,
     SOCKET_RELEASE_POLICY.acceptedExceptionRequires,
     "acceptedExceptionRequires",
   );
@@ -176,39 +220,46 @@ export function validateDeepAuxiliary(deep, label) {
   const errors = [];
   if (!deep || typeof deep !== "object") return [`${label} deep must be an object`];
 
-  // dependencyCount: absent/null -> ok, present -> non-negative integer
   if (deep.dependencyCount !== undefined && deep.dependencyCount !== null) {
     if (typeof deep.dependencyCount !== "number" || !Number.isInteger(deep.dependencyCount) || deep.dependencyCount < 0) {
       errors.push(`${label}.dependencyCount must be a non-negative integer when present`);
     }
   }
 
-  // capabilities: absent/null -> ok, present -> array of non-empty strings
   if (deep.capabilities !== undefined && deep.capabilities !== null) {
     if (!Array.isArray(deep.capabilities)) {
       errors.push(`${label}.capabilities must be an array when present`);
     } else {
       for (let i = 0; i < deep.capabilities.length; i++) {
-        if (typeof deep.capabilities[i] !== "string" || !deep.capabilities[i]) {
+        if (typeof deep.capabilities[i] !== "string" || !deep.capabilities[i].trim()) {
           errors.push(`${label}.capabilities[${i}] must be a non-empty string`);
         }
+      }
+      if (new Set(deep.capabilities).size !== deep.capabilities.length) {
+        errors.push(`${label}.capabilities must not contain duplicate entries`);
       }
     }
   }
 
-  // lowest: absent/null -> ok, present -> plain object with score-key string values
   if (deep.lowest !== undefined && deep.lowest !== null) {
     if (typeof deep.lowest !== "object" || Array.isArray(deep.lowest)) {
       errors.push(`${label}.lowest must be a plain object when present`);
     } else {
       for (const key of SCORE_KEYS) {
-        if (Object.prototype.hasOwnProperty.call(deep.lowest, key)) {
-          if (typeof deep.lowest[key] !== "string" || !deep.lowest[key]) {
-            errors.push(`${label}.lowest.${key} must be a non-empty string`);
-          }
+        if (!Object.prototype.hasOwnProperty.call(deep.lowest, key)) {
+          errors.push(`${label}.lowest is missing required key ${key}`);
+          continue;
+        }
+        const value = deep.lowest[key];
+        if (typeof value !== "string" || !value.trim()) {
+          errors.push(`${label}.lowest.${key} must be a non-empty string`);
+          continue;
+        }
+        const identity = packageIdentityFromExample(value);
+        if (!identity.package || !identity.version) {
+          errors.push(`${label}.lowest.${key} must be a Socket package identity`);
         }
       }
-      // Reject unexpected keys
       for (const key of Object.keys(deep.lowest)) {
         if (!SCORE_KEYS.includes(key)) {
           errors.push(`${label}.lowest contains unexpected key ${key}`);
@@ -221,14 +272,23 @@ export function validateDeepAuxiliary(deep, label) {
 }
 
 /**
- * Validate that a capturedAt value is a valid ISO-8601 timestamp.
- * Accepts YYYY-MM-DD or a full timestamp with time and a Z / ±hh:mm zone.
- * Rejects free-form strings such as "banana" or "Aug 25, 2026".
+ * Validate that a capturedAt value is a valid ISO-8601 date or timestamp.
  */
 export function validateCapturedAt(value, fieldName = "capturedAt") {
   if (value === undefined || value === null) return undefined;
   if (!isIso8601Timestamp(value)) {
     return `${fieldName} must be a valid ISO-8601 timestamp when present`;
+  }
+  return undefined;
+}
+
+/**
+ * normalizedAt is importer-generated and therefore must always be a full,
+ * offset-aware timestamp rather than a date-only value.
+ */
+export function validateNormalizedAt(value, fieldName = "normalizedAt") {
+  if (!isFullIso8601Timestamp(value)) {
+    return `${fieldName} must be a full ISO-8601 timestamp`;
   }
   return undefined;
 }
@@ -253,30 +313,25 @@ export function validateDispositionAlert(alert, index) {
   const prefix = `alert ${index}`;
   if (!alert || typeof alert !== "object") return `${prefix}: must be an object`;
 
-  // Require canonical string fields
   const requiredStrings = ["type", "package", "version", "path", "reachability", "evidence", "verification"];
   for (const field of requiredStrings) {
-    if (typeof alert[field] !== "string" || !alert[field]) {
+    if (typeof alert[field] !== "string" || !alert[field].trim()) {
       return `${prefix}: ${field} must be a non-empty string`;
     }
   }
 
-  // Severity must be canonical
   const sevErr = validateCanonicalSeverity(alert.severity);
   if (sevErr) return `${prefix}: ${sevErr}`;
 
-  // Disposition must be a recognized value
   const allowed = SOCKET_RELEASE_POLICY.allowedDispositionTypes;
   if (alert.disposition && !allowed.includes(alert.disposition)) {
     return `${prefix}: disposition "${alert.disposition}" is not a recognized value`;
   }
 
-  // Reachability must be valid
   if (!REACHABILITY_VALUES.includes(alert.reachability)) {
     return `${prefix}: reachability "${alert.reachability}" is not a recognized value`;
   }
 
-  // Disposition reports should only contain high/critical
   if (!SOCKET_RELEASE_POLICY.requireDispositionSeverities.includes(alert.severity)) {
     return `${prefix}: disposition reports should only contain high/critical alerts, got "${alert.severity}"`;
   }
@@ -362,11 +417,17 @@ export function normalizeAlertIdentity(alert) {
 }
 
 /**
- * Validate the full alert schema for a score artifact alert.
- * For normalized artifacts, uses canonical severity (no "middle" alias).
+ * Validate the full alert schema for a schemaVersion 2 score artifact alert.
+ * Legacy duplicate fields deliberately removed from the canonical normalized
+ * representation are rejected even when their values happen to agree.
  */
 export function validateScoreAlert(alert, index) {
   if (!alert || typeof alert !== "object") return `alert ${index}: must be an object`;
+  for (const field of ["type", "scope", "reachability", "lockfilePath"]) {
+    if (Object.hasOwn(alert, field)) {
+      return `alert ${index}: legacy field ${field} is not allowed in schemaVersion 2 score alerts`;
+    }
+  }
   const identity = normalizeAlertIdentity(alert);
   if (identity.error) return `alert ${index}: ${identity.error}`;
   const sevErr = validateCanonicalSeverity(alert.severity);
@@ -393,7 +454,7 @@ export function validateUnresolvedEvidence(alert, index) {
   if (ev.unresolved !== true) return `alert ${index}: unmatched alert must be unresolved`;
   if (ev.reachability !== "unknown") return `alert ${index}: unresolved alert reachability must be unknown`;
   if (!Array.isArray(ev.paths) || ev.paths.length !== 0) return `alert ${index}: unresolved alert must have empty paths`;
-  if (typeof ev.reason !== "string" || ev.reason.length === 0) return `alert ${index}: unresolved alert must have a reason`;
+  if (typeof ev.reason !== "string" || !ev.reason.trim()) return `alert ${index}: unresolved alert must have a reason`;
   return undefined;
 }
 
