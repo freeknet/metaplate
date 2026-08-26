@@ -17,6 +17,7 @@ import {
   validateScoreAlert,
   validateResolvedEvidence,
   validateUnresolvedEvidence,
+  validateSocketScoreVector,
 } from "./socket-evidence.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -39,7 +40,7 @@ function policyAlertIdentity(alert, index, source = "score") {
 
   // For policy identity, we also need a path. Prefer the one from dependencyEvidence.
   const evidence = alert.dependencyEvidence ?? {};
-  const path = alert.dependencyPath ?? alert.path ?? alert.lockfilePath;
+  const path = alert.dependencyPath ?? alert.path;
   const effectiveReachability = evidence.reachability ?? alert.reachability;
 
   if (!identity.package || !identity.version || !path) {
@@ -96,6 +97,12 @@ function policyAlerts(score) {
  * Validates deduped derived fields match canonical evidence.
  */
 function validateScoreAlertSchemas(score, inventory, errors) {
+  // Validate score vectors first
+  const shallowScoreError = validateSocketScoreVector(score.shallow?.score, "shallow");
+  if (shallowScoreError) errors.push(`score artifact: ${shallowScoreError}`);
+  const deepScoreError = validateSocketScoreVector(score.deep?.score, "deep");
+  if (deepScoreError) errors.push(`score artifact: ${deepScoreError}`);
+
   const allAlerts = [
     ...(Array.isArray(score.shallow?.alerts) ? score.shallow.alerts.map((a, i) => ({ alert: a, idx: i, scope: "shallow" })) : []),
     ...(Array.isArray(score.deep?.alerts) ? score.deep.alerts.map((a, i) => ({ alert: a, idx: i, scope: "deep" })) : []),

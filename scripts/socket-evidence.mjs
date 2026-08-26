@@ -24,6 +24,33 @@ export const REACHABILITY_VALUES = Object.freeze([
 
 export const VALID_DEP_EVIDENCE_SOURCES = Object.freeze(["package-lock.json"]);
 
+export const SCORE_KEYS = Object.freeze([
+  "overall",
+  "supplyChain",
+  "maintenance",
+  "quality",
+  "vulnerability",
+  "license",
+]);
+
+/**
+ * Validate a Socket score vector. Requires an object with all six canonical
+ * score keys, each a finite number from 0 to 100. Returns an error string
+ * or undefined if valid.
+ */
+export function validateSocketScoreVector(score, label) {
+  if (!score || typeof score !== "object") return `${label} score must be an object`;
+  for (const key of SCORE_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(score, key)) {
+      return `${label} score is missing required key ${key}`;
+    }
+    if (!Number.isFinite(score[key]) || score[key] < 0 || score[key] > 100) {
+      return `${label} score ${key} must be a number from 0 to 100`;
+    }
+  }
+  return undefined;
+}
+
 /**
  * Normalize severity from Socket terminology to canonical values.
  * Rejects missing, non-string, or unknown severities.
@@ -38,16 +65,17 @@ export function normalizeSeverity(value) {
 /**
  * Accepted Socket package URL pathname forms (exact match, with or without
  * trailing slash). The version segment is required for release evidence.
+ * The package capture is non-greedy to prevent double-version matches.
  */
 const VALID_PATHNAMES = [
-  /^\/npm\/package\/([^/]+)@(\d+\.\d+\.\d+)\/?$/,
-  /^\/npm\/package\/([^/]+)\/alerts\/(\d+\.\d+\.\d+)\/?$/,
+  /^\/npm\/package\/([^/@]+?)@(\d+\.\d+\.\d+)\/?$/,
+  /^\/npm\/package\/([^/@]+?)\/alerts\/(\d+\.\d+\.\d+)\/?$/,
 ];
 
 /**
  * Parse a Socket package URL strictly. Uses `new URL()` and requires the
  * entire pathname to match an accepted form. Rejects suffix garbage,
- * credentials, and non-default ports.
+ * credentials, non-default ports, and malformed double-version URLs.
  *
  * Returns { package, version } where both are populated, or undefined on
  * any parse/validation failure.
@@ -80,13 +108,14 @@ export function parseSocketPackageUrl(source) {
 /**
  * Validate the source URL against the expected package/version.
  * Requires the URL to encode the version (versionless URLs are rejected
- * for release evidence).
+ * for release evidence). The parsed package must exactly match the expected
+ * package (no legacy @version suffix encoding).
  * Returns undefined on success, or an error message string on failure.
  */
 export function validateSocketSource(source, expectedPackage, expectedVersion) {
   const parsed = parseSocketPackageUrl(source);
   if (!parsed) return `source URL is not a valid Socket package URL: ${source}`;
-  if (parsed.package !== expectedPackage && parsed.package !== `${expectedPackage}@${expectedVersion}`) {
+  if (parsed.package !== expectedPackage) {
     return `source URL identifies package ${parsed.package}, expected ${expectedPackage}`;
   }
   if (!parsed.version) {
@@ -171,10 +200,12 @@ export function validateResolvedEvidence(alert, index) {
 
 /**
  * Validate the dependencyEvidence shape for an unresolved (unmatched) alert.
+ * Requires the same source as resolved evidence.
  */
 export function validateUnresolvedEvidence(alert, index) {
   const ev = alert.dependencyEvidence;
   if (!ev || typeof ev !== "object") return `alert ${index}: dependencyEvidence is required`;
+  if (!VALID_DEP_EVIDENCE_SOURCES.includes(ev.source)) return `alert ${index}: dependencyEvidence.source must be package-lock.json`;
   if (ev.unresolved !== true) return `alert ${index}: unmatched alert must be unresolved`;
   if (ev.reachability !== "unknown") return `alert ${index}: unresolved alert reachability must be unknown`;
   if (!Array.isArray(ev.paths) || ev.paths.length !== 0) return `alert ${index}: unresolved alert must have empty paths`;
