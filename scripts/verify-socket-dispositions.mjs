@@ -40,6 +40,7 @@ function policyAlertIdentity(alert, index, source = "score") {
   const evidence = alert.dependencyEvidence ?? {};
   const path = alert.dependencyPath ?? alert.path;
   const effectiveReachability = evidence.reachability ?? alert.reachability;
+  const severity = normalizeSeverity(alert.severity);
 
   if (!identity.package || !identity.version || !path) {
     return {
@@ -53,6 +54,7 @@ function policyAlertIdentity(alert, index, source = "score") {
     version: identity.version,
     path,
     reachability: effectiveReachability,
+    severity,
   };
 }
 
@@ -223,7 +225,7 @@ export function validateSocketReport(report, now = new Date()) {
     // Type-validate all required string fields
     const requiredStrings = ["type", "package", "version", "path", "reachability", "evidence", "verification"];
     for (const field of requiredStrings) {
-      if (typeof alert[field] !== "string" || !alert[field]) {
+      if (typeof alert[field] !== "string" || !alert[field].trim()) {
         errors.push(`${prefix}: ${field} must be a non-empty string`);
         break;
       }
@@ -257,7 +259,8 @@ export function validateSocketReport(report, now = new Date()) {
       errors.push(`${prefix}: disposition required for ${alert.severity}`);
     }
 
-    // Critical blocks release
+    // Critical disposition metadata also blocks, but the authoritative block
+    // is independently enforced from the score artifact below.
     if (blockSeverities.has(alert.severity)) {
       errors.push(`${prefix}: ${alert.severity} findings block release under release policy`);
     }
@@ -265,10 +268,12 @@ export function validateSocketReport(report, now = new Date()) {
     // Accepted-with-evidence requirements
     if (alert.disposition === "accepted-with-evidence") {
       for (const field of acceptedRequires) {
-        if (!alert[field]) errors.push(`${prefix}: accepted exception requires ${field}`);
+        if (typeof alert[field] !== "string" || !alert[field].trim()) {
+          errors.push(`${prefix}: accepted exception requires ${field} as a non-empty string`);
+        }
       }
-      if (alert.expiry && isExpired(alert.expiry, now))
-        errors.push(`${prefix}: accepted exception is expired`);
+      if (typeof alert.expiry === "string" && alert.expiry.trim() && isExpired(alert.expiry, now))
+        errors.push(`${prefix}: accepted exception is expired or has an invalid expiry`);
     }
   }
 
@@ -342,6 +347,20 @@ export function validateSocketReport(report, now = new Date()) {
         if (!Array.isArray(score.shallow?.alerts) || !Array.isArray(score.deep?.alerts))
           errors.push("complete report score artifact must contain shallow and deep alert arrays");
 
+        // A release-blocking severity is authoritative in the score artifact.
+        // A disposition can describe the finding, but it can never downgrade or
+        // otherwise change whether the finding blocks release.
+        for (const [index, scoreAlert] of allScoreAlerts.entries()) {
+          const severity = normalizeSeverity(scoreAlert?.severity);
+          if (blockSeverities.has(severity)) {
+            const identity = normalizeAlertIdentity(scoreAlert);
+            const label = identity.error
+              ? `score alert ${index}`
+              : `${identity.type} ${identity.package ?? "unknown"}@${identity.version ?? "unknown"}`;
+            errors.push(`score artifact: ${severity} finding ${label} blocks release under release policy`);
+          }
+        }
+
         // Match high/critical score alerts to dispositions
         const scoreAlerts = policyAlerts(score);
         const scoreIdentities = new Map();
@@ -369,21 +388,34 @@ export function validateSocketReport(report, now = new Date()) {
           }
           if (dispositionIdentities.has(identity.key)) {
             errors.push(`disposition ${index}: duplicate high/critical alert identity`);
-          } else {
-            dispositionIdentities.set(identity.key, identity);
+            continue;
           }
+
           const scoreIdentity = scoreIdentities.get(identity.key);
           if (!scoreIdentity) {
             errors.push(`disposition ${index}: high/critical alert does not exist in score artifact`);
-          } else {
-            const evidence = scoreEvidenceByKey.get(identity.key);
-            const expectedReachability = evidence?.reachability;
-            if (expectedReachability && identity.reachability !== expectedReachability) {
-              errors.push(`disposition ${index}: reachability does not match score artifact evidence`);
-            }
-            if (Array.isArray(evidence?.paths) && evidence.paths.length > 0 && !evidence.paths.includes(identity.path)) {
-              errors.push(`disposition ${index}: path is not present in score artifact evidence`);
-            }
+            continue;
+          }
+
+          // Severity is part of the evidence binding even though the structural
+          // key intentionally remains type/package/version/path for clearer
+          // mismatch diagnostics.
+          if (identity.severity !== scoreIdentity.severity) {
+            errors.push(
+              `disposition ${index}: severity ${identity.severity} does not match score artifact severity ${scoreIdentity.severity}`,
+            );
+            continue;
+          }
+
+          dispositionIdentities.set(identity.key, identity);
+
+          const evidence = scoreEvidenceByKey.get(identity.key);
+          const expectedReachability = evidence?.reachability;
+          if (expectedReachability && identity.reachability !== expectedReachability) {
+            errors.push(`disposition ${index}: reachability does not match score artifact evidence`);
+          }
+          if (Array.isArray(evidence?.paths) && evidence.paths.length > 0 && !evidence.paths.includes(identity.path)) {
+            errors.push(`disposition ${index}: path is not present in score artifact evidence`);
           }
         }
 
