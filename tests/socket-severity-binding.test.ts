@@ -5,20 +5,39 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { validateSocketReport } from "../scripts/verify-socket-dispositions.mjs";
 
-type JsonObject = Record<string, any>;
+interface ScoreAlert {
+  severity: string;
+  [key: string]: unknown;
+}
+
+interface ScoreReport {
+  deep: { alerts: ScoreAlert[] };
+  [key: string]: unknown;
+}
+
+interface DispositionAlert {
+  severity: string;
+  [key: string]: unknown;
+}
+
+interface DispositionReport {
+  export: Record<string, unknown>;
+  alerts: DispositionAlert[];
+  [key: string]: unknown;
+}
 
 const dispositionReport = JSON.parse(
   await readFile("socket-dispositions.json", "utf8"),
-) as JsonObject;
+) as DispositionReport;
 const scoreReport = JSON.parse(
   await readFile("socket-score-report.json", "utf8"),
-) as JsonObject;
+) as ScoreReport;
 
 async function reportForScore(
-  mutateScore: (score: JsonObject) => void,
-  mutateDisposition?: (report: JsonObject) => void,
+  mutateScore: (score: ScoreReport) => void,
+  mutateDisposition?: (report: DispositionReport) => void,
 ) {
-  const score = JSON.parse(JSON.stringify(scoreReport)) as JsonObject;
+  const score = JSON.parse(JSON.stringify(scoreReport)) as ScoreReport;
   mutateScore(score);
 
   const directory = await mkdtemp(join(tmpdir(), "metaplate-socket-severity-"));
@@ -27,7 +46,9 @@ async function reportForScore(
   await writeFile(scorePath, content);
   const sha256 = createHash("sha256").update(content).digest("hex");
 
-  const report = JSON.parse(JSON.stringify(dispositionReport)) as JsonObject;
+  const report = JSON.parse(
+    JSON.stringify(dispositionReport),
+  ) as DispositionReport;
   report.export = {
     ...report.export,
     artifact: scorePath,
@@ -37,10 +58,8 @@ async function reportForScore(
   return report;
 }
 
-function currentHighAlert(score: JsonObject) {
-  const alert = score.deep.alerts.find(
-    (entry: JsonObject) => entry.severity === "high",
-  );
+function currentHighAlert(score: ScoreReport) {
+  const alert = score.deep.alerts.find((entry) => entry.severity === "high");
   if (!alert) throw new Error("expected current high Socket alert");
   return alert;
 }
