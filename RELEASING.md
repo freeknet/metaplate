@@ -18,7 +18,12 @@ GitHub Releases are the user-facing home for each version. They must explain why
    Do not describe `npm audit` as
    equivalent to Socket analysis; behavioral and native-code signals need their
    own evidence or an explicit time-bounded exception. An incomplete Socket
-   report must not be presented as clean.
+   report must not be presented as clean. For fresh `socket-cli-import`
+   artifacts, `provenance.inputSha256` records the bytes consumed by the
+   importer, but it is trace metadata unless the corresponding raw
+   `socket-export.json` is retained. If independently verifiable raw-import
+   provenance is required, retain that raw export beside the release evidence
+   and verify its SHA-256 against `provenance.inputSha256`.
 6. Include explicit upgrade advice and write `None.` under breaking changes when there is no migration.
 7. Run the complete local gate:
 
@@ -60,10 +65,12 @@ claims, retain the complete evidence bundle:
 `dependency-inventory.json`, `release-evidence-report.json`,
 `release-check-results.json`, `deployment-contract-evidence.json`,
 `deployment-evidence.json`, `socket-score-report.json`, and
-`socket-dispositions.json`. A route is certified only after its
-packed-artifact, production-build, served/published output, image, and
-response-header evidence is recorded in a structured certification object. The
-packed Node fixtures verify response headers and route resolution; they do not
-claim page-level social metadata unless a page fixture emits and checks those
-tags. Local contract evidence must not be described as hosted provider
-certification.
+`socket-dispositions.json`. The standard seven-file bundle validates the
+normalized Socket evidence but does not independently prove a fresh import's
+raw input bytes unless `socket-export.json` is additionally retained as
+specified above. A route is certified only after its packed-artifact,
+production-build, served/published output, image, and response-header evidence
+is recorded in a structured certification object. The packed Node fixtures
+verify response headers and route resolution; they do not claim page-level
+social metadata unless a page fixture emits and checks those tags. Local
+contract evidence must not be described as hosted provider certification.
