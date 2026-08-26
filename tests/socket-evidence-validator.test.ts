@@ -54,7 +54,7 @@ describe("Socket evidence validator hardening", () => {
     );
   });
 
-  it("rejects duplicate capabilities and incomplete or malformed lowest data", () => {
+  it("rejects duplicate capabilities and malformed lowest data while allowing partial canonical maps", () => {
     expect(
       validateDeepAuxiliary(
         {
@@ -66,14 +66,15 @@ describe("Socket evidence validator hardening", () => {
       ).some((error) => error.includes("duplicate")),
     ).toBe(true);
 
-    const missingLowest = { ...validLowest } as Record<string, string>;
-    delete missingLowest.license;
     expect(
       validateDeepAuxiliary(
-        { capabilities: [], lowest: missingLowest },
+        {
+          capabilities: [],
+          lowest: { maintenance: validLowest.maintenance },
+        },
         "deep",
-      ).some((error) => error.includes("missing required key license")),
-    ).toBe(true);
+      ),
+    ).toEqual([]);
 
     expect(
       validateDeepAuxiliary(
