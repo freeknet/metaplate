@@ -29,11 +29,16 @@ async function runImporter(input: unknown, encoding: "utf8" | "utf16le" = "utf8"
 describe("Socket report importer", () => {
   it("normalizes an official 0.6.0 report without altering scores", async () => {
     const result = await runImporter({
-      source: "https://socket.dev/npm/package/metaplate/alerts/0.6.0",
-      version: "0.6.0",
-      shallow: { overall: 96, supplyChain: 95, maintenance: 94, quality: 93, vulnerability: 100, license: 99 },
-      deep: { overall: 82, supplyChain: 81, maintenance: 80, quality: 79, vulnerability: 100, license: 78 },
-      alerts: [{ package: "example", severity: "low" }],
+      data: {
+        purl: "pkg:npm/metaplate@0.6.0",
+        self: {
+          purl: "npm/metaplate@0.6.0",
+          score: { overall: 96, supplyChain: 95, maintenance: 94, quality: 93, vulnerability: 100, license: 99 },
+        },
+        transitively: {
+          score: { overall: 82, supplyChain: 81, maintenance: 80, quality: 79, vulnerability: 100, license: 78 },
+        },
+      },
     });
     expect(result.code).toBe(0);
     expect(JSON.parse(result.output!).shallow.score).toEqual({ overall: 96, supplyChain: 95, maintenance: 94, quality: 93, vulnerability: 100, license: 99 });
@@ -120,10 +125,11 @@ describe("Socket report importer", () => {
 
   it("rejects malformed score objects as well as untrusted provenance", async () => {
     await expect(runImporter({
-      source: "https://socket.dev/npm/package/metaplate/alerts/0.6.0",
-      version: "0.6.0",
-      shallow: { overall: 96 },
-      deep: { overall: 82 },
+      data: {
+        purl: "pkg:npm/metaplate@0.6.0",
+        self: { purl: "npm/metaplate@0.6.0", score: { overall: 96 } },
+        transitively: { score: { overall: 82 } },
+      },
     })).resolves.toMatchObject({ code: 1 });
   });
 
@@ -131,6 +137,134 @@ describe("Socket report importer", () => {
     await expect(runImporter({ version: "0.6.0" })).resolves.toMatchObject({ code: 1 });
     await expect(runImporter({ source: "https://example.com/report", version: "0.6.0" })).resolves.toMatchObject({ code: 1 });
     await expect(runImporter({ source: "https://socket.dev/npm/package/other-package/alerts/0.6.0", version: "0.6.0" })).resolves.toMatchObject({ code: 1 });
-    await expect(runImporter({ source: "https://socket.dev/report", version: "0.7.0" })).resolves.toMatchObject({ code: 1 });
+    await expect(runImporter({ source: "https://socket.dev/report", version: "0.6.0" })).resolves.toMatchObject({ code: 1 });
+  });
+
+  it("rejects non-empty top-level alerts array as unsupported schema", async () => {
+    const result = await runImporter({
+      source: "https://socket.dev/npm/package/metaplate/alerts/0.6.0",
+      version: "0.6.0",
+      shallow: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 },
+      deep: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 },
+      alerts: [{ name: "socketUpgradeAvailable", severity: "high", example: "npm/string.prototype.codepointat@0.2.1" }],
+    });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("Top-level alerts");
+  });
+
+  it("rejects critical top-level alert that would otherwise disappear", async () => {
+    const result = await runImporter({
+      source: "https://socket.dev/npm/package/metaplate/alerts/0.6.0",
+      version: "0.6.0",
+      shallow: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 },
+      deep: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 },
+      alerts: [{ name: "criticalAlert", severity: "critical", example: "npm/string.prototype.codepointat@0.2.1" }],
+    });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("Top-level alerts");
+  });
+
+  it("rejects invalid source URL paths", async () => {
+    await expect(runImporter({
+      source: "https://socket.dev/report",
+      version: "0.6.0",
+      shallow: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 },
+      deep: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 },
+    })).resolves.toMatchObject({ code: 1 });
+
+    await expect(runImporter({
+      source: "https://socket.dev/foo",
+      version: "0.6.0",
+      shallow: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 },
+      deep: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 },
+    })).resolves.toMatchObject({ code: 1 });
+
+    await expect(runImporter({
+      source: "http://socket.dev/npm/package/metaplate@0.6.0",
+      version: "0.6.0",
+      shallow: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 },
+      deep: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 },
+    })).resolves.toMatchObject({ code: 1 });
+
+    await expect(runImporter({
+      source: "https://evil.dev/npm/package/metaplate@0.6.0",
+      version: "0.6.0",
+      shallow: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 },
+      deep: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 },
+    })).resolves.toMatchObject({ code: 1 });
+  });
+
+  it("rejects alerts with missing or unknown severity", async () => {
+    await expect(runImporter({
+      data: {
+        purl: "pkg:npm/metaplate@0.6.0",
+        self: {
+          purl: "npm/metaplate@0.6.0",
+          score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 },
+          alerts: [{ name: "someAlert" }],
+        },
+        transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } },
+      },
+    })).resolves.toMatchObject({ code: 1 });
+
+    await expect(runImporter({
+      data: {
+        purl: "pkg:npm/metaplate@0.6.0",
+        self: {
+          purl: "npm/metaplate@0.6.0",
+          score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 },
+          alerts: [{ name: "someAlert", severity: "urgent" }],
+        },
+        transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } },
+      },
+    })).resolves.toMatchObject({ code: 1 });
+  });
+
+  it("rejects alerts with conflicting example and explicit identity", async () => {
+    await expect(runImporter({
+      data: {
+        purl: "pkg:npm/metaplate@0.6.0",
+        self: {
+          purl: "npm/metaplate@0.6.0",
+          score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 },
+          alerts: [],
+        },
+        transitively: {
+          score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 },
+          alerts: [{ name: "someAlert", severity: "low", example: "npm/real-pkg@1.0.0", package: "different-pkg", version: "2.0.0" }],
+        },
+      },
+    })).resolves.toMatchObject({ code: 1 });
+  });
+
+  it("rejects missing alert name/type", async () => {
+    await expect(runImporter({
+      data: {
+        purl: "pkg:npm/metaplate@0.6.0",
+        self: {
+          purl: "npm/metaplate@0.6.0",
+          score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 },
+          alerts: [{ severity: "low" }],
+        },
+        transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } },
+      },
+    })).resolves.toMatchObject({ code: 1 });
+  });
+
+  it("normalizes middle severity to medium", async () => {
+    const result = await runImporter({
+      data: {
+        purl: "pkg:npm/metaplate@0.6.0",
+        self: {
+          purl: "npm/metaplate@0.6.0",
+          score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 },
+          alerts: [{ name: "someAlert", severity: "middle" }],
+        },
+        transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } },
+      },
+    });
+    expect(result.code).toBe(0);
+    const normalized = JSON.parse(result.output!);
+    expect(normalized.shallow.alerts[0].severity).toBe("medium");
   });
 });

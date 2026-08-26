@@ -12,7 +12,8 @@ const scoreReport = JSON.parse(await readFile("socket-score-report.json", "utf8"
 async function withScore(score: unknown, mutate: (report: JsonObject) => JsonObject = (report) => report) {
   const directory = await mkdtemp(join(tmpdir(), "metaplate-socket-integrity-"));
   const scorePath = join(directory, "socket-score-report.json");
-  const content = JSON.stringify(mutate(score as JsonObject));
+  const clone = JSON.parse(JSON.stringify(score)) as JsonObject;
+  const content = JSON.stringify(mutate(clone));
   await writeFile(scorePath, content);
   const digest = (await import("node:crypto")).createHash("sha256").update(content).digest("hex");
   const digestReport = { ...dispositionReport, export: { ...dispositionReport.export, artifact: scorePath, sha256: digest } };
@@ -74,5 +75,86 @@ describe("Socket evidence integrity", () => {
     await writeFile(scorePath, `${await readFile(scorePath, "utf8")}tampered`);
     const tampered = { ...dispositionReport, export: { ...dispositionReport.export, artifact: scorePath } };
     expect(validateSocketReport(tampered).some((error) => error.includes("sha256") || error.includes("not readable"))).toBe(true);
+  });
+
+  it("rejects score artifact with invalid source URL", async () => {
+    const tampered = await withScore(scoreReport, (score) => {
+      (score as JsonObject).source = "https://socket.dev/report";
+      return score;
+    });
+    expect(validateSocketReport(tampered.report).some((error) => error.includes("source"))).toBe(true);
+  });
+
+  it("rejects score artifact with source for wrong package", async () => {
+    const tampered = await withScore(scoreReport, (score) => {
+      (score as JsonObject).source = "https://socket.dev/npm/package/other-package@0.6.0";
+      return score;
+    });
+    expect(validateSocketReport(tampered.report).some((error) => error.includes("source") || error.includes("package"))).toBe(true);
+  });
+
+  it("rejects score artifact with conflicting identity in alert", async () => {
+    const tampered = await withScore(scoreReport, (score) => {
+      const deep = score.deep as { alerts: Array<Record<string, unknown>> };
+      const first = deep.alerts.find((a) => a.severity === "high" || a.severity === "critical");
+      if (first) {
+        first.package = "completely-different-package";
+        first.version = "99.99.99";
+      }
+      return score;
+    });
+    expect(validateSocketReport(tampered.report).some((error) => error.includes("identity") || error.includes("severity") || error.includes("missing") || error.includes("conflicts") || error.includes("does not exist"))).toBe(true);
+  });
+
+  it("rejects score artifact with invalid severity", async () => {
+    const tampered = await withScore(scoreReport, (score) => {
+      const deep = score.deep as { alerts: Array<Record<string, unknown>> };
+      const first = deep.alerts[0];
+      if (first) {
+        first.severity = "urgent";
+      }
+      return score;
+    });
+    expect(validateSocketReport(tampered.report).some((error) => error.includes("severity"))).toBe(true);
+  });
+
+  it("rejects score artifact with missing alert name/type", async () => {
+    const tampered = await withScore(scoreReport, (score) => {
+      const deep = score.deep as { alerts: Array<Record<string, unknown>> };
+      const first = deep.alerts[0];
+      if (first) {
+        delete first.name;
+        delete first.type;
+      }
+      return score;
+    });
+    expect(validateSocketReport(tampered.report).some((error) => error.includes("type") || error.includes("identity"))).toBe(true);
+  });
+
+  it("rejects unresolved alert that claims resolved evidence", async () => {
+    const tampered = await withScore(scoreReport, (score) => {
+      const deep = score.deep as { alerts: Array<Record<string, unknown>> };
+      const unresolved = deep.alerts.find((a) => {
+        const ev = a.dependencyEvidence as Record<string, unknown> | undefined;
+        return ev?.unresolved === true;
+      });
+      if (unresolved) {
+        const evidence = unresolved.dependencyEvidence as Record<string, unknown>;
+        delete evidence.unresolved;
+        evidence.reachability = "runtime-peer";
+      }
+      return score;
+    });
+    expect(validateSocketReport(tampered.report).some((error) => error.includes("unresolved"))).toBe(true);
+  });
+
+  it("rejects arbitrary socket.dev pathname even with correct PURL", async () => {
+    const tampered = { ...dispositionReport, source: "https://socket.dev/report" };
+    expect(validateSocketReport(tampered).some((error) => error.includes("source"))).toBe(true);
+  });
+
+  it("rejects disposition report with wrong source hostname", async () => {
+    const tampered = { ...dispositionReport, source: "https://evil.dev/npm/package/metaplate@0.6.0" };
+    expect(validateSocketReport(tampered).some((error) => error.includes("source"))).toBe(true);
   });
 });

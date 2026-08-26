@@ -1,0 +1,10 @@
+export const CANONICAL_SEVERITIES: readonly string[];
+export const REACHABILITY_VALUES: readonly string[];
+export const VALID_DEP_EVIDENCE_SOURCES: readonly string[];
+export function normalizeSeverity(value: unknown): string | undefined;
+export function parseSocketPackageUrl(source: unknown): { package: string; version?: string } | undefined;
+export function validateSocketSource(source: unknown, expectedPackage: string, expectedVersion: string): string | undefined;
+export function normalizeAlertIdentity(alert: Record<string, unknown>): { type: string; package?: string; version?: string } | { error: string };
+export function validateScoreAlert(alert: unknown, index: string | number): string | undefined;
+export function validateResolvedEvidence(alert: Record<string, unknown>, index: string | number): string | undefined;
+export function validateUnresolvedEvidence(alert: Record<string, unknown>, index: string | number): string | undefined;

@@ -26,8 +26,9 @@
           "paths": [],
           "reachability": "unknown",
           "unresolved": true,
-          "reason": "No metaplate@0.6.0 node exists in package-lock.json."
-        }
+          "reason": "metaplate@0.6.0 not found in the current dependency inventory"
+        },
+        "reachability": "unknown"
       }
     ]
   },
@@ -117,8 +118,9 @@
           "paths": [],
           "reachability": "unknown",
           "unresolved": true,
-          "reason": "Socket analyzed next@16.3.3 while the release fixture lockfile contains next@16.3.2."
-        }
+          "reason": "next@16.3.3 not found in the current dependency inventory"
+        },
+        "reachability": "unknown"
       },
       {
         "name": "recentlyPublished",
@@ -241,8 +243,9 @@
           "paths": [],
           "reachability": "unknown",
           "unresolved": true,
-          "reason": "Socket analyzed next@16.3.3 while the release fixture lockfile contains next@16.3.2."
-        }
+          "reason": "next@16.3.3 not found in the current dependency inventory"
+        },
+        "reachability": "unknown"
       },
       {
         "name": "envVars",
@@ -351,8 +354,9 @@
           "paths": [],
           "reachability": "unknown",
           "unresolved": true,
-          "reason": "No metaplate@0.6.0 node exists in package-lock.json."
-        }
+          "reason": "metaplate@0.6.0 not found in the current dependency inventory"
+        },
+        "reachability": "unknown"
       },
       {
         "name": "urlStrings",
