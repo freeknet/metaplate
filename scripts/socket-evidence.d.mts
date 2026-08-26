@@ -8,12 +8,15 @@ export const SOCKET_RELEASE_POLICY: {
   readonly allowedDispositionTypes: readonly string[];
   readonly acceptedExceptionRequires: readonly string[];
 };
+export function isIso8601Timestamp(value: unknown): boolean;
+export function isFullIso8601Timestamp(value: unknown): boolean;
 export function validateReleasePolicy(policy: unknown): string[];
 export function validateSocketScoreVector(score: unknown, label: string): string | undefined;
 export function normalizeSeverity(value: unknown): string | undefined;
 export function validateCanonicalSeverity(value: unknown): string | undefined;
 export function validateDeepAuxiliary(deep: unknown, label: string): string[];
 export function validateCapturedAt(value: unknown, fieldName?: string): string | undefined;
+export function validateNormalizedAt(value: unknown, fieldName?: string): string | undefined;
 export function validatePackageSizeBytes(value: unknown, fieldName?: string): string | undefined;
 export function validateDispositionAlert(alert: unknown, index: number): string | undefined;
 export function parseSocketPackageUrl(source: unknown): { package: string; version: string } | undefined;
