@@ -101,8 +101,9 @@ describe("Socket report importer", () => {
     });
     expect(result.code).toBe(0);
     const normalized = JSON.parse(result.output!);
-    expect(normalized.shallow.alerts[0].scope).toBe("shallow");
-    expect(normalized.deep.alerts[0].scope).toBe("deep");
+    // scope is not emitted in the canonical score-alert shape
+    expect(normalized.shallow.alerts[0].scope).toBeUndefined();
+    expect(normalized.deep.alerts[0].scope).toBeUndefined();
 
     const digest = createHash("sha256").update(await readFile(result.outputPath)).digest("hex");
     const disposition = {
@@ -483,8 +484,8 @@ describe("Socket report importer", () => {
     expect(result.code).toBe(0);
     const normalized = JSON.parse(result.output!);
     const alert = normalized.deep.alerts[0];
-    // scope must be the real derived scope, not the malicious input
-    expect(alert.scope).toBe("deep");
+    // scope is not emitted in the canonical score-alert shape
+    expect(alert.scope).toBeUndefined();
     // reachability must come from inventory, not from input
     expect(alert.dependencyEvidence.reachability).not.toBe("development-only");
     // lockfilePath must not exist
@@ -515,6 +516,67 @@ describe("Socket report importer", () => {
     });
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("data.alerts");
+  });
+
+  // --- Auxiliary deep fields (dependencyCount, capabilities, lowest) ---
+
+  it("rejects malformed dependencyCount values", async () => {
+    const deep = { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } };
+    await expect(runImporter(cliEnvelope({ transitively: { ...deep, dependencyCount: 1.5 } }))).resolves.toMatchObject({ code: 1 });
+    await expect(runImporter(cliEnvelope({ transitively: { ...deep, dependencyCount: -1 } }))).resolves.toMatchObject({ code: 1 });
+    await expect(runImporter(cliEnvelope({ transitively: { ...deep, dependencyCount: "5" } }))).resolves.toMatchObject({ code: 1 });
+  });
+
+  it("accepts a valid non-negative integer dependencyCount", async () => {
+    const result = await runImporter(cliEnvelope({ transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 }, dependencyCount: 90 } }));
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.output!).deep.dependencyCount).toBe(90);
+  });
+
+  it("rejects malformed capabilities values", async () => {
+    const deep = { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } };
+    await expect(runImporter(cliEnvelope({ transitively: { ...deep, capabilities: "not-an-array" } }))).resolves.toMatchObject({ code: 1 });
+    await expect(runImporter(cliEnvelope({ transitively: { ...deep, capabilities: ["fs", 123, {}] } }))).resolves.toMatchObject({ code: 1 });
+  });
+
+  it("rejects malformed lowest values", async () => {
+    const deep = { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } };
+    await expect(runImporter(cliEnvelope({ transitively: { ...deep, lowest: [] } }))).resolves.toMatchObject({ code: 1 });
+    await expect(runImporter(cliEnvelope({ transitively: { ...deep, lowest: { unknownKey: "npm/x@1.0.0" } } }))).resolves.toMatchObject({ code: 1 });
+    await expect(runImporter(cliEnvelope({ transitively: { ...deep, lowest: { maintenance: 5 } } }))).resolves.toMatchObject({ code: 1 });
+  });
+
+  it("accepts a valid lowest map with the canonical score keys", async () => {
+    const result = await runImporter(cliEnvelope({
+      transitively: {
+        score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 },
+        lowest: { overall: "npm/x@1.0.0", supplyChain: "npm/y@2.0.0", maintenance: "npm/z@3.0.0" },
+      },
+    }));
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.output!).deep.lowest.maintenance).toBe("npm/z@3.0.0");
+  });
+
+  // --- capturedAt / normalizedAt ---
+
+  it("rejects invalid capturedAt timestamps", async () => {
+    await expect(runImporter(minimalEnvelope({ capturedAt: "banana" }))).resolves.toMatchObject({ code: 1 });
+    await expect(runImporter(minimalEnvelope({ capturedAt: "Aug 25, 2026" }))).resolves.toMatchObject({ code: 1 });
+  });
+
+  it("retains a valid source capturedAt and always emits normalizedAt", async () => {
+    const withCapture = await runImporter(minimalEnvelope({ capturedAt: "2026-08-25T18:24:42Z" }));
+    expect(withCapture.code).toBe(0);
+    const captured = JSON.parse(withCapture.output!);
+    expect(captured.capturedAt).toBe("2026-08-25T18:24:42Z");
+    expect(typeof captured.normalizedAt).toBe("string");
+    expect(Number.isNaN(Date.parse(captured.normalizedAt))).toBe(false);
+
+    const withoutCapture = await runImporter(minimalEnvelope());
+    expect(withoutCapture.code).toBe(0);
+    const output = JSON.parse(withoutCapture.output!);
+    expect(output.capturedAt).toBeUndefined();
+    expect(typeof output.normalizedAt).toBe("string");
   });
 
   // --- Explicit-only identity (no example) ---

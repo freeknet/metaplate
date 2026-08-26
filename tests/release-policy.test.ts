@@ -130,13 +130,35 @@ describe("Socket release policy", () => {
 
   it("requires dispositions for policy severities and rejects unknown values", () => {
     expect(validateSocketReport({ ...baseSocket, alerts: [alert({ disposition: undefined })] })).toContain("alert 0: disposition required for high");
-    expect(validateSocketReport({ ...baseSocket, alerts: [alert({ severity: "urgent" })] })).toContain("alert 0: unknown severity urgent");
-    expect(validateSocketReport({ ...baseSocket, alerts: [alert({ disposition: "ignore" })] }).some((error: string) => error.includes("disposition is not allowed"))).toBe(true);
+    expect(validateSocketReport({ ...baseSocket, alerts: [alert({ severity: "urgent" })] }).some((e: string) => e.includes("severity") && e.includes("urgent"))).toBe(true);
+    expect(validateSocketReport({ ...baseSocket, alerts: [alert({ disposition: "ignore" })] }).some((error: string) => error.includes("disposition") && error.includes("ignore"))).toBe(true);
   });
 
   it("blocks critical findings even with a syntactically valid disposition", () => {
     const errors = validateSocketReport({ ...baseSocket, alerts: [alert({ severity: "critical", disposition: "upgrade" })] });
     expect(errors.some((error) => error.includes("critical findings block release"))).toBe(true);
+  });
+
+  it("rejects tampered release policy that weakens the executable policy", () => {
+    // blockSeverities emptied
+    expect(validateSocketReport({ ...baseSocket, releasePolicy: { ...baseSocket.releasePolicy, blockSeverities: [] } })).toContain("blockSeverities has 0 entries, expected 1");
+    // blockSeverities changed to high
+    expect(validateSocketReport({ ...baseSocket, releasePolicy: { ...baseSocket.releasePolicy, blockSeverities: ["high"] } })).toContain("blockSeverities entry high is not in the expected set");
+    // requireDispositionSeverities weakened
+    expect(validateSocketReport({ ...baseSocket, releasePolicy: { ...baseSocket.releasePolicy, requireDispositionSeverities: ["high"] } })).toContain("requireDispositionSeverities has 1 entries, expected 2");
+    // allowedDispositionTypes extended with ignore
+    expect(validateSocketReport({ ...baseSocket, releasePolicy: { ...baseSocket.releasePolicy, allowedDispositionTypes: [...baseSocket.releasePolicy.allowedDispositionTypes, "ignore"] } }).some((e: string) => e.includes("allowedDispositionTypes") && e.includes("6 entries"))).toBe(true);
+    // acceptedExceptionRequires weakened
+    expect(validateSocketReport({ ...baseSocket, releasePolicy: { ...baseSocket.releasePolicy, acceptedExceptionRequires: ["verification"] } })).toContain("acceptedExceptionRequires has 1 entries, expected 4");
+    // missing entirely
+    expect(validateSocketReport({ ...baseSocket, releasePolicy: undefined })).toContain("releasePolicy is missing");
+  });
+
+  it("critical findings cannot be made releasable by editing blockSeverities", () => {
+    // Even with empty blockSeverities, critical should still be checked against pinned policy
+    const report = { ...baseSocket, releasePolicy: { ...baseSocket.releasePolicy, blockSeverities: [] } };
+    const errors = validateSocketReport(report);
+    expect(errors.some((e) => e.includes("blockSeverities"))).toBe(true);
   });
 
   it("rejects expired accepted exceptions", () => {

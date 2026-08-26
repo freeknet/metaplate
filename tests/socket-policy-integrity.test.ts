@@ -314,4 +314,103 @@ describe("Socket evidence integrity", () => {
       expect((alert as Record<string, unknown>).lockfilePath).toBeUndefined();
     }
   });
+
+  // --- Disposition identity type validation (no loose truthy checks) ---
+
+  it("rejects disposition entries with non-string identity fields", async () => {
+    const high = dispositionReport.alerts[0];
+    const cases = [
+      { mutate: (a: Record<string, unknown>) => ({ ...a, type: 123 }), text: "type must be a non-empty string" },
+      { mutate: (a: Record<string, unknown>) => ({ ...a, package: 456 }), text: "package must be a non-empty string" },
+      { mutate: (a: Record<string, unknown>) => ({ ...a, version: {} }), text: "version must be a non-empty string" },
+      { mutate: (a: Record<string, unknown>) => ({ ...a, path: null }), text: "path must be a non-empty string" },
+      { mutate: (a: Record<string, unknown>) => ({ ...a, reachability: { nested: true } }), text: "reachability must be a non-empty string" },
+      { mutate: (a: Record<string, unknown>) => ({ ...a, evidence: 42 }), text: "evidence must be a non-empty string" },
+      { mutate: (a: Record<string, unknown>) => ({ ...a, verification: [] }), text: "verification must be a non-empty string" },
+    ];
+    for (const { mutate, text } of cases) {
+      const errors = validateSocketReport({ ...dispositionReport, alerts: [mutate(high)] });
+      expect(errors.some((error) => error.includes(text))).toBe(true);
+    }
+  });
+
+  // --- Score artifact capturedAt validation ---
+
+  it("rejects score artifact with an invalid capturedAt", async () => {
+    const tampered = await withScore(scoreReport, (score) => {
+      (score as JsonObject).capturedAt = "banana";
+      return score;
+    });
+    expect(validateSocketReport(tampered.report).some((e) => e.includes("capturedAt"))).toBe(true);
+  });
+
+  it("accepts the committed score artifact capturedAt as valid ISO-8601", () => {
+    expect(typeof scoreReport.capturedAt).toBe("string");
+  });
+
+  it("the committed score artifact has no top-level reachability on alerts", () => {
+    const allAlerts = [
+      ...(scoreReport.shallow?.alerts ?? []),
+      ...(scoreReport.deep?.alerts ?? []),
+    ];
+    for (const alert of allAlerts) {
+      expect((alert as Record<string, unknown>).reachability).toBeUndefined();
+    }
+  });
+
+  it("rejects score artifact with middle severity (must be canonical)", async () => {
+    const tampered = await withScore(scoreReport, (score) => {
+      const deep = score.deep as { alerts: Array<Record<string, unknown>> };
+      const first = deep.alerts[0];
+      if (first) first.severity = "middle";
+      return score;
+    });
+    expect(validateSocketReport(tampered.report).some((e) => e.includes("severity"))).toBe(true);
+  });
+
+  it("rejects score artifact with invalid auxiliary fields", async () => {
+    // dependencyCount = -1
+    const t1 = await withScore(scoreReport, (score) => {
+      (score.deep as Record<string, unknown>).dependencyCount = -1;
+      return score;
+    });
+    expect(validateSocketReport(t1.report).some((e) => e.includes("dependencyCount"))).toBe(true);
+
+    // dependencyCount = 1.5
+    const t2 = await withScore(scoreReport, (score) => {
+      (score.deep as Record<string, unknown>).dependencyCount = 1.5;
+      return score;
+    });
+    expect(validateSocketReport(t2.report).some((e) => e.includes("dependencyCount"))).toBe(true);
+
+    // capabilities = "fs"
+    const t3 = await withScore(scoreReport, (score) => {
+      (score.deep as Record<string, unknown>).capabilities = "fs";
+      return score;
+    });
+    expect(validateSocketReport(t3.report).some((e) => e.includes("capabilities"))).toBe(true);
+
+    // capabilities = [123]
+    const t4 = await withScore(scoreReport, (score) => {
+      (score.deep as Record<string, unknown>).capabilities = [123];
+      return score;
+    });
+    expect(validateSocketReport(t4.report).some((e) => e.includes("capabilities"))).toBe(true);
+
+    // lowest.overall = 123
+    const t5 = await withScore(scoreReport, (score) => {
+      const deep = score.deep as Record<string, unknown>;
+      (deep.lowest as Record<string, unknown>).overall = 123;
+      return score;
+    });
+    expect(validateSocketReport(t5.report).some((e) => e.includes("lowest"))).toBe(true);
+
+    // lowest.extra = "fake"
+    const t6 = await withScore(scoreReport, (score) => {
+      const deep = score.deep as Record<string, unknown>;
+      (deep.lowest as Record<string, unknown>).extra = "fake";
+      return score;
+    });
+    expect(validateSocketReport(t6.report).some((e) => e.includes("lowest") && e.includes("unexpected"))).toBe(true);
+  });
 });

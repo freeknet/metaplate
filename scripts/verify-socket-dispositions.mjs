@@ -9,8 +9,9 @@ import {
   strongestReachability,
 } from "./dependency-model.mjs";
 import {
-  CANONICAL_SEVERITIES,
   REACHABILITY_VALUES,
+  SOCKET_RELEASE_POLICY,
+  validateReleasePolicy,
   normalizeSeverity,
   validateSocketSource,
   normalizeAlertIdentity,
@@ -18,27 +19,24 @@ import {
   validateResolvedEvidence,
   validateUnresolvedEvidence,
   validateSocketScoreVector,
+  validateDeepAuxiliary,
+  validateCapturedAt,
+  validatePackageSizeBytes,
+  validateCanonicalSeverity,
 } from "./socket-evidence.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const severities = new Set(CANONICAL_SEVERITIES);
 const statuses = new Set(["complete"]);
-const reachabilities = new Set(REACHABILITY_VALUES);
 
 function isExpired(value, now = new Date()) {
   const expiry = new Date(value);
   return !Number.isFinite(expiry.getTime()) || expiry.getTime() <= now.getTime();
 }
 
-/**
- * Canonical alert identity for policy matching. Uses the shared normalizer
- * and requires a dependency path for high/critical alerts.
- */
 function policyAlertIdentity(alert, index, source = "score") {
   const identity = normalizeAlertIdentity(alert);
   if (identity.error) return { error: `${source} alert ${index}: ${identity.error}` };
 
-  // For policy identity, we also need a path. Prefer the one from dependencyEvidence.
   const evidence = alert.dependencyEvidence ?? {};
   const path = alert.dependencyPath ?? alert.path;
   const effectiveReachability = evidence.reachability ?? alert.reachability;
@@ -86,22 +84,31 @@ function policyAlerts(score) {
     ...(Array.isArray(score.shallow?.alerts) ? score.shallow.alerts : []),
     ...(Array.isArray(score.deep?.alerts) ? score.deep.alerts : []),
   ].filter((alert) =>
-    ["high", "critical"].includes(normalizeSeverity(alert?.severity)),
+    SOCKET_RELEASE_POLICY.requireDispositionSeverities.includes(
+      normalizeSeverity(alert?.severity),
+    ),
   );
 }
 
 /**
  * Validate every score artifact alert's schema and dependency evidence.
- * Uses the canonical identity normalizer everywhere.
- * Requires dependencyEvidence for every alert with a package identity.
- * Validates deduped derived fields match canonical evidence.
  */
 function validateScoreAlertSchemas(score, inventory, errors) {
-  // Validate score vectors first
+  // Validate score vectors
   const shallowScoreError = validateSocketScoreVector(score.shallow?.score, "shallow");
   if (shallowScoreError) errors.push(`score artifact: ${shallowScoreError}`);
   const deepScoreError = validateSocketScoreVector(score.deep?.score, "deep");
   if (deepScoreError) errors.push(`score artifact: ${deepScoreError}`);
+
+  // Validate auxiliary fields
+  const auxErrors = validateDeepAuxiliary(score.deep, "score.deep");
+  for (const err of auxErrors) errors.push(`score artifact: ${err}`);
+
+  const capErr = validateCapturedAt(score.capturedAt);
+  if (capErr) errors.push(`score artifact: ${capErr}`);
+
+  const sizeErr = validatePackageSizeBytes(score.packageSizeBytes);
+  if (sizeErr) errors.push(`score artifact: ${sizeErr}`);
 
   const allAlerts = [
     ...(Array.isArray(score.shallow?.alerts) ? score.shallow.alerts.map((a, i) => ({ alert: a, idx: i, scope: "shallow" })) : []),
@@ -116,7 +123,6 @@ function validateScoreAlertSchemas(score, inventory, errors) {
       continue;
     }
 
-    // Use canonical identity for inventory lookup
     const identity = normalizeAlertIdentity(alert);
     if (identity.error) {
       errors.push(`score artifact: ${prefix}: ${identity.error}`);
@@ -135,7 +141,6 @@ function validateScoreAlertSchemas(score, inventory, errors) {
       if (evError) {
         errors.push(`score artifact: ${evError}`);
       } else {
-        // Validate deduped derived fields match canonical evidence
         const evidence = alert.dependencyEvidence;
         const expectedPaths = [...new Set(matches.flatMap((e) => e.dependencyPaths ?? []))].sort();
         const expectedReachability = strongestReachability(matches.map((e) => e.classification));
@@ -145,7 +150,7 @@ function validateScoreAlertSchemas(score, inventory, errors) {
         if (evidence.reachability !== expectedReachability) {
           errors.push(`score artifact: ${prefix}: dependencyEvidence.reachability does not match current inventory`);
         }
-        // Validate deduped top-level derived fields if present
+        // Deduped top-level derived fields must match the canonical evidence
         if (alert.reachability !== undefined && alert.reachability !== evidence.reachability) {
           errors.push(`score artifact: ${prefix}: alert.reachability does not match dependencyEvidence.reachability`);
         }
@@ -159,7 +164,6 @@ function validateScoreAlertSchemas(score, inventory, errors) {
         errors.push(`score artifact: ${evError}`);
       }
     } else if (identity.package && identity.version) {
-      // Alert has a package identity but no dependencyEvidence and no lockfile match
       errors.push(`score artifact: ${prefix}: missing dependencyEvidence for unresolved alert`);
     }
   }
@@ -168,18 +172,15 @@ function validateScoreAlertSchemas(score, inventory, errors) {
 export function validateSocketReport(report, now = new Date()) {
   const errors = [];
   const policy = report.releasePolicy;
+
   if (report.schemaVersion !== 2) errors.push("schemaVersion must be 2");
   if (report.package !== "metaplate") errors.push("package must be metaplate");
   if (report.version !== undefined && report.version !== "0.6.0")
     errors.push("version must be the 0.6.0 Socket baseline");
 
-  // Strict source validation using shared helper
+  // Strict source validation
   if (typeof report.source === "string") {
-    const sourceError = validateSocketSource(
-      report.source,
-      "metaplate",
-      report.version,
-    );
+    const sourceError = validateSocketSource(report.source, "metaplate", report.version);
     if (sourceError) errors.push(sourceError);
   } else {
     errors.push("source must be a Socket HTTPS URL");
@@ -187,72 +188,84 @@ export function validateSocketReport(report, now = new Date()) {
 
   if (!statuses.has(report.status))
     errors.push(`unknown report status ${report.status}`);
-  if (
-    !policy ||
-    !Array.isArray(policy.blockSeverities) ||
-    !Array.isArray(policy.requireDispositionSeverities) ||
-    !Array.isArray(policy.allowedDispositionTypes) ||
-    !Array.isArray(policy.acceptedExceptionRequires)
-  ) {
-    errors.push("releasePolicy is incomplete");
+
+  // Validate release policy matches the pinned executable policy exactly
+  if (!policy) {
+    errors.push("releasePolicy is missing");
+    if (!Array.isArray(report.alerts)) errors.push("alerts must be an array");
+    return errors;
+  }
+  const policyErrors = validateReleasePolicy(policy);
+  errors.push(...policyErrors);
+  if (policyErrors.length > 0) {
+    if (!Array.isArray(report.alerts)) errors.push("alerts must be an array");
     return errors;
   }
 
-  const blockSeverities = new Set(
-    policy.blockSeverities.map(normalizeSeverity),
-  );
-  const requireDispositionSeverities = new Set(
-    policy.requireDispositionSeverities.map(normalizeSeverity),
-  );
-  const allowedDispositions = new Set(policy.allowedDispositionTypes);
-  const acceptedRequires = new Set(policy.acceptedExceptionRequires);
-  for (const severity of [...blockSeverities, ...requireDispositionSeverities]) {
-    if (!severities.has(severity))
-      errors.push(`unknown policy severity ${severity}`);
-  }
-  if (allowedDispositions.size === 0)
-    errors.push("allowedDispositionTypes must not be empty");
-  if (acceptedRequires.size === 0)
-    errors.push("acceptedExceptionRequires must not be empty");
-  if (!Array.isArray(report.alerts)) errors.push("alerts must be an array");
-  if (errors.length > 0) return errors;
+  const blockSeverities = new Set(SOCKET_RELEASE_POLICY.blockSeverities);
+  const requireDispositionSeverities = new Set(SOCKET_RELEASE_POLICY.requireDispositionSeverities);
+  const allowedDispositions = new Set(SOCKET_RELEASE_POLICY.allowedDispositionTypes);
+  const acceptedRequires = new Set(SOCKET_RELEASE_POLICY.acceptedExceptionRequires);
 
+  if (!Array.isArray(report.alerts)) {
+    errors.push("alerts must be an array");
+    return errors;
+  }
+
+  // Validate every disposition entry's schema
   for (const [index, alert] of report.alerts.entries()) {
     const prefix = `alert ${index}`;
-    if (
-      !alert ||
-      !alert.type ||
-      !alert.package ||
-      !alert.version ||
-      !alert.path
-    ) {
-      errors.push(`${prefix}: missing identity fields`);
+    if (!alert || typeof alert !== "object") {
+      errors.push(`${prefix}: must be an object`);
       continue;
     }
-    const severity = normalizeSeverity(alert.severity);
-    if (!severities.has(severity))
-      errors.push(`${prefix}: unknown severity ${alert.severity}`);
-    if (!reachabilities.has(alert.reachability))
-      errors.push(`${prefix}: unknown reachability ${alert.reachability}`);
-    if (!alert.evidence || !alert.verification)
-      errors.push(`${prefix}: evidence and verification are required`);
-    const required = requireDispositionSeverities.has(severity);
-    if (required && !alert.disposition)
-      errors.push(`${prefix}: disposition required for ${severity}`);
+
+    // Type-validate all required string fields
+    const requiredStrings = ["type", "package", "version", "path", "reachability", "evidence", "verification"];
+    for (const field of requiredStrings) {
+      if (typeof alert[field] !== "string" || !alert[field]) {
+        errors.push(`${prefix}: ${field} must be a non-empty string`);
+        break;
+      }
+    }
+    if (errors.length > 0 && errors[errors.length - 1].includes(prefix)) continue;
+
+    // Severity must be canonical
+    const sevErr = validateCanonicalSeverity(alert.severity);
+    if (sevErr) {
+      errors.push(`${prefix}: ${sevErr}`);
+      continue;
+    }
+
+    // Disposition must be recognized
     if (alert.disposition && !allowedDispositions.has(alert.disposition)) {
-      errors.push(
-        `${prefix}: disposition is not allowed by releasePolicy`,
-      );
+      errors.push(`${prefix}: disposition "${alert.disposition}" is not allowed by release policy`);
     }
-    if (blockSeverities.has(severity)) {
-      errors.push(
-        `${prefix}: ${severity} findings block release under releasePolicy`,
-      );
+
+    // Reachability must be valid
+    if (!REACHABILITY_VALUES.includes(alert.reachability)) {
+      errors.push(`${prefix}: reachability "${alert.reachability}" is not a recognized value`);
     }
+
+    // Only high/critical in disposition reports
+    if (!requireDispositionSeverities.has(alert.severity)) {
+      errors.push(`${prefix}: disposition reports should only contain high/critical alerts, got "${alert.severity}"`);
+    }
+
+    // Policy-required disposition
+    if (requireDispositionSeverities.has(alert.severity) && !alert.disposition) {
+      errors.push(`${prefix}: disposition required for ${alert.severity}`);
+    }
+
+    // Critical blocks release
+    if (blockSeverities.has(alert.severity)) {
+      errors.push(`${prefix}: ${alert.severity} findings block release under release policy`);
+    }
+
+    // Accepted-with-evidence requirements
     if (alert.disposition === "accepted-with-evidence") {
       for (const field of acceptedRequires) {
-        if (!alert[field])
-          errors.push(`${prefix}: accepted exception requires ${field}`);
+        if (!alert[field]) errors.push(`${prefix}: accepted exception requires ${field}`);
       }
       if (alert.expiry && isExpired(alert.expiry, now))
         errors.push(`${prefix}: accepted exception is expired`);
@@ -260,89 +273,49 @@ export function validateSocketReport(report, now = new Date()) {
   }
 
   if (report.status === "complete") {
-    if (
-      !report.export ||
-      !report.export.artifact ||
-      !report.export.generatedAt ||
-      !report.export.sha256
-    ) {
-      errors.push(
-        "complete reports require export artifact, generatedAt, and sha256 provenance",
-      );
+    if (!report.export || !report.export.artifact || !report.export.generatedAt || !report.export.sha256) {
+      errors.push("complete reports require export artifact, generatedAt, and sha256 provenance");
     } else {
       try {
         const { score, digest } = loadScoreArtifact(report);
         if (digest !== report.export.sha256)
-          errors.push(
-            "complete report export sha256 does not match its artifact",
-          );
+          errors.push("complete report export sha256 does not match its artifact");
         if (score.schemaVersion !== 2)
           errors.push("complete report score artifact schemaVersion must be 2");
         if (score.package !== report.package)
-          errors.push(
-            "complete report score artifact package does not match disposition package",
-          );
+          errors.push("complete report score artifact package does not match disposition package");
         if (score.version !== report.version)
-          errors.push(
-            "complete report score artifact version does not match disposition version",
-          );
+          errors.push("complete report score artifact version does not match disposition version");
 
         // Strict source validation on score artifact
         if (typeof score.source === "string") {
-          const scoreSourceError = validateSocketSource(
-            score.source,
-            score.package,
-            score.version,
-          );
-          if (scoreSourceError)
-            errors.push(
-              `complete report score artifact: ${scoreSourceError}`,
-            );
+          const scoreSourceError = validateSocketSource(score.source, score.package, score.version);
+          if (scoreSourceError) errors.push(`complete report score artifact: ${scoreSourceError}`);
         } else {
-          errors.push(
-            "complete report score artifact source must be a Socket HTTPS URL",
-          );
+          errors.push("complete report score artifact source must be a Socket HTTPS URL");
         }
 
         if (score.captureKind === "socket-cli-import") {
-          if (
-            !/^[a-f0-9]{64}$/i.test(score.provenance?.inputSha256 ?? "")
-          ) {
-            errors.push(
-              "socket-cli-import score artifact requires a valid 64-character inputSha256",
-            );
-          }
+          if (!/^[a-f0-9]{64}$/i.test(score.provenance?.inputSha256 ?? ""))
+            errors.push("socket-cli-import score artifact requires a valid 64-character inputSha256");
         } else if (score.captureKind === "historical-normalized-snapshot") {
-          if (
-            score.provenance?.rawInputSha256 !== null ||
-            score.provenance?.rawInputRetained !== false
-          ) {
-            errors.push(
-              "historical-normalized-snapshot must explicitly state that raw input is unavailable",
-            );
-          }
+          if (score.provenance?.rawInputSha256 !== null || score.provenance?.rawInputRetained !== false)
+            errors.push("historical-normalized-snapshot must explicitly state that raw input is unavailable");
         } else {
-          errors.push(
-            `unknown score artifact captureKind ${score.captureKind}`,
-          );
+          errors.push(`unknown score artifact captureKind ${score.captureKind}`);
         }
 
-        // Validate historical score alert schemas against current inventory
+        // Validate score alert schemas, auxiliary fields, and inventory
         const inventory = currentInventory();
         validateScoreAlertSchemas(score, inventory, errors);
 
-        // Cross-check every exact package/version using canonical identity
-        const allScoreAlerts = [
-          ...(score.shallow?.alerts ?? []),
-          ...(score.deep?.alerts ?? []),
-        ];
+        // Cross-check every exact package/version
+        const allScoreAlerts = [...(score.shallow?.alerts ?? []), ...(score.deep?.alerts ?? [])];
         for (const [index, scoreAlert] of allScoreAlerts.entries()) {
           const identity = normalizeAlertIdentity(scoreAlert);
           if (identity.error || !identity.package || !identity.version) continue;
           const matches = inventory.filter(
-            (entry) =>
-              entry.name === identity.package &&
-              entry.version === identity.version,
+            (entry) => entry.name === identity.package && entry.version === identity.version,
           );
           if (matches.length === 0) {
             if (
@@ -350,42 +323,26 @@ export function validateSocketReport(report, now = new Date()) {
               scoreAlert.dependencyEvidence?.reachability !== "unknown" ||
               (scoreAlert.dependencyEvidence?.paths ?? []).length !== 0
             ) {
-              errors.push(
-                `score alert ${index}: unmatched package/version must be explicitly unresolved`,
-              );
+              errors.push(`score alert ${index}: unmatched package/version must be explicitly unresolved`);
             }
             continue;
           }
-          const paths = [
-            ...new Set(
-              matches.flatMap((entry) => entry.dependencyPaths ?? []),
-            ),
-          ].sort();
-          const expectedReachability = strongestReachability(
-            matches.map((entry) => entry.classification),
-          );
+          const paths = [...new Set(matches.flatMap((entry) => entry.dependencyPaths ?? []))].sort();
+          const expectedReachability = strongestReachability(matches.map((entry) => entry.classification));
           const evidence = scoreAlert.dependencyEvidence;
           if (
             !evidence ||
-            JSON.stringify(evidence.paths ?? []) !==
-              JSON.stringify(paths) ||
+            JSON.stringify(evidence.paths ?? []) !== JSON.stringify(paths) ||
             evidence.reachability !== expectedReachability
           ) {
-            errors.push(
-              `score alert ${index}: dependency evidence does not match current inventory`,
-            );
+            errors.push(`score alert ${index}: dependency evidence does not match current inventory`);
           }
         }
 
-        if (
-          !Array.isArray(score.shallow?.alerts) ||
-          !Array.isArray(score.deep?.alerts)
-        ) {
-          errors.push(
-            "complete report score artifact must contain shallow and deep alert arrays",
-          );
-        }
+        if (!Array.isArray(score.shallow?.alerts) || !Array.isArray(score.deep?.alerts))
+          errors.push("complete report score artifact must contain shallow and deep alert arrays");
 
+        // Match high/critical score alerts to dispositions
         const scoreAlerts = policyAlerts(score);
         const scoreIdentities = new Map();
         const scoreEvidenceByKey = new Map();
@@ -394,15 +351,10 @@ export function validateSocketReport(report, now = new Date()) {
           if (identity.error) {
             errors.push(identity.error);
           } else if (scoreIdentities.has(identity.key)) {
-            errors.push(
-              `score alert ${index}: duplicate high/critical alert identity`,
-            );
+            errors.push(`score alert ${index}: duplicate high/critical alert identity`);
           } else {
             scoreIdentities.set(identity.key, identity);
-            scoreEvidenceByKey.set(
-              identity.key,
-              scoreAlert.dependencyEvidence ?? null,
-            );
+            scoreEvidenceByKey.set(identity.key, scoreAlert.dependencyEvidence ?? null);
           }
         }
 
@@ -416,86 +368,46 @@ export function validateSocketReport(report, now = new Date()) {
             continue;
           }
           if (dispositionIdentities.has(identity.key)) {
-            errors.push(
-              `disposition ${index}: duplicate high/critical alert identity`,
-            );
+            errors.push(`disposition ${index}: duplicate high/critical alert identity`);
           } else {
             dispositionIdentities.set(identity.key, identity);
           }
           const scoreIdentity = scoreIdentities.get(identity.key);
           if (!scoreIdentity) {
-            errors.push(
-              `disposition ${index}: high/critical alert does not exist in score artifact`,
-            );
+            errors.push(`disposition ${index}: high/critical alert does not exist in score artifact`);
           } else {
             const evidence = scoreEvidenceByKey.get(identity.key);
-            const expectedReachability =
-              evidence?.reachability ?? scoreIdentity.reachability;
-            if (
-              expectedReachability &&
-              identity.reachability !== expectedReachability
-            ) {
-              errors.push(
-                `disposition ${index}: reachability does not match score artifact evidence`,
-              );
+            const expectedReachability = evidence?.reachability;
+            if (expectedReachability && identity.reachability !== expectedReachability) {
+              errors.push(`disposition ${index}: reachability does not match score artifact evidence`);
             }
-            if (
-              Array.isArray(evidence?.paths) &&
-              evidence.paths.length > 0 &&
-              !evidence.paths.includes(identity.path)
-            ) {
-              errors.push(
-                `disposition ${index}: path is not present in score artifact evidence`,
-              );
+            if (Array.isArray(evidence?.paths) && evidence.paths.length > 0 && !evidence.paths.includes(identity.path)) {
+              errors.push(`disposition ${index}: path is not present in score artifact evidence`);
             }
           }
         }
 
         for (const [key, scoreIdentity] of scoreIdentities) {
           if (!dispositionIdentities.has(key)) {
-            errors.push(
-              `score alert ${scoreIdentity.type} ${scoreIdentity.package}@${scoreIdentity.version}: missing disposition`,
-            );
+            errors.push(`score alert ${scoreIdentity.type} ${scoreIdentity.package}@${scoreIdentity.version}: missing disposition`);
           }
         }
 
-        if (
-          scoreAlerts.length === 0 &&
-          report.alerts.some((alert) =>
-            requireDispositionSeverities.has(
-              normalizeSeverity(alert.severity),
-            ),
-          )
-        ) {
-          errors.push(
-            "disposition contains policy-severity alert absent from score artifact",
-          );
+        if (scoreAlerts.length === 0 && report.alerts.some((a) => requireDispositionSeverities.has(normalizeSeverity(a.severity)))) {
+          errors.push("disposition contains policy-severity alert absent from score artifact");
         }
       } catch {
-        errors.push(
-          `complete report export artifact is not readable: ${report.export.artifact}`,
-        );
+        errors.push(`complete report export artifact is not readable: ${report.export.artifact}`);
       }
     }
   }
-  if (
-    report.status === "complete" &&
-    report.alerts.some(
-      (alert) =>
-        !alert.disposition &&
-        requireDispositionSeverities.has(normalizeSeverity(alert.severity)),
-    )
-  ) {
-    errors.push(
-      "complete reports require dispositions for all policy-severity alerts",
-    );
+  if (report.status === "complete" && report.alerts.some((a) => !a.disposition && requireDispositionSeverities.has(normalizeSeverity(a.severity)))) {
+    errors.push("complete reports require dispositions for all policy-severity alerts");
   }
   return errors;
 }
 
-export function loadSocketReport(
-  file = join(root, "socket-dispositions.json"),
-) {
+export function loadSocketReport(file = join(root, "socket-dispositions.json")) {
   return readJson(file);
 }
 
@@ -503,9 +415,7 @@ function main() {
   const report = loadSocketReport(process.argv[2]);
   const errors = validateSocketReport(report);
   if (errors.length > 0)
-    throw new Error(
-      `Invalid Socket disposition report:\n- ${errors.join("\n- ")}`,
-    );
+    throw new Error(`Invalid Socket disposition report:\n- ${errors.join("\n- ")}`);
   process.stdout.write(
     `Verified Socket disposition report: ${report.alerts.length} alerts, status ${report.status}.\n`,
   );

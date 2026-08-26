@@ -13,6 +13,8 @@ import {
   validateSocketSource,
   normalizeAlertIdentity,
   validateSocketScoreVector,
+  validateDeepAuxiliary,
+  validateCapturedAt,
 } from "./socket-evidence.mjs";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -35,47 +37,6 @@ function assertScore(score, label) {
     ["overall", "supplyChain", "maintenance", "quality", "vulnerability", "license"]
       .map((key) => [key, score[key]]),
   ));
-}
-
-/**
- * Validate the auxiliary deep-dependency fields: dependencyCount, capabilities, lowest.
- * Malformed supplied values cause import failure rather than silent coercion.
- */
-function validateDeepAuxiliary(data, errors) {
-  const deep = data.transitively;
-
-  // dependencyCount: absent -> null, present -> non-negative integer
-  if (deep.dependencyCount !== undefined && deep.dependencyCount !== null) {
-    if (typeof deep.dependencyCount !== "number" || !Number.isInteger(deep.dependencyCount) || deep.dependencyCount < 0) {
-      errors.push("transitively.dependencyCount must be a non-negative integer when present");
-    }
-  }
-
-  // capabilities: absent -> [], present -> array of non-empty strings
-  if (deep.capabilities !== undefined && deep.capabilities !== null) {
-    if (!Array.isArray(deep.capabilities)) {
-      errors.push("transitively.capabilities must be an array when present");
-    } else {
-      for (let i = 0; i < deep.capabilities.length; i++) {
-        if (typeof deep.capabilities[i] !== "string" || !deep.capabilities[i]) {
-          errors.push(`transitively.capabilities[${i}] must be a non-empty string`);
-        }
-      }
-    }
-  }
-
-  // lowest: absent -> null, present -> plain object with string values
-  if (deep.lowest !== undefined && deep.lowest !== null) {
-    if (typeof deep.lowest !== "object" || Array.isArray(deep.lowest)) {
-      errors.push("transitively.lowest must be a plain object when present");
-    } else {
-      for (const [key, value] of Object.entries(deep.lowest)) {
-        if (typeof value !== "string" || !value) {
-          errors.push(`transitively.lowest.${key} must be a non-empty string`);
-        }
-      }
-    }
-  }
 }
 
 /**
@@ -119,9 +80,7 @@ function assertAlerts(alerts, scope, inventory) {
     const output = {
       ...socketFields,
       name: identity.type,
-      type: identity.type,
       severity,
-      scope,
       ...(packageName ? { package: packageName } : {}),
       ...(version ? { version } : {}),
     };
@@ -154,19 +113,7 @@ function assertAlerts(alerts, scope, inventory) {
   });
 }
 
-/**
- * Validate capturedAt is a valid ISO-8601 timestamp string.
- */
-function validateCapturedAt(value) {
-  if (value === undefined || value === null) return;
-  if (typeof value !== "string") {
-    throw new Error("capturedAt must be a string when present");
-  }
-  const parsed = new Date(value);
-  if (!Number.isFinite(parsed.getTime())) {
-    throw new Error(`capturedAt is not a valid ISO-8601 timestamp: ${value}`);
-  }
-}
+
 
 /**
  * Detect and validate the official Socket CLI envelope.
@@ -333,14 +280,14 @@ function normalize(report, inputSha256) {
   const canonicalSource = `https://socket.dev/npm/package/metaplate@${version}`;
   const source = report.source ?? canonicalSource;
 
-  // Validate capturedAt if present
-  validateCapturedAt(report.capturedAt);
+  // Validate capturedAt if present (strict ISO-8601 via the shared validator)
+  const capturedAtError = validateCapturedAt(report.capturedAt);
+  if (capturedAtError) throw new Error(capturedAtError);
 
-  // Validate auxiliary deep fields
-  const validationErrors = [];
-  validateDeepAuxiliary(data, validationErrors);
-  if (validationErrors.length > 0) {
-    throw new Error(`Socket envelope validation failed: ${validationErrors.join("; ")}`);
+  // Validate auxiliary deep fields using the shared validator
+  const auxiliaryErrors = validateDeepAuxiliary(data.transitively, "transitively");
+  if (auxiliaryErrors.length > 0) {
+    throw new Error(`Socket envelope validation failed: ${auxiliaryErrors.join("; ")}`);
   }
 
   const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
@@ -359,7 +306,10 @@ function normalize(report, inputSha256) {
     package: "metaplate",
     version,
     source,
-    capturedAt: report.capturedAt ?? new Date().toISOString(),
+    // capturedAt is the validated source capture time (omitted when the raw
+    // export does not supply one); normalizedAt is always importer-generated.
+    capturedAt: report.capturedAt,
+    normalizedAt: new Date().toISOString(),
     captureKind: "socket-cli-import",
     shallow: { score: shallowScore, alerts: shallowAlerts },
     deep: {

@@ -34,6 +34,98 @@ export const SCORE_KEYS = Object.freeze([
 ]);
 
 /**
+ * A strict but pragmatic ISO-8601 check: date-only (YYYY-MM-DD) or a full
+ * timestamp with time and a Z / ±hh:mm zone designator. Rejects free-form
+ * strings that `new Date()` would otherwise accept (e.g. "Aug 25, 2026").
+ */
+const ISO_8601_TIMESTAMP = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2}))?$/;
+
+export function isIso8601Timestamp(value) {
+  return typeof value === "string" && ISO_8601_TIMESTAMP.test(value);
+}
+
+/**
+ * The pinned executable release policy. This is the single source of truth
+ * for what the verifier enforces. The releasePolicy in socket-dispositions.json
+ * must match this exactly — it cannot weaken or extend the policy.
+ */
+export const SOCKET_RELEASE_POLICY = Object.freeze({
+  blockSeverities: Object.freeze(["critical"]),
+  requireDispositionSeverities: Object.freeze(["high", "critical"]),
+  allowedDispositionTypes: Object.freeze([
+    "upgrade",
+    "replace",
+    "remove",
+    "isolate",
+    "accepted-with-evidence",
+  ]),
+  acceptedExceptionRequires: Object.freeze([
+    "owner",
+    "reason",
+    "expiry",
+    "verification",
+  ]),
+});
+
+/**
+ * Validate that two sorted string arrays are exactly equal (same elements,
+ * no extras, no missing, no duplicates).
+ */
+function validateExactStringSet(actual, expected, fieldName) {
+  const sorted = [...actual].sort();
+  const expectedSorted = [...expected].sort();
+  if (sorted.length !== expectedSorted.length) {
+    return `${fieldName} has ${sorted.length} entries, expected ${expectedSorted.length}`;
+  }
+  for (let i = 0; i < sorted.length; i++) {
+    if (sorted[i] !== expectedSorted[i]) {
+      return `${fieldName} entry ${sorted[i]} is not in the expected set`;
+    }
+  }
+  // Check for duplicates
+  const unique = new Set(actual);
+  if (unique.size !== actual.length) {
+    return `${fieldName} contains duplicate entries`;
+  }
+  return undefined;
+}
+
+/**
+ * Validate that a disposition report's releasePolicy matches the pinned
+ * executable policy exactly. Returns an array of error strings.
+ */
+export function validateReleasePolicy(policy) {
+  if (!policy || typeof policy !== "object") return ["releasePolicy is missing"];
+  const errors = [];
+  let err;
+  err = validateExactStringSet(
+    policy.blockSeverities ?? [],
+    SOCKET_RELEASE_POLICY.blockSeverities,
+    "blockSeverities",
+  );
+  if (err) errors.push(err);
+  err = validateExactStringSet(
+    policy.requireDispositionSeverities ?? [],
+    SOCKET_RELEASE_POLICY.requireDispositionSeverities,
+    "requireDispositionSeverities",
+  );
+  if (err) errors.push(err);
+  err = validateExactStringSet(
+    policy.allowedDispositionTypes ?? [],
+    SOCKET_RELEASE_POLICY.allowedDispositionTypes,
+    "allowedDispositionTypes",
+  );
+  if (err) errors.push(err);
+  err = validateExactStringSet(
+    policy.acceptedExceptionRequires ?? [],
+    SOCKET_RELEASE_POLICY.acceptedExceptionRequires,
+    "acceptedExceptionRequires",
+  );
+  if (err) errors.push(err);
+  return errors;
+}
+
+/**
  * Validate a Socket score vector. Requires an object with all six canonical
  * score keys, each a finite number from 0 to 100. Returns an error string
  * or undefined if valid.
@@ -53,7 +145,8 @@ export function validateSocketScoreVector(score, label) {
 
 /**
  * Normalize severity from Socket terminology to canonical values.
- * Rejects missing, non-string, or unknown severities.
+ * For raw CLI input: "middle" -> "medium" is valid.
+ * For normalized artifacts, use validateCanonicalSeverity instead.
  */
 export function normalizeSeverity(value) {
   if (typeof value !== "string") return undefined;
@@ -63,27 +156,142 @@ export function normalizeSeverity(value) {
 }
 
 /**
- * Accepted Socket package URL pathname forms (exact match, with or without
- * trailing slash). The version segment is required for release evidence.
- * The package capture is non-greedy to prevent double-version matches.
+ * Validate that severity is one of the canonical normalized values.
+ * Does NOT accept "middle" — use this for schemaVersion 2 artifacts.
  */
+export function validateCanonicalSeverity(value) {
+  if (typeof value !== "string") return `severity must be a string`;
+  if (!CANONICAL_SEVERITIES.includes(value)) {
+    return `severity "${value}" is not a canonical value; expected one of: ${CANONICAL_SEVERITIES.join(", ")}`;
+  }
+  return undefined;
+}
+
+/**
+ * Validate the auxiliary deep-dependency fields: dependencyCount, capabilities, lowest.
+ * Used by both the importer and the verifier.
+ * Returns an array of error strings (empty if valid).
+ */
+export function validateDeepAuxiliary(deep, label) {
+  const errors = [];
+  if (!deep || typeof deep !== "object") return [`${label} deep must be an object`];
+
+  // dependencyCount: absent/null -> ok, present -> non-negative integer
+  if (deep.dependencyCount !== undefined && deep.dependencyCount !== null) {
+    if (typeof deep.dependencyCount !== "number" || !Number.isInteger(deep.dependencyCount) || deep.dependencyCount < 0) {
+      errors.push(`${label}.dependencyCount must be a non-negative integer when present`);
+    }
+  }
+
+  // capabilities: absent/null -> ok, present -> array of non-empty strings
+  if (deep.capabilities !== undefined && deep.capabilities !== null) {
+    if (!Array.isArray(deep.capabilities)) {
+      errors.push(`${label}.capabilities must be an array when present`);
+    } else {
+      for (let i = 0; i < deep.capabilities.length; i++) {
+        if (typeof deep.capabilities[i] !== "string" || !deep.capabilities[i]) {
+          errors.push(`${label}.capabilities[${i}] must be a non-empty string`);
+        }
+      }
+    }
+  }
+
+  // lowest: absent/null -> ok, present -> plain object with score-key string values
+  if (deep.lowest !== undefined && deep.lowest !== null) {
+    if (typeof deep.lowest !== "object" || Array.isArray(deep.lowest)) {
+      errors.push(`${label}.lowest must be a plain object when present`);
+    } else {
+      for (const key of SCORE_KEYS) {
+        if (Object.prototype.hasOwnProperty.call(deep.lowest, key)) {
+          if (typeof deep.lowest[key] !== "string" || !deep.lowest[key]) {
+            errors.push(`${label}.lowest.${key} must be a non-empty string`);
+          }
+        }
+      }
+      // Reject unexpected keys
+      for (const key of Object.keys(deep.lowest)) {
+        if (!SCORE_KEYS.includes(key)) {
+          errors.push(`${label}.lowest contains unexpected key ${key}`);
+        }
+      }
+    }
+  }
+
+  return errors;
+}
+
+/**
+ * Validate that a capturedAt value is a valid ISO-8601 timestamp.
+ * Accepts YYYY-MM-DD or a full timestamp with time and a Z / ±hh:mm zone.
+ * Rejects free-form strings such as "banana" or "Aug 25, 2026".
+ */
+export function validateCapturedAt(value, fieldName = "capturedAt") {
+  if (value === undefined || value === null) return undefined;
+  if (!isIso8601Timestamp(value)) {
+    return `${fieldName} must be a valid ISO-8601 timestamp when present`;
+  }
+  return undefined;
+}
+
+/**
+ * Validate packageSizeBytes if present.
+ */
+export function validatePackageSizeBytes(value, fieldName = "packageSizeBytes") {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    return `${fieldName} must be a non-negative integer when present`;
+  }
+  return undefined;
+}
+
+/**
+ * Validate the basic schema of a disposition alert entry.
+ * Requires all identity and metadata fields to be present non-empty strings.
+ * Only allows high/critical severity in disposition reports.
+ */
+export function validateDispositionAlert(alert, index) {
+  const prefix = `alert ${index}`;
+  if (!alert || typeof alert !== "object") return `${prefix}: must be an object`;
+
+  // Require canonical string fields
+  const requiredStrings = ["type", "package", "version", "path", "reachability", "evidence", "verification"];
+  for (const field of requiredStrings) {
+    if (typeof alert[field] !== "string" || !alert[field]) {
+      return `${prefix}: ${field} must be a non-empty string`;
+    }
+  }
+
+  // Severity must be canonical
+  const sevErr = validateCanonicalSeverity(alert.severity);
+  if (sevErr) return `${prefix}: ${sevErr}`;
+
+  // Disposition must be a recognized value
+  const allowed = SOCKET_RELEASE_POLICY.allowedDispositionTypes;
+  if (alert.disposition && !allowed.includes(alert.disposition)) {
+    return `${prefix}: disposition "${alert.disposition}" is not a recognized value`;
+  }
+
+  // Reachability must be valid
+  if (!REACHABILITY_VALUES.includes(alert.reachability)) {
+    return `${prefix}: reachability "${alert.reachability}" is not a recognized value`;
+  }
+
+  // Disposition reports should only contain high/critical
+  if (!SOCKET_RELEASE_POLICY.requireDispositionSeverities.includes(alert.severity)) {
+    return `${prefix}: disposition reports should only contain high/critical alerts, got "${alert.severity}"`;
+  }
+
+  return undefined;
+}
+
+// Accepted Socket package URL pathname forms
 const VALID_PATHNAMES = [
   /^\/npm\/package\/([^/@]+?)@(\d+\.\d+\.\d+)\/?$/,
   /^\/npm\/package\/([^/@]+?)\/alerts\/(\d+\.\d+\.\d+)\/?$/,
 ];
 
 /**
- * Parse a Socket package URL strictly. Uses `new URL()` and requires the
- * entire pathname to match an accepted form. Rejects suffix garbage,
- * credentials, non-default ports, and malformed double-version URLs.
- *
- * Returns { package, version } where both are populated, or undefined on
- * any parse/validation failure.
- *
- * Accepted forms:
- *   https://socket.dev/npm/package/metaplate@0.6.0
- *   https://socket.dev/npm/package/metaplate/alerts/0.6.0
- *   https://socket.dev/npm/package/metaplate/alerts/0.6.0?tab=dependencies
+ * Parse a Socket package URL strictly.
  */
 export function parseSocketPackageUrl(source) {
   if (typeof source !== "string") return undefined;
@@ -93,7 +301,6 @@ export function parseSocketPackageUrl(source) {
   } catch {
     return undefined;
   }
-  // Require HTTPS, socket.dev hostname, default port, no credentials
   if (parsed.protocol !== "https:" || parsed.hostname !== "socket.dev") return undefined;
   if (parsed.username || parsed.password) return undefined;
   if (parsed.port && parsed.port !== "443") return undefined;
@@ -105,13 +312,6 @@ export function parseSocketPackageUrl(source) {
   return undefined;
 }
 
-/**
- * Validate the source URL against the expected package/version.
- * Requires the URL to encode the version (versionless URLs are rejected
- * for release evidence). The parsed package must exactly match the expected
- * package (no legacy @version suffix encoding).
- * Returns undefined on success, or an error message string on failure.
- */
 export function validateSocketSource(source, expectedPackage, expectedVersion) {
   const parsed = parseSocketPackageUrl(source);
   if (!parsed) return `source URL is not a valid Socket package URL: ${source}`;
@@ -127,14 +327,6 @@ export function validateSocketSource(source, expectedPackage, expectedVersion) {
   return undefined;
 }
 
-/**
- * Canonical alert identity parser. Returns { type, package, version } or
- * an error string.
- *
- * Validates each explicit field independently against the example-derived
- * values. Partial conflicts are rejected. Both name and type are treated
- * as aliases for the same canonical field and must agree when both present.
- */
 export function normalizeAlertIdentity(alert) {
   const name = alert.name;
   const type = alert.type;
@@ -146,7 +338,6 @@ export function normalizeAlertIdentity(alert) {
 
   const exampleId = parseExampleIdentity(alert.example);
 
-  // Validate each explicit field independently against example
   if (alert.package !== undefined) {
     if (typeof alert.package !== "string" || !alert.package) {
       return { error: "alert package must be a non-empty string" };
@@ -172,20 +363,17 @@ export function normalizeAlertIdentity(alert) {
 
 /**
  * Validate the full alert schema for a score artifact alert.
- * Returns an error string or undefined if valid.
+ * For normalized artifacts, uses canonical severity (no "middle" alias).
  */
 export function validateScoreAlert(alert, index) {
   if (!alert || typeof alert !== "object") return `alert ${index}: must be an object`;
   const identity = normalizeAlertIdentity(alert);
   if (identity.error) return `alert ${index}: ${identity.error}`;
-  const sev = normalizeSeverity(alert.severity);
-  if (!sev) return `alert ${index}: invalid or missing severity ${JSON.stringify(alert.severity)}`;
+  const sevErr = validateCanonicalSeverity(alert.severity);
+  if (sevErr) return `alert ${index}: ${sevErr}`;
   return undefined;
 }
 
-/**
- * Validate the dependencyEvidence shape for a resolved (matched) alert.
- */
 export function validateResolvedEvidence(alert, index) {
   const ev = alert.dependencyEvidence;
   if (!ev || typeof ev !== "object") return `alert ${index}: dependencyEvidence is required`;
@@ -198,10 +386,6 @@ export function validateResolvedEvidence(alert, index) {
   return undefined;
 }
 
-/**
- * Validate the dependencyEvidence shape for an unresolved (unmatched) alert.
- * Requires the same source as resolved evidence.
- */
 export function validateUnresolvedEvidence(alert, index) {
   const ev = alert.dependencyEvidence;
   if (!ev || typeof ev !== "object") return `alert ${index}: dependencyEvidence is required`;
@@ -214,5 +398,4 @@ export function validateUnresolvedEvidence(alert, index) {
 }
 
 // ---- internals ----
-// parseExampleIdentity is shared via dependency-model.mjs packageIdentityFromExample
 const parseExampleIdentity = packageIdentityFromExample;

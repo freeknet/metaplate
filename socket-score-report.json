@@ -27,8 +27,7 @@
           "reachability": "unknown",
           "unresolved": true,
           "reason": "metaplate@0.6.0 not found in the current dependency inventory"
-        },
-        "reachability": "unknown"
+        }
       }
     ]
   },
@@ -72,7 +71,6 @@
           ],
           "reachability": "runtime-peer"
         },
-        "reachability": "runtime-peer",
         "dependencyPath": "metaplate > satori > @shuding/opentype.js > string.prototype.codepointat"
       },
       {
@@ -87,7 +85,6 @@
           ],
           "reachability": "runtime-peer"
         },
-        "reachability": "runtime-peer",
         "dependencyPath": "metaplate > satori > @shuding/opentype.js"
       },
       {
@@ -102,7 +99,6 @@
           ],
           "reachability": "runtime-peer"
         },
-        "reachability": "runtime-peer",
         "dependencyPath": "metaplate > satori > yoga-layout"
       },
       {
@@ -116,8 +112,7 @@
           "reachability": "unknown",
           "unresolved": true,
           "reason": "next@16.3.3 not found in the current dependency inventory"
-        },
-        "reachability": "unknown"
+        }
       },
       {
         "name": "recentlyPublished",
@@ -131,7 +126,6 @@
           ],
           "reachability": "runtime-peer"
         },
-        "reachability": "runtime-peer",
         "dependencyPath": "metaplate > satori"
       },
       {
@@ -146,7 +140,6 @@
           ],
           "reachability": "runtime-peer"
         },
-        "reachability": "runtime-peer",
         "dependencyPath": "metaplate > @resvg/resvg-js"
       },
       {
@@ -162,7 +155,6 @@
           ],
           "reachability": "runtime-peer-optional"
         },
-        "reachability": "runtime-peer-optional",
         "dependencyPath": "metaplate > astro > sharp > @img/sharp-linux-arm"
       },
       {
@@ -190,7 +182,6 @@
           ],
           "reachability": "runtime-peer-optional"
         },
-        "reachability": "runtime-peer-optional",
         "dependencyPath": "metaplate > @react-router/dev > vite > postcss > source-map-js"
       },
       {
@@ -205,7 +196,6 @@
           ],
           "reachability": "runtime-peer-optional"
         },
-        "reachability": "runtime-peer-optional",
         "dependencyPath": "metaplate > @resvg/resvg-js > @resvg/resvg-js-android-arm-eabi"
       },
       {
@@ -221,7 +211,6 @@
           ],
           "reachability": "runtime-peer-optional"
         },
-        "reachability": "runtime-peer-optional",
         "dependencyPath": "metaplate > astro > sharp"
       },
       {
@@ -235,8 +224,7 @@
           "reachability": "unknown",
           "unresolved": true,
           "reason": "next@16.3.3 not found in the current dependency inventory"
-        },
-        "reachability": "unknown"
+        }
       },
       {
         "name": "envVars",
@@ -250,7 +238,6 @@
           ],
           "reachability": "runtime-peer"
         },
-        "reachability": "runtime-peer",
         "dependencyPath": "metaplate > satori > css-to-react-native"
       },
       {
@@ -265,7 +252,6 @@
           ],
           "reachability": "runtime-peer"
         },
-        "reachability": "runtime-peer",
         "dependencyPath": "metaplate > @resvg/resvg-js"
       },
       {
@@ -281,7 +267,6 @@
           ],
           "reachability": "runtime-peer"
         },
-        "reachability": "runtime-peer",
         "dependencyPath": "metaplate > satori > @shuding/opentype.js > fflate"
       },
       {
@@ -296,7 +281,6 @@
           ],
           "reachability": "runtime-peer"
         },
-        "reachability": "runtime-peer",
         "dependencyPath": "metaplate > @resvg/resvg-js"
       },
       {
@@ -311,7 +295,6 @@
           ],
           "reachability": "runtime-peer"
         },
-        "reachability": "runtime-peer",
         "dependencyPath": "metaplate > satori > css-to-react-native > camelize"
       },
       {
@@ -326,7 +309,6 @@
           ],
           "reachability": "runtime-peer-optional"
         },
-        "reachability": "runtime-peer-optional",
         "dependencyPath": "metaplate > @resvg/resvg-js > @resvg/resvg-js-android-arm-eabi"
       },
       {
@@ -340,8 +322,7 @@
           "reachability": "unknown",
           "unresolved": true,
           "reason": "metaplate@0.6.0 not found in the current dependency inventory"
-        },
-        "reachability": "unknown"
+        }
       },
       {
         "name": "urlStrings",
@@ -355,7 +336,6 @@
           ],
           "reachability": "runtime-peer"
         },
-        "reachability": "runtime-peer",
         "dependencyPath": "metaplate > satori > css-to-react-native > camelize"
       }
     ]
@@ -366,7 +346,7 @@
     "rawInputRetained": false
   },
   "limitations": [
-    "Socket CLI output exposes example package identities but not full physical dependency paths; lockfilePath and dependencyPath above are derived locally and labeled accordingly.",
+    "Socket CLI output exposes example package identities but not full physical dependency paths; dependencyPath and dependencyEvidence.paths are derived locally from package-lock.json and labeled accordingly.",
     "Download, popularity, package age, maintainer, and adoption metrics are external score mechanics and are not manipulated.",
     "The deep report's next@16.3.3 example reflects Socket's analyzed peer graph; the repository lockfile currently pins next@16.3.2 for its fixture."
   ]
