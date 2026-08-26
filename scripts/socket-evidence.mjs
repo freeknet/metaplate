@@ -241,16 +241,18 @@ export function validateDeepAuxiliary(deep, label) {
     }
   }
 
+  // Socket may supply only the score dimensions for which it has a lowest
+  // package. Any supplied entries must use canonical score keys and package
+  // identities, but the object is intentionally allowed to be partial.
   if (deep.lowest !== undefined && deep.lowest !== null) {
     if (typeof deep.lowest !== "object" || Array.isArray(deep.lowest)) {
       errors.push(`${label}.lowest must be a plain object when present`);
     } else {
-      for (const key of SCORE_KEYS) {
-        if (!Object.prototype.hasOwnProperty.call(deep.lowest, key)) {
-          errors.push(`${label}.lowest is missing required key ${key}`);
+      for (const [key, value] of Object.entries(deep.lowest)) {
+        if (!SCORE_KEYS.includes(key)) {
+          errors.push(`${label}.lowest contains unexpected key ${key}`);
           continue;
         }
-        const value = deep.lowest[key];
         if (typeof value !== "string" || !value.trim()) {
           errors.push(`${label}.lowest.${key} must be a non-empty string`);
           continue;
@@ -258,11 +260,6 @@ export function validateDeepAuxiliary(deep, label) {
         const identity = packageIdentityFromExample(value);
         if (!identity.package || !identity.version) {
           errors.push(`${label}.lowest.${key} must be a Socket package identity`);
-        }
-      }
-      for (const key of Object.keys(deep.lowest)) {
-        if (!SCORE_KEYS.includes(key)) {
-          errors.push(`${label}.lowest contains unexpected key ${key}`);
         }
       }
     }
