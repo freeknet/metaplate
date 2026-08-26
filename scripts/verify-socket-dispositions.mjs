@@ -21,6 +21,7 @@ import {
   validateSocketScoreVector,
   validateDeepAuxiliary,
   validateCapturedAt,
+  validateNormalizedAt,
   validatePackageSizeBytes,
   validateCanonicalSeverity,
 } from "./socket-evidence.mjs";
@@ -96,13 +97,11 @@ function policyAlerts(score) {
  * Validate every score artifact alert's schema and dependency evidence.
  */
 function validateScoreAlertSchemas(score, inventory, errors) {
-  // Validate score vectors
   const shallowScoreError = validateSocketScoreVector(score.shallow?.score, "shallow");
   if (shallowScoreError) errors.push(`score artifact: ${shallowScoreError}`);
   const deepScoreError = validateSocketScoreVector(score.deep?.score, "deep");
   if (deepScoreError) errors.push(`score artifact: ${deepScoreError}`);
 
-  // Validate auxiliary fields
   const auxErrors = validateDeepAuxiliary(score.deep, "score.deep");
   for (const err of auxErrors) errors.push(`score artifact: ${err}`);
 
@@ -152,7 +151,6 @@ function validateScoreAlertSchemas(score, inventory, errors) {
         if (evidence.reachability !== expectedReachability) {
           errors.push(`score artifact: ${prefix}: dependencyEvidence.reachability does not match current inventory`);
         }
-        // Deduped top-level derived fields must match the canonical evidence
         if (alert.reachability !== undefined && alert.reachability !== evidence.reachability) {
           errors.push(`score artifact: ${prefix}: alert.reachability does not match dependencyEvidence.reachability`);
         }
@@ -180,7 +178,6 @@ export function validateSocketReport(report, now = new Date()) {
   if (report.version !== undefined && report.version !== "0.6.0")
     errors.push("version must be the 0.6.0 Socket baseline");
 
-  // Strict source validation
   if (typeof report.source === "string") {
     const sourceError = validateSocketSource(report.source, "metaplate", report.version);
     if (sourceError) errors.push(sourceError);
@@ -191,7 +188,6 @@ export function validateSocketReport(report, now = new Date()) {
   if (!statuses.has(report.status))
     errors.push(`unknown report status ${report.status}`);
 
-  // Validate release policy matches the pinned executable policy exactly
   if (!policy) {
     errors.push("releasePolicy is missing");
     if (!Array.isArray(report.alerts)) errors.push("alerts must be an array");
@@ -214,7 +210,6 @@ export function validateSocketReport(report, now = new Date()) {
     return errors;
   }
 
-  // Validate every disposition entry's schema
   for (const [index, alert] of report.alerts.entries()) {
     const prefix = `alert ${index}`;
     if (!alert || typeof alert !== "object") {
@@ -222,7 +217,6 @@ export function validateSocketReport(report, now = new Date()) {
       continue;
     }
 
-    // Type-validate all required string fields
     const requiredStrings = ["type", "package", "version", "path", "reachability", "evidence", "verification"];
     for (const field of requiredStrings) {
       if (typeof alert[field] !== "string" || !alert[field].trim()) {
@@ -232,48 +226,46 @@ export function validateSocketReport(report, now = new Date()) {
     }
     if (errors.length > 0 && errors[errors.length - 1].includes(prefix)) continue;
 
-    // Severity must be canonical
     const sevErr = validateCanonicalSeverity(alert.severity);
     if (sevErr) {
       errors.push(`${prefix}: ${sevErr}`);
       continue;
     }
 
-    // Disposition must be recognized
     if (alert.disposition && !allowedDispositions.has(alert.disposition)) {
       errors.push(`${prefix}: disposition "${alert.disposition}" is not allowed by release policy`);
     }
 
-    // Reachability must be valid
     if (!REACHABILITY_VALUES.includes(alert.reachability)) {
       errors.push(`${prefix}: reachability "${alert.reachability}" is not a recognized value`);
     }
 
-    // Only high/critical in disposition reports
     if (!requireDispositionSeverities.has(alert.severity)) {
       errors.push(`${prefix}: disposition reports should only contain high/critical alerts, got "${alert.severity}"`);
     }
 
-    // Policy-required disposition
     if (requireDispositionSeverities.has(alert.severity) && !alert.disposition) {
       errors.push(`${prefix}: disposition required for ${alert.severity}`);
     }
 
-    // Critical disposition metadata also blocks, but the authoritative block
-    // is independently enforced from the score artifact below.
     if (blockSeverities.has(alert.severity)) {
       errors.push(`${prefix}: ${alert.severity} findings block release under release policy`);
     }
 
-    // Accepted-with-evidence requirements
     if (alert.disposition === "accepted-with-evidence") {
       for (const field of acceptedRequires) {
         if (typeof alert[field] !== "string" || !alert[field].trim()) {
           errors.push(`${prefix}: accepted exception requires ${field} as a non-empty string`);
         }
       }
-      if (typeof alert.expiry === "string" && alert.expiry.trim() && isExpired(alert.expiry, now))
-        errors.push(`${prefix}: accepted exception is expired or has an invalid expiry`);
+      if (typeof alert.expiry === "string" && alert.expiry.trim()) {
+        const expiryError = validateCapturedAt(alert.expiry, `${prefix} expiry`);
+        if (expiryError) {
+          errors.push(expiryError);
+        } else if (isExpired(alert.expiry, now)) {
+          errors.push(`${prefix}: accepted exception is expired`);
+        }
+      }
     }
   }
 
@@ -292,7 +284,6 @@ export function validateSocketReport(report, now = new Date()) {
         if (score.version !== report.version)
           errors.push("complete report score artifact version does not match disposition version");
 
-        // Strict source validation on score artifact
         if (typeof score.source === "string") {
           const scoreSourceError = validateSocketSource(score.source, score.package, score.version);
           if (scoreSourceError) errors.push(`complete report score artifact: ${scoreSourceError}`);
@@ -303,6 +294,9 @@ export function validateSocketReport(report, now = new Date()) {
         if (score.captureKind === "socket-cli-import") {
           if (!/^[a-f0-9]{64}$/i.test(score.provenance?.inputSha256 ?? ""))
             errors.push("socket-cli-import score artifact requires a valid 64-character inputSha256");
+          const normalizedAtError = validateNormalizedAt(score.normalizedAt);
+          if (normalizedAtError)
+            errors.push(`socket-cli-import score artifact: ${normalizedAtError}`);
         } else if (score.captureKind === "historical-normalized-snapshot") {
           if (score.provenance?.rawInputSha256 !== null || score.provenance?.rawInputRetained !== false)
             errors.push("historical-normalized-snapshot must explicitly state that raw input is unavailable");
@@ -310,11 +304,9 @@ export function validateSocketReport(report, now = new Date()) {
           errors.push(`unknown score artifact captureKind ${score.captureKind}`);
         }
 
-        // Validate score alert schemas, auxiliary fields, and inventory
         const inventory = currentInventory();
         validateScoreAlertSchemas(score, inventory, errors);
 
-        // Cross-check every exact package/version
         const allScoreAlerts = [...(score.shallow?.alerts ?? []), ...(score.deep?.alerts ?? [])];
         for (const [index, scoreAlert] of allScoreAlerts.entries()) {
           const identity = normalizeAlertIdentity(scoreAlert);
@@ -347,9 +339,6 @@ export function validateSocketReport(report, now = new Date()) {
         if (!Array.isArray(score.shallow?.alerts) || !Array.isArray(score.deep?.alerts))
           errors.push("complete report score artifact must contain shallow and deep alert arrays");
 
-        // A release-blocking severity is authoritative in the score artifact.
-        // A disposition can describe the finding, but it can never downgrade or
-        // otherwise change whether the finding blocks release.
         for (const [index, scoreAlert] of allScoreAlerts.entries()) {
           const severity = normalizeSeverity(scoreAlert?.severity);
           if (blockSeverities.has(severity)) {
@@ -361,7 +350,6 @@ export function validateSocketReport(report, now = new Date()) {
           }
         }
 
-        // Match high/critical score alerts to dispositions
         const scoreAlerts = policyAlerts(score);
         const scoreIdentities = new Map();
         const scoreEvidenceByKey = new Map();
@@ -397,9 +385,6 @@ export function validateSocketReport(report, now = new Date()) {
             continue;
           }
 
-          // Severity is part of the evidence binding even though the structural
-          // key intentionally remains type/package/version/path for clearer
-          // mismatch diagnostics.
           if (identity.severity !== scoreIdentity.severity) {
             errors.push(
               `disposition ${index}: severity ${identity.severity} does not match score artifact severity ${scoreIdentity.severity}`,
