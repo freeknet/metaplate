@@ -147,4 +147,52 @@ describe("Socket score/disposition severity binding", () => {
       ),
     ).toBe(true);
   });
+
+  it("requires a valid normalizedAt on fresh socket-cli-import artifacts", async () => {
+    const missing = await reportForScore((score) => {
+      score.captureKind = "socket-cli-import";
+      score.provenance = {
+        importedFrom: "Socket CLI export",
+        inputSha256: "a".repeat(64),
+        dependencyEvidence: "package-lock.json via dependency-model.mjs",
+      };
+      delete score.normalizedAt;
+    });
+    expect(
+      validateSocketReport(missing).some((error) => error.includes("normalizedAt")),
+    ).toBe(true);
+
+    const invalid = await reportForScore((score) => {
+      score.captureKind = "socket-cli-import";
+      score.provenance = {
+        importedFrom: "Socket CLI export",
+        inputSha256: "a".repeat(64),
+        dependencyEvidence: "package-lock.json via dependency-model.mjs",
+      };
+      score.normalizedAt = "2026-99-99T12:00:00Z";
+    });
+    expect(
+      validateSocketReport(invalid).some((error) => error.includes("normalizedAt")),
+    ).toBe(true);
+  });
+
+  it("rejects malformed accepted-with-evidence metadata", async () => {
+    const report = await reportForScore(
+      () => {},
+      (dispositions) => {
+        const disposition = currentDisposition(dispositions);
+        disposition.owner = {};
+        disposition.reason = [];
+        disposition.expiry = "2026-02-30";
+      },
+    );
+
+    const errors = validateSocketReport(
+      report,
+      new Date("2026-08-25T12:00:00Z"),
+    );
+    expect(errors.some((error) => error.includes("requires owner"))).toBe(true);
+    expect(errors.some((error) => error.includes("requires reason"))).toBe(true);
+    expect(errors.some((error) => error.includes("expiry") && error.includes("ISO-8601"))).toBe(true);
+  });
 });
