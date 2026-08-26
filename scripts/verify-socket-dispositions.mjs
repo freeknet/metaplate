@@ -5,7 +5,6 @@ import { fileURLToPath } from "node:url";
 import process from "node:process";
 import { runScript } from "./run-script.mjs";
 import {
-  packageIdentityFromExample,
   classifyLockPackages,
   strongestReachability,
 } from "./dependency-model.mjs";
@@ -91,10 +90,10 @@ function policyAlerts(score) {
 }
 
 /**
- * Validate a historical/normalized score artifact's alert schema.
- * Every alert must have valid type, severity, and identity consistency.
- * Locally resolved alerts must have valid dependencyEvidence.
- * Unmatched alerts must be explicitly unresolved.
+ * Validate every score artifact alert's schema and dependency evidence.
+ * Uses the canonical identity normalizer everywhere.
+ * Requires dependencyEvidence for every alert with a package identity.
+ * Validates deduped derived fields match canonical evidence.
  */
 function validateScoreAlertSchemas(score, inventory, errors) {
   const allAlerts = [
@@ -103,14 +102,20 @@ function validateScoreAlertSchemas(score, inventory, errors) {
   ];
 
   for (const { alert, idx, scope } of allAlerts) {
-    const schemaError = validateScoreAlert(alert, `${scope}[${idx}]`);
+    const prefix = `${scope}[${idx}]`;
+    const schemaError = validateScoreAlert(alert, prefix);
     if (schemaError) {
       errors.push(`score artifact: ${schemaError}`);
       continue;
     }
 
-    // Check dependency evidence for resolved vs unresolved alerts
+    // Use canonical identity for inventory lookup
     const identity = normalizeAlertIdentity(alert);
+    if (identity.error) {
+      errors.push(`score artifact: ${prefix}: ${identity.error}`);
+      continue;
+    }
+
     const matches =
       identity.package && identity.version
         ? inventory.filter(
@@ -119,15 +124,36 @@ function validateScoreAlertSchemas(score, inventory, errors) {
         : [];
 
     if (matches.length > 0) {
-      const evError = validateResolvedEvidence(alert, `${scope}[${idx}]`);
+      const evError = validateResolvedEvidence(alert, prefix);
       if (evError) {
         errors.push(`score artifact: ${evError}`);
+      } else {
+        // Validate deduped derived fields match canonical evidence
+        const evidence = alert.dependencyEvidence;
+        const expectedPaths = [...new Set(matches.flatMap((e) => e.dependencyPaths ?? []))].sort();
+        const expectedReachability = strongestReachability(matches.map((e) => e.classification));
+        if (JSON.stringify(evidence.paths ?? []) !== JSON.stringify(expectedPaths)) {
+          errors.push(`score artifact: ${prefix}: dependencyEvidence.paths does not match current inventory`);
+        }
+        if (evidence.reachability !== expectedReachability) {
+          errors.push(`score artifact: ${prefix}: dependencyEvidence.reachability does not match current inventory`);
+        }
+        // Validate deduped top-level derived fields if present
+        if (alert.reachability !== undefined && alert.reachability !== evidence.reachability) {
+          errors.push(`score artifact: ${prefix}: alert.reachability does not match dependencyEvidence.reachability`);
+        }
+        if (alert.dependencyPath !== undefined && !evidence.paths.includes(alert.dependencyPath)) {
+          errors.push(`score artifact: ${prefix}: alert.dependencyPath is not in dependencyEvidence.paths`);
+        }
       }
     } else if (alert.dependencyEvidence) {
-      const evError = validateUnresolvedEvidence(alert, `${scope}[${idx}]`);
+      const evError = validateUnresolvedEvidence(alert, prefix);
       if (evError) {
         errors.push(`score artifact: ${evError}`);
       }
+    } else if (identity.package && identity.version) {
+      // Alert has a package identity but no dependencyEvidence and no lockfile match
+      errors.push(`score artifact: ${prefix}: missing dependencyEvidence for unresolved alert`);
     }
   }
 }
@@ -298,14 +324,14 @@ export function validateSocketReport(report, now = new Date()) {
         const inventory = currentInventory();
         validateScoreAlertSchemas(score, inventory, errors);
 
-        // Cross-check every exact package/version in the score artifact against inventory
+        // Cross-check every exact package/version using canonical identity
         const allScoreAlerts = [
           ...(score.shallow?.alerts ?? []),
           ...(score.deep?.alerts ?? []),
         ];
         for (const [index, scoreAlert] of allScoreAlerts.entries()) {
-          const identity = packageIdentityFromExample(scoreAlert?.example);
-          if (!identity.package || !identity.version) continue;
+          const identity = normalizeAlertIdentity(scoreAlert);
+          if (identity.error || !identity.package || !identity.version) continue;
           const matches = inventory.filter(
             (entry) =>
               entry.name === identity.package &&

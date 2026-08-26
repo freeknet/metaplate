@@ -107,30 +107,74 @@ function assertAlerts(alerts, scope, inventory) {
   });
 }
 
-function extractEnvelope(report) {
+/**
+ * Detect and validate the official Socket CLI envelope.
+ * Only the official envelope is accepted for socket-cli-import.
+ * Normalized (schemaVersion 2) artifacts are rejected — the importer
+ * is only for converting raw CLI exports, not reprocessing imports.
+ */
+function extractOfficialEnvelope(report) {
+  if (!report || typeof report !== "object") return undefined;
   const data = report.data ?? report;
-  // Detect the official Socket CLI envelope shape
-  if (data.self && typeof data.self === "object") {
-    return { shape: "official-envelope", data };
+
+  // Reject normalized reimport: schemaVersion 2 means already imported
+  if (report.schemaVersion === 2) {
+    throw new Error(
+      "Input is already a normalized score artifact (schemaVersion 2). " +
+        "The importer accepts only raw official Socket CLI exports.",
+    );
   }
-  // Detect a normalized shape (from a previous import pass)
-  if (report.schemaVersion === 2 && report.shallow && report.deep) {
-    return { shape: "normalized", data: report };
-  }
-  return { shape: "raw", data };
+
+  // Require the official Socket CLI envelope: data.self with score
+  if (!data.self || typeof data.self !== "object") return undefined;
+  if (!data.self.score || typeof data.self.score !== "object") return undefined;
+  if (!data.transitively || typeof data.transitively !== "object") return undefined;
+  if (!data.transitively.score || typeof data.transitively.score !== "object") return undefined;
+
+  return { shape: "official-envelope", data };
 }
 
 function normalize(report, inputSha256) {
   if (!report || typeof report !== "object") throw new Error("Socket report must be a JSON object");
 
-  const { shape, data } = extractEnvelope(report);
-
-  // Reject non-empty top-level alerts in the raw input.
-  // The official Socket CLI uses data.self.alerts and data.transitively.alerts.
-  // A top-level alerts array is ambiguous and must not be silently accepted.
-  if (shape === "raw" && Array.isArray(data.alerts) && data.alerts.length > 0) {
+  const envelope = extractOfficialEnvelope(report);
+  if (!envelope) {
     throw new Error(
-      "Top-level alerts array is not a supported import schema. " +
+      "Input is not a recognized Socket CLI export. " +
+        "Expected the official Socket CLI envelope with data.self and data.transitively. " +
+        "Hand-authored score JSON is not accepted as a CLI import.",
+    );
+  }
+
+  const { data } = envelope;
+
+  // Reject hidden alert containers in the official envelope.
+  // The only legal alert locations are data.self.alerts and data.transitively.alerts.
+  if (Array.isArray(report.alerts) && report.alerts.length > 0) {
+    throw new Error(
+      "Top-level report.alerts is not a supported alert source. " +
+        "Use the official Socket CLI envelope with data.self.alerts / data.transitively.alerts.",
+    );
+  }
+  if (Array.isArray(data.alerts) && data.alerts.length > 0) {
+    throw new Error(
+      "data.alerts is not a supported alert source. " +
+        "Use the official Socket CLI envelope with data.self.alerts / data.transitively.alerts.",
+    );
+  }
+  // report.shallow and report.deep are normalized-artifact fields.
+  // They must not appear on raw CLI input.
+  for (const field of ["shallow", "deep"]) {
+    if (report[field] && typeof report[field] === "object") {
+      throw new Error(
+        `report.${field} is not a valid field on a raw CLI export. ` +
+          "Use the official Socket CLI envelope with data.self / data.transitively.",
+      );
+    }
+  }
+  if (Array.isArray(data.alerts) && data.alerts.length > 0) {
+    throw new Error(
+      "data.alerts is not a supported alert source. " +
         "Use the official Socket CLI envelope with data.self.alerts / data.transitively.alerts.",
     );
   }
@@ -166,28 +210,12 @@ function normalize(report, inputSha256) {
   const lockfile = JSON.parse(readFileSync(join(root, "package-lock.json"), "utf8"));
   const inventory = classifyLockPackages({ root, manifest, lockfile });
 
-  const shallowScore = assertScore(
-    data.self?.score ?? report.shallow?.score ?? report.shallow,
-    "shallow",
-  );
-  const deepScore = assertScore(
-    data.transitively?.score ?? report.deep?.score ?? report.deep,
-    "deep",
-  );
+  const shallowScore = assertScore(data.self.score, "shallow");
+  const deepScore = assertScore(data.transitively.score, "deep");
 
-  // Alerts come ONLY from the official envelope or normalized scope fields.
-  const shallowAlerts = assertAlerts(
-    data.self?.alerts ?? (shape === "normalized" ? data.shallow?.alerts ?? [] : []),
-    "shallow",
-    inventory,
-  );
-  const deepAlerts = assertAlerts(
-    data.transitively?.alerts ?? (shape === "normalized" ? data.deep?.alerts ?? [] : []),
-    "deep",
-    inventory,
-  );
-
-  const deep = data.transitively ?? (shape === "normalized" ? data.deep : {}) ?? {};
+  // Alerts come ONLY from data.self.alerts and data.transitively.alerts
+  const shallowAlerts = assertAlerts(data.self.alerts ?? [], "shallow", inventory);
+  const deepAlerts = assertAlerts(data.transitively.alerts ?? [], "deep", inventory);
 
   return {
     schemaVersion: 2,
@@ -195,18 +223,18 @@ function normalize(report, inputSha256) {
     version,
     source,
     capturedAt: report.capturedAt ?? new Date().toISOString(),
-    captureKind: shape === "normalized" ? "historical-normalized-snapshot" : "socket-cli-import",
+    captureKind: "socket-cli-import",
     shallow: { score: shallowScore, alerts: shallowAlerts },
     deep: {
       score: deepScore,
-      dependencyCount: deep.dependencyCount ?? null,
-      capabilities: deep.capabilities ?? [],
-      lowest: deep.lowest ?? null,
+      dependencyCount: data.transitively.dependencyCount ?? null,
+      capabilities: data.transitively.capabilities ?? [],
+      lowest: data.transitively.lowest ?? null,
       alerts: deepAlerts,
     },
     provenance: {
       importedFrom: "Socket CLI export",
-      inputSha256: shape === "normalized" ? (report.provenance?.inputSha256 ?? null) : inputSha256,
+      inputSha256,
       dependencyEvidence: "package-lock.json via dependency-model.mjs",
     },
   };

@@ -36,13 +36,26 @@ export function normalizeSeverity(value) {
 }
 
 /**
- * Parse a Socket package URL strictly. Rejects arbitrary socket.dev paths.
- * Returns { package, version? } where the pathname explicitly identifies
- * the npm package. Returns undefined on any parse/validation failure.
+ * Accepted Socket package URL pathname forms (exact match, with or without
+ * trailing slash). The version segment is required for release evidence.
+ */
+const VALID_PATHNAMES = [
+  /^\/npm\/package\/([^/]+)@(\d+\.\d+\.\d+)\/?$/,
+  /^\/npm\/package\/([^/]+)\/alerts\/(\d+\.\d+\.\d+)\/?$/,
+];
+
+/**
+ * Parse a Socket package URL strictly. Uses `new URL()` and requires the
+ * entire pathname to match an accepted form. Rejects suffix garbage,
+ * credentials, and non-default ports.
+ *
+ * Returns { package, version } where both are populated, or undefined on
+ * any parse/validation failure.
  *
  * Accepted forms:
  *   https://socket.dev/npm/package/metaplate@0.6.0
  *   https://socket.dev/npm/package/metaplate/alerts/0.6.0
+ *   https://socket.dev/npm/package/metaplate/alerts/0.6.0?tab=dependencies
  */
 export function parseSocketPackageUrl(source) {
   if (typeof source !== "string") return undefined;
@@ -52,14 +65,22 @@ export function parseSocketPackageUrl(source) {
   } catch {
     return undefined;
   }
+  // Require HTTPS, socket.dev hostname, default port, no credentials
   if (parsed.protocol !== "https:" || parsed.hostname !== "socket.dev") return undefined;
-  const pathMatch = /^\/npm\/package\/([^/?]+)(?:\/alerts\/([^/?]+))?/.exec(parsed.pathname);
-  if (!pathMatch) return undefined;
-  return { package: pathMatch[1], version: pathMatch[2] ?? undefined };
+  if (parsed.username || parsed.password) return undefined;
+  if (parsed.port && parsed.port !== "443") return undefined;
+
+  for (const pattern of VALID_PATHNAMES) {
+    const match = pattern.exec(parsed.pathname);
+    if (match) return { package: match[1], version: match[2] };
+  }
+  return undefined;
 }
 
 /**
  * Validate the source URL against the expected package/version.
+ * Requires the URL to encode the version (versionless URLs are rejected
+ * for release evidence).
  * Returns undefined on success, or an error message string on failure.
  */
 export function validateSocketSource(source, expectedPackage, expectedVersion) {
@@ -68,7 +89,10 @@ export function validateSocketSource(source, expectedPackage, expectedVersion) {
   if (parsed.package !== expectedPackage && parsed.package !== `${expectedPackage}@${expectedVersion}`) {
     return `source URL identifies package ${parsed.package}, expected ${expectedPackage}`;
   }
-  if (parsed.version && parsed.version !== expectedVersion) {
+  if (!parsed.version) {
+    return `source URL does not encode a version; expected ${expectedVersion}`;
+  }
+  if (parsed.version !== expectedVersion) {
     return `source URL identifies version ${parsed.version}, expected ${expectedVersion}`;
   }
   return undefined;
@@ -76,35 +100,45 @@ export function validateSocketSource(source, expectedPackage, expectedVersion) {
 
 /**
  * Canonical alert identity parser. Returns { type, package, version } or
- * an error string. When both explicit package/version and example-derived
- * values exist, they must agree.
+ * an error string.
+ *
+ * Validates each explicit field independently against the example-derived
+ * values. Partial conflicts are rejected. Both name and type are treated
+ * as aliases for the same canonical field and must agree when both present.
  */
 export function normalizeAlertIdentity(alert) {
-  const type = alert.type ?? alert.name;
-  if (typeof type !== "string" || !type) return { error: "alert type/name is required" };
-
-  const exampleId = parseExampleIdentity(alert.example);
-  const explicitPkg = alert.package;
-  const explicitVer = alert.version;
-
-  let pkg;
-  let ver;
-
-  if (explicitPkg && explicitVer) {
-    pkg = explicitPkg;
-    ver = explicitVer;
-    if (exampleId.package && exampleId.package !== pkg) {
-      return { error: `example package ${exampleId.package} conflicts with explicit package ${pkg}` };
-    }
-    if (exampleId.version && exampleId.version !== ver) {
-      return { error: `example version ${exampleId.version} conflicts with explicit version ${ver}` };
-    }
-  } else if (exampleId.package || explicitPkg) {
-    pkg = exampleId.package ?? explicitPkg;
-    ver = exampleId.version ?? explicitVer;
+  const name = alert.name;
+  const type = alert.type;
+  const canonicalType = type ?? name;
+  if (typeof canonicalType !== "string" || !canonicalType) return { error: "alert type/name is required" };
+  if (name !== undefined && type !== undefined && name !== type) {
+    return { error: `alert name ${JSON.stringify(name)} conflicts with type ${JSON.stringify(type)}` };
   }
 
-  return { type, package: pkg, version: ver };
+  const exampleId = parseExampleIdentity(alert.example);
+
+  // Validate each explicit field independently against example
+  if (alert.package !== undefined) {
+    if (typeof alert.package !== "string" || !alert.package) {
+      return { error: "alert package must be a non-empty string" };
+    }
+    if (exampleId.package && exampleId.package !== alert.package) {
+      return { error: `example package ${exampleId.package} conflicts with explicit package ${alert.package}` };
+    }
+  }
+  if (alert.version !== undefined) {
+    if (typeof alert.version !== "string" || !alert.version) {
+      return { error: "alert version must be a non-empty string" };
+    }
+    if (exampleId.version && exampleId.version !== alert.version) {
+      return { error: `example version ${exampleId.version} conflicts with explicit version ${alert.version}` };
+    }
+  }
+
+  const pkg = alert.package ?? exampleId.package;
+  const ver = alert.version ?? exampleId.version;
+
+  return { type: canonicalType, package: pkg, version: ver };
 }
 
 /**
