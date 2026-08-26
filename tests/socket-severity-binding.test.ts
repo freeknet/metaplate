@@ -64,6 +64,12 @@ function currentHighAlert(score: ScoreReport) {
   return alert;
 }
 
+function currentDisposition(report: DispositionReport) {
+  const disposition = report.alerts[0];
+  if (!disposition) throw new Error("expected current Socket disposition");
+  return disposition;
+}
+
 describe("Socket score/disposition severity binding", () => {
   it("blocks a critical score finding even when its disposition is downgraded to high", async () => {
     const report = await reportForScore((score) => {
@@ -101,7 +107,7 @@ describe("Socket score/disposition severity binding", () => {
         currentHighAlert(score).severity = "critical";
       },
       (dispositions) => {
-        dispositions.alerts[0].severity = "critical";
+        currentDisposition(dispositions).severity = "critical";
       },
     );
 
@@ -124,7 +130,7 @@ describe("Socket score/disposition severity binding", () => {
     const report = await reportForScore(
       () => {},
       (dispositions) => {
-        dispositions.alerts[0].severity = "critical";
+        currentDisposition(dispositions).severity = "critical";
       },
     );
 
