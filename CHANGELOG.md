@@ -3,7 +3,7 @@
 All notable changes to Metaplate are documented in this file. The project uses
 [Semantic Versioning](https://semver.org/).
 
-## [0.7.0] - Unreleased
+## [0.7.0] - 2026-09-08
 
 ### Breaking
 
