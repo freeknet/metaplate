@@ -209,8 +209,9 @@ For a long-lived service, expose a health endpoint, listen on `process.env.PORT`
 and use a graceful shutdown path. `response()` owns `Content-Type` and computes
 `Content-Length`; configure cache and other non-representation headers through
 `headers`, but do not provide `Content-Type`, `Content-Length`, or
-`Content-Encoding` yourself. Set `etag: "sha256"` when a deterministic strong
-ETag derived from the final bytes is useful. The provider only needs the normal Node build
+`Content-Encoding` yourself; configuring one throws when the plate is defined.
+Set `etag: "sha256"` (or `etag: true`) when a deterministic strong ETag derived
+from the final bytes is useful. The provider only needs the normal Node build
 and start commands; no Railway or Render SDK is required:
 
 ```ts

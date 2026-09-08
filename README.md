@@ -3,7 +3,7 @@
 [![CI](https://github.com/lnorton89/metaplate/actions/workflows/ci.yml/badge.svg)](https://github.com/lnorton89/metaplate/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/lnorton89/metaplate/actions/workflows/codeql.yml/badge.svg)](https://github.com/lnorton89/metaplate/actions/workflows/codeql.yml)
 [![npm](https://img.shields.io/npm/v/metaplate)](https://www.npmjs.com/package/metaplate)
-[![Socket Badge](https://badge.socket.dev/npm/package/metaplate/0.5.0)](https://socket.dev/npm/package/metaplate/overview/0.5.0)
+[![Socket Badge](https://badge.socket.dev/npm/package/metaplate/0.6.0)](https://socket.dev/npm/package/metaplate/overview/0.6.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Composable, framework-neutral Open Graph image tooling for TypeScript.
@@ -120,9 +120,11 @@ const fetchable = og.fetchableFrom((request: Request) => ({
 
 `artifact` renders the bytes and matching descriptor metadata from the same copy.
 Node responses own `Content-Type`, `Content-Length`, and `Content-Encoding`; pass
-only unrelated headers such as `Cache-Control`. Set `etag: "sha256"` on the
-plate when responses should carry a deterministic strong ETag based on the final
-encoded bytes.
+only unrelated headers such as `Cache-Control`; configuring one of the owned
+headers throws at definition time. Set `etag: "sha256"` (or `etag: true`) on the
+plate when responses and artifacts should carry a deterministic strong ETag
+based on the final encoded bytes. While automatic ETags are on, a caller
+`ETag` header is rejected too; with `etag` off, a caller `ETag` passes through.
 
 Rendering is safe to call concurrently. Satori is a pure call, each render
 builds its own Resvg instance, and the font loaders memoize one shared copy
@@ -570,7 +572,8 @@ Open Graph or undocumented heuristics rather than a separate page schema.
 `socialImageCompatibility` checks local descriptor facts without making
 network requests. The conservative `universal` profile requires an absolute
 HTTPS URL and PNG/JPEG media type; named profiles add documented checks,
-including LinkedIn's dimensions and optional 5 MB limit:
+including LinkedIn's minimum dimensions, a 1.91:1 aspect-ratio warning, and
+optional 5 MB limit:
 
 ```ts
 import { socialImageCompatibility } from "metaplate";
@@ -582,6 +585,10 @@ const report = socialImageCompatibility(metadata.openGraph.images[0], {
 
 if (!report.compatible) throw new Error(JSON.stringify(report.issues));
 ```
+
+Pass `checkUrl: false` or `checkAlt: false` to evaluate a descriptor that has
+not been assigned a URL or alt text yet; the input type,
+`SocialCompatibilityImage`, makes both fields optional.
 
 Issues are `error`, `warning`, or `unknown`. Discord and Instagram checks are
 reported as unknown because neither publishes a stable webpage image-tag
@@ -788,16 +795,16 @@ For provider-neutral guidance covering static generation, Vercel and Netlify Nod
 functions, Railway and Render services, GitHub Pages, and edge-runtime limits,
 see the [deployment routes guide](docs/deployment.md). The release's current
 route evidence and certification status lives in
-[`deployment-evidence.json`](deployment-evidence.json). The short version is:
+[`deployment-evidence.json`](https://github.com/lnorton89/metaplate/blob/main/deployment-evidence.json)
+in the repository. The short version is:
 use a real `.png`/`.jpg` file for static hosts, use the provider's Node runtime
 for `metaplate/node`, and do not deploy the native renderer to an Edge/Workers
 runtime without a separately tested Wasm-compatible renderer.
 
 ## Verify generated files
 
-`metaplate verify` reads dimensions from SVG roots and PNG, JPEG, WebP, or
-structurally walked GIF files
-container headers. It runs a structural/truncation check: raster chunk streams
+`metaplate verify` reads dimensions from SVG roots and from PNG, JPEG, WebP,
+and GIF container headers. It runs a structural/truncation check: raster chunk streams
 are walked through image data to their terminator, while SVG roots must declare
 safe, positive pixel dimensions (without XML entity expansion). Obvious header
 shells, malformed roots, and partially written files fail even when their
@@ -833,18 +840,47 @@ npx metaplate verify --format jpeg --size 1200x630 out/og-image.jpg
 ```
 
 Or import `verifyImage` from `metaplate/image` in a test, which returns the
-format it verified alongside the dimensions. For a single application/reporting
-contract, use `verifySocialImage(bytes, descriptor, { targets: [...] })` to catch
-byte/metadata format and dimension mismatches alongside target compatibility
-findings. Add `--json --target linkedin --url https://example.com/og.png --alt
-\"Project card\"` to the CLI for machine-readable deployment checks. A target
-without `--url` or `--alt` verifies only image/platform facts and does not invent
-metadata; those fields are checked only when supplied.
-`metaplate/png` remains available for PNG-only checks.
+format it verified alongside the dimensions. `metaplate/png` remains available
+for PNG-only checks.
+
+For a single application/reporting contract, `verifySocialImage` from the root
+entry checks the encoded bytes and the published descriptor together. Structural
+image failures still throw; metadata disagreement and compatibility findings are
+returned so CI can report them:
+
+```ts
+import { verifySocialImage } from "metaplate";
+
+const report = verifySocialImage(bytes, metadata.openGraph.images[0], {
+  targets: ["universal", "linkedin"],
+  maxFileSize: 1_000_000,
+});
+
+if (!report.compatible) throw new Error(JSON.stringify(report.issues));
+console.log(report.actual); // { width, height, format, contentType, byteLength }
+```
+
+Every descriptor field is optional. `width` and `height` must be supplied
+together and are compared against the bytes; `type` is compared against the
+detected format; `url` and `alt` are checked only when present.
+
+The CLI exposes the same checks for deployment pipelines:
+
+```sh
+npx metaplate verify --json --target linkedin --url https://example.com/og.png --alt "Project card" --max-file-size 1000000 --size 1200x630 out/og-image.png
+```
+
+`--json` prints one stable report per file with `valid` (file-level findings)
+separate from per-target `compatible`. `--target` is repeatable.
+`--max-file-size N` fails any file over `N` bytes and works without a target.
+A target without `--url` or `--alt` verifies only image and platform facts and
+does not invent metadata; those two flags are evaluated against targets only,
+so they are rejected without at least one `--target`.
 
 ## Entry points
 
-- `metaplate` — framework-free paths, dimensions, and metadata.
+- `metaplate` — framework-free paths, dimensions, metadata, social
+  compatibility, and byte-level social image verification.
 - `metaplate/render` — Satori-based SVG generation. Satori is installed
   automatically.
 - `metaplate/node` — SVG, PNG, raw pixels, and any format a supplied encoder
