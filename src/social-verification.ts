@@ -52,7 +52,7 @@ export function verifySocialImage(
   options: SocialImageVerificationOptions = {},
 ): SocialImageVerificationReport {
   const actual = imageDimensions(bytes);
-  const byteLength = bytes instanceof Uint8Array ? bytes.byteLength : bytes.byteLength;
+  const byteLength = bytes.byteLength;
   if (descriptor.width !== undefined || descriptor.height !== undefined) {
     if (descriptor.width === undefined || descriptor.height === undefined) {
       throw new TypeError("descriptor width and height must be provided together");
@@ -93,7 +93,7 @@ export function verifySocialImage(
     issues.push(issue(
       "error",
       "format",
-      `Metadata advertises ${descriptor.type ?? "no media type"}, but image bytes are ${actualContentType}.`,
+      `Metadata advertises ${descriptor.type}, but image bytes are ${actualContentType}.`,
     ));
   }
   if (options.maxFileSize !== undefined && byteLength > options.maxFileSize) {

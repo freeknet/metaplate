@@ -8,7 +8,7 @@ import {
   VERIFY_USAGE,
 } from "./cli-args.js";
 import { verifySocialImage } from "./social-verification.js";
-import { verifyImage } from "./image.js";
+import { imageContentType, verifyImage } from "./image.js";
 import { METAPLATE_VERSION } from "./version.js";
 
 const CLI_HELP = `${VERIFY_USAGE}\n\nCommands:\n  verify    Verify image dimensions, format, and optional social metadata\n\nOptions:\n  -h, --help       Show this help\n  -v, --version    Show the installed version\n  --json           Emit one stable JSON report\n  --target NAME    Check a compatibility profile (repeatable)\n  --url URL        Metadata image URL for target checks\n  --alt TEXT       Metadata alt text for target checks\n  --max-file-size N  Reject images larger than N bytes\n`;
@@ -70,9 +70,7 @@ async function main(args: string[]) {
           ...(invocation.alt !== undefined ? { alt: invocation.alt } : {}),
           width: target.size.width,
           height: target.size.height,
-          type: dimensions.format === "svg"
-            ? "image/svg+xml"
-            : `image/${dimensions.format === "jpeg" ? "jpeg" : dimensions.format}`,
+          type: imageContentType(dimensions.format),
         };
         const report = verifySocialImage(bytes, descriptor, {
           ...(invocation.socialTargets.length > 0 ? { targets: invocation.socialTargets } : { targets: [] }),

@@ -77,6 +77,13 @@ describe("parseVerifyTargets", () => {
     { args: ["verify", "--size", "99999999999999999999x630", "image.png"] },
     { args: ["verify", "--size", "1200.5x630", "image.png"] },
     { args: ["verify", "--size", "-1200x630", "image.png"] },
+    { args: ["verify", "--max-file-size", "", "--size", "1200x630", "image.png"] },
+    { args: ["verify", "--max-file-size", "0x10", "--size", "1200x630", "image.png"] },
+    { args: ["verify", "--max-file-size", "-1", "--size", "1200x630", "image.png"] },
+    { args: ["verify", "--max-file-size", "1.5", "--size", "1200x630", "image.png"] },
+    { args: ["verify", "--target", "myspace", "--size", "1200x630", "image.png"] },
+    { args: ["verify", "--url", "https://example.com/og.png", "--size", "1200x630", "image.png"] },
+    { args: ["verify", "--alt", "Card", "--size", "1200x630", "image.png"] },
   ] satisfies { args: string[] }[])(`rejects invalid arguments: $args`, ({ args }) => {
     expect(() => parseVerifyTargets(args)).toThrow(VERIFY_USAGE);
   });
@@ -234,6 +241,39 @@ describe("verify CLI", () => {
     };
     expect(report.files[0]?.valid).toBe(false);
     expect(report.files[0]?.globalIssues.some(({ code }) => code === "file-size")).toBe(true);
+  });
+
+  it("verifies GIF files, reports them as universal-incompatible, and rejects a facebook-only claim mismatch", async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "metaplate-cli-"));
+    const gif = Uint8Array.from([
+      ...new TextEncoder().encode("GIF89a"),
+      0x10, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00,
+      0x2c, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x10, 0x00, 0x00,
+      0x02, 0x02, 0x44, 0x01, 0x00, 0x3b,
+    ]);
+    await writeFile(path.join(cwd, "card.gif"), gif);
+
+    const plain = run(["verify", "--format", "gif", "--size", "16x16", "card.gif"], cwd);
+    expect(plain.status).toBe(0);
+    expect(plain.stdout).toContain("✓ card.gif 16x16");
+
+    const universal = run(
+      ["verify", "--json", "--target", "universal", "--target", "facebook", "--size", "16x16", "card.gif"],
+      cwd,
+    );
+    expect(universal.status).toBe(1);
+    const report = JSON.parse(universal.stdout) as {
+      files: Array<{
+        valid: boolean;
+        image: { format: string };
+        targets: Record<string, { compatible: boolean; issues: Array<{ code?: string }> }>;
+      }>;
+    };
+    expect(report.files[0]?.valid).toBe(true);
+    expect(report.files[0]?.image.format).toBe("gif");
+    expect(report.files[0]?.targets.universal?.compatible).toBe(false);
+    expect(report.files[0]?.targets.universal?.issues.some(({ code }) => code === "format")).toBe(true);
+    expect(report.files[0]?.targets.facebook?.compatible).toBe(true);
   });
 
   it("honors --format and rejects a format mismatch", async () => {

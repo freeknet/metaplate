@@ -692,7 +692,7 @@ function webpSize(bytes: Uint8Array): ImageDimensions {
   return dimensions;
 }
 
-/** Reads dimensions from an SVG, PNG, JPEG, or WebP without decoding pixels. */
+/** Reads dimensions from an SVG, PNG, JPEG, WebP, or GIF without decoding pixels. */
 export function imageDimensions(input: ArrayBuffer | Uint8Array): ImageDimensions {
   const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
   if (bytes.byteLength === 0) throw new Error("Unrecognized image: file is too short");
@@ -707,7 +707,7 @@ export function imageDimensions(input: ArrayBuffer | Uint8Array): ImageDimension
   if (ascii(bytes, 0, 4) === "RIFF" && ascii(bytes, 8, 4) === "WEBP") return webpSize(bytes);
   if (isSvg) return svgSize(bytes);
 
-  throw new Error("Unrecognized image: expected an SVG, PNG, JPEG, or WebP signature");
+  throw new Error("Unrecognized image: expected an SVG, PNG, JPEG, WebP, or GIF signature");
 }
 
 /** Throws when an image does not have the expected dimensions or format. */

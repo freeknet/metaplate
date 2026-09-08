@@ -1,24 +1,14 @@
 import path from "node:path";
 import process from "node:process";
 import { MAX_IMAGE_DIMENSION, type ImageSize } from "./core.js";
-import type { SocialTarget } from "./compatibility-profiles.js";
+import { SOCIAL_TARGETS, type SocialTarget } from "./compatibility-profiles.js";
 import type { ImageFormat } from "./image.js";
 
 export const VERIFY_USAGE =
-  "Usage: metaplate verify [--json] [--target TARGET] [--url URL] [--alt TEXT] [--format svg|png|jpeg|webp|gif] --size WIDTHxHEIGHT <file> [...] [--size WIDTHxHEIGHT <file> [...]]";
+  "Usage: metaplate verify [--json] [--target TARGET] [--url URL] [--alt TEXT] [--max-file-size BYTES] [--format svg|png|jpeg|webp|gif] --size WIDTHxHEIGHT <file> [...] [--size WIDTHxHEIGHT <file> [...]]";
 
 const FORMATS = new Set<ImageFormat>(["svg", "png", "jpeg", "webp", "gif"]);
-const TARGETS = new Set<SocialTarget>([
-  "universal",
-  "openGraph",
-  "facebook",
-  "x",
-  "linkedin",
-  "slack",
-  "mastodon",
-  "discord",
-  "instagram",
-]);
+const TARGETS = new Set<SocialTarget>(SOCIAL_TARGETS);
 
 export type VerifyTarget = {
   file: string;
@@ -61,8 +51,10 @@ function parseSize(value: string | undefined): ImageSize {
 }
 
 function parseMaxFileSize(value: string | undefined): number {
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+  // Only plain decimal digits: `Number("")` is 0 and `Number("0x10")` is 16,
+  // and neither is a byte ceiling anyone typed on purpose.
+  const parsed = /^\d+$/.test(value ?? "") ? Number(value) : Number.NaN;
+  if (!Number.isSafeInteger(parsed)) {
     throw new Error(`Invalid max file size. ${VERIFY_USAGE}`);
   }
   return parsed;
@@ -132,6 +124,11 @@ export function parseVerifyInvocation(args: string[]): VerifyInvocation {
   }
 
   if (targets.length === 0) throw new Error(VERIFY_USAGE);
+  // Metadata fields are only ever evaluated against a compatibility profile;
+  // accepting them without one would silently verify less than was asked for.
+  if ((url !== undefined || alt !== undefined) && socialTargets.length === 0) {
+    throw new Error(`--url and --alt require at least one --target. ${VERIFY_USAGE}`);
+  }
   return {
     targets,
     json,
