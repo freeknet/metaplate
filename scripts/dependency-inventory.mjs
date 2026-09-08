@@ -1,13 +1,19 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import process from "node:process";
 import { join, resolve } from "node:path";
 import { fileURLToPath, URL } from "node:url";
-import { classifyLockPackages } from "./dependency-model.mjs";
+import { REMOTE_SPECIFIER_PATTERN, classifyLockPackages } from "./dependency-model.mjs";
+import { lifecycleScriptsDisabledInCi } from "./workflow-policy.mjs";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
-const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
-const lockfile = JSON.parse(readFileSync(join(root, "package-lock.json"), "utf8"));
-const lockPackages = classifyLockPackages({ root, manifest, lockfile });
+const manifestSource = readFileSync(join(root, "package.json"));
+const lockfileSource = readFileSync(join(root, "package-lock.json"));
+const manifest = JSON.parse(manifestSource.toString("utf8"));
+const lockfile = JSON.parse(lockfileSource.toString("utf8"));
+const lockPackages = classifyLockPackages({ manifest, lockfile });
+const REGISTRY = "https://registry.npmjs.org/";
+const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const direct = new Set([
   ...Object.keys(manifest.dependencies ?? {}),
   ...Object.keys(manifest.devDependencies ?? {}),
@@ -46,12 +52,21 @@ const report = {
     installScriptPackages: lockPackages.filter((entry) => entry.installScript).length,
     remoteDependencyPackages: lockPackages.filter((entry) => entry.remoteDependency).length,
   },
+  // Every control is observed, not asserted: a false value here fails
+  // verify-dependency-inventory.mjs instead of being copied from a constant.
   controls: {
-    lifecycleScriptsDisabledInCi: true,
+    lifecycleScriptsDisabledInCi: lifecycleScriptsDisabledInCi(),
     lockfileVersion: lockfile.lockfileVersion,
-    lockfileInstallScriptField: true,
-    registryOnlyExpected: true,
-    remoteSpecifierPattern: "git|http|https|ssh|file",
+    lockfileInstallScriptField: Number(lockfile.lockfileVersion) >= 2,
+    registryOnly: lockPackages.every(
+      (entry) => typeof entry.resolved === "string" && entry.resolved.startsWith(REGISTRY),
+    ),
+    integrityComplete: lockPackages.every(
+      (entry) => typeof entry.integrity === "string" && entry.integrity.startsWith("sha512-"),
+    ),
+    remoteSpecifierPattern: REMOTE_SPECIFIER_PATTERN.source,
+    manifestSha256: sha256(manifestSource),
+    lockfileSha256: sha256(lockfileSource),
   },
   packages: lockPackages,
 };

@@ -4,6 +4,7 @@ import { validateDeploymentManifest } from "../scripts/verify-deployment-evidenc
 const base = {
   schemaVersion: 1,
   release: "0.7.0",
+  status: "in-progress",
   policy: {
     certifiedRequires: [
       "packed-artifact",

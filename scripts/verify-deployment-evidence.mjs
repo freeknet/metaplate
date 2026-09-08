@@ -5,6 +5,7 @@ import process from "node:process";
 import { runScript } from "./run-script.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const allowedManifestStatuses = new Set(["in-progress", "complete"]);
 const allowedStatuses = new Set([
   "documented",
   "documented-recipe",
@@ -38,16 +39,30 @@ function present(value) {
 export function validateDeploymentManifest(manifest) {
   const errors = [];
   if (manifest.schemaVersion !== 1) errors.push("schemaVersion must be 1");
-  if (!Array.isArray(manifest.policy?.certifiedRequires) || manifest.policy.certifiedRequires.length < 5) {
+  if (!Array.isArray(manifest.policy?.certifiedRequires)) {
     errors.push("policy.certifiedRequires must declare the certification evidence requirements");
   } else {
-    for (const requirement of manifest.policy.certifiedRequires) {
+    // Exact set equality: a repeated or missing requirement would let a route
+    // certify without one of the executable evidence checks.
+    const declared = manifest.policy.certifiedRequires;
+    for (const requirement of new Set(declared)) {
       if (!evidenceFieldByRequirement.has(requirement)) {
         errors.push(`policy.certifiedRequires contains unknown requirement ${requirement}`);
       }
     }
+    for (const requirement of evidenceFieldByRequirement.keys()) {
+      if (!declared.includes(requirement)) {
+        errors.push(`policy.certifiedRequires is missing requirement ${requirement}`);
+      }
+    }
+    if (new Set(declared).size !== declared.length) {
+      errors.push("policy.certifiedRequires contains duplicate requirements");
+    }
   }
   if (manifest.release !== "0.7.0") errors.push("release must be 0.7.0");
+  if (!allowedManifestStatuses.has(manifest.status)) {
+    errors.push("status must be in-progress or complete");
+  }
   if (manifest.policy?.edgeNativeRendererRequired !== true) {
     errors.push("edgeNativeRendererRequired must be true");
   }
@@ -63,7 +78,7 @@ export function validateDeploymentManifest(manifest) {
     }
     if (!allowedStatuses.has(route.status)) errors.push(`${route.id}: unknown status ${route.status}`);
     if (!present(route.evidence)) errors.push(`${route.id}: evidence is required`);
-    if ((/edge/i.test(route.runtime) || route.id === "edge") && route.status === "certified") {
+    if ((route.edgeRuntime === true || /edge|workers/i.test(route.runtime) || route.id === "edge") && route.status === "certified") {
       errors.push(`${route.id}: native edge runtime cannot be certified without an edge renderer`);
     }
     if (route.status === "not-supported" && !present(route.reason)) {
@@ -76,7 +91,7 @@ export function validateDeploymentManifest(manifest) {
       if (!route.certification || typeof route.certification !== "object") {
         errors.push(`${route.id}: certified routes require a certification object`);
       } else {
-        for (const requirement of manifest.policy.certifiedRequires) {
+        for (const requirement of Array.isArray(manifest.policy?.certifiedRequires) ? manifest.policy.certifiedRequires : []) {
           const field = evidenceFieldByRequirement.get(requirement);
           if (field && !present(route.certification[field])) {
             errors.push(`${route.id}: certification.${field} is required by ${requirement}`);
@@ -110,7 +125,7 @@ function main() {
   const certified = manifest.routes.filter((route) => route.status === "certified");
   const localContracts = manifest.routes.filter((route) => route.status === "certified-local-contract");
   process.stdout.write(
-    `Verified deployment evidence manifest: ${manifest.routes.length} routes, ${localContracts.length} local contracts, ${certified.length} provider-certified.\n`,
+    `Verified deployment evidence manifest (${manifest.status}): ${manifest.routes.length} routes, ${localContracts.length} local contracts, ${certified.length} provider-certified.\n`,
   );
 }
 

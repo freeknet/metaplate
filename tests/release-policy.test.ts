@@ -2,11 +2,15 @@ import { describe, expect, it } from "vitest";
 import { packageNameFromLockPath } from "../scripts/dependency-model.mjs";
 import { validateDeploymentManifest } from "../scripts/verify-deployment-evidence.mjs";
 import { validateSocketReport } from "../scripts/verify-socket-dispositions.mjs";
-import { validateCheckResults } from "../scripts/release-evidence-report.mjs";
+import { REQUIRED_ARTIFACTS, validateCheckResults } from "../scripts/release-evidence-report.mjs";
+import { validateEvidenceBundle } from "../scripts/verify-evidence-bundle.mjs";
+import { isRemoteSpecifier } from "../scripts/dependency-model.mjs";
+import { lifecycleScriptErrors, workflowPinErrors } from "../scripts/workflow-policy.mjs";
 
 const baseDeployment = {
   schemaVersion: 1,
   release: "0.7.0",
+  status: "in-progress",
   policy: {
     certifiedRequires: [
       "packed-artifact",
@@ -97,6 +101,28 @@ describe("deployment evidence policy", () => {
     expect(errors).toContain("policy.certifiedRequires contains unknown requirement custom-evidence");
   });
 
+  it("rejects duplicate or missing policy requirements and unknown manifest status", () => {
+    const duplicated = validateDeploymentManifest({
+      ...baseDeployment,
+      policy: {
+        ...baseDeployment.policy,
+        certifiedRequires: Array.from({ length: 5 }, () => "packed-artifact"),
+      },
+      routes: [{ ...certifiedRoute, certification: { ...certifiedRoute.certification, productionBuild: false } }],
+    });
+    expect(duplicated).toContain("policy.certifiedRequires contains duplicate requirements");
+    expect(duplicated).toContain("policy.certifiedRequires is missing requirement production-build");
+    expect(validateDeploymentManifest({ ...baseDeployment, status: "done", routes: [certifiedRoute] })).toContain("status must be in-progress or complete");
+    expect(validateDeploymentManifest({
+      ...baseDeployment,
+      routes: [{ ...certifiedRoute, id: "workers", runtime: "Cloudflare Workers" }],
+    })).toContain("workers: native edge runtime cannot be certified without an edge renderer");
+    expect(validateDeploymentManifest({
+      ...baseDeployment,
+      routes: [{ ...certifiedRoute, id: "flagged", runtime: "Custom", edgeRuntime: true }],
+    })).toContain("flagged: native edge runtime cannot be certified without an edge renderer");
+  });
+
   it("rejects certified routes with missing evidence and unknown statuses", () => {
     const missing = validateDeploymentManifest({
       ...baseDeployment,
@@ -180,14 +206,17 @@ describe("release evidence consistency", () => {
   });
 });
 
+const REQUIRED_CHECK_NAMES = [
+  "production-build",
+  "packed-artifact",
+  "dependency-inventory",
+  "deployment-evidence-policy",
+  "socket-release-policy",
+  "workflow-policy",
+];
+
 describe("release check evidence", () => {
-  const checks = [
-    "production-build",
-    "packed-artifact",
-    "dependency-inventory",
-    "deployment-evidence-policy",
-    "socket-release-policy",
-  ].map((name) => ({ name, status: "passed" }));
+  const checks = REQUIRED_CHECK_NAMES.map((name) => ({ name, status: "passed" }));
 
   it("requires every expected check exactly once and passed", () => {
     expect(validateCheckResults({ schemaVersion: 1, commitSha: "abc", releaseVersion: "0.6.0", checks }, { commitSha: "abc", releaseVersion: "0.6.0" })).toEqual(checks);
@@ -198,12 +227,60 @@ describe("release check evidence", () => {
       [],
       checks.slice(1),
       [...checks, checks[0]!],
-      [...checks.slice(0, 4), { name: "unknown", status: "passed" }],
-      [...checks.slice(0, 4), { name: "socket-release-policy", status: "unknown" }],
+      [...checks.slice(0, 5), { name: "unknown", status: "passed" }],
+      [...checks.slice(0, 5), { name: "workflow-policy", status: "unknown" }],
     ];
     for (const invalidChecks of cases) {
       expect(() => validateCheckResults({ schemaVersion: 1, commitSha: "abc", releaseVersion: "0.6.0", checks: invalidChecks }, { commitSha: "abc", releaseVersion: "0.6.0" })).toThrow();
     }
+  });
+});
+
+describe("retained evidence bundle", () => {
+  const digest = (file: string) => (REQUIRED_ARTIFACTS.includes(file) ? "a".repeat(64) : undefined);
+  const report = {
+    schemaVersion: 1,
+    verificationStatus: "passed",
+    commitSha: "abc",
+    releaseVersion: "0.6.0",
+    checks: REQUIRED_CHECK_NAMES.map((name) => ({ name, status: "passed" })),
+    artifacts: REQUIRED_ARTIFACTS.map((file) => ({ file, sha256: "a".repeat(64) })),
+  };
+  const context = { commitSha: "abc", releaseVersion: "0.6.0", digest };
+
+  it("accepts a passed report whose artifacts all hash correctly", () => {
+    expect(validateEvidenceBundle(report, context)).toEqual([]);
+  });
+
+  it("rejects failed, foreign, incomplete, or tampered bundles", () => {
+    expect(validateEvidenceBundle({ ...report, verificationStatus: "failed" }, context)).toContain("release-evidence-report.json verificationStatus is failed, not passed");
+    expect(validateEvidenceBundle(report, { ...context, commitSha: "other" })).toContain("release-evidence-report.json commitSha abc does not match other");
+    expect(validateEvidenceBundle({ ...report, artifacts: report.artifacts.slice(1) }, context)).toContain(`release evidence does not retain ${REQUIRED_ARTIFACTS[0]}`);
+    expect(validateEvidenceBundle({ ...report, checks: report.checks.slice(1) }, context)).toContain(`release-evidence-report.json is missing the ${REQUIRED_CHECK_NAMES[0]} check`);
+    expect(validateEvidenceBundle(report, { ...context, digest: () => "b".repeat(64) })).toContain(`${REQUIRED_ARTIFACTS[0]} is missing or does not match its recorded SHA-256`);
+  });
+});
+
+describe("remote dependency specifiers", () => {
+  it("recognizes git, hosted shorthand, URL, and file specifiers", () => {
+    for (const specifier of ["git+https://github.com/a/b.git", "git+ssh://git@github.com/a/b.git", "git://host/a.git", "github:a/b", "https://example.com/a.tgz", "file:../a", "ssh://git@host/a.git"]) {
+      expect(isRemoteSpecifier(specifier), specifier).toBe(true);
+    }
+    for (const specifier of ["^1.0.0", "latest", "npm:react@^19", "workspace:*", "1.x", undefined]) {
+      expect(isRemoteSpecifier(specifier), String(specifier)).toBe(false);
+    }
+  });
+});
+
+describe("workflow policy", () => {
+  it("requires full-SHA pins with version comments and script-free installs", () => {
+    const pinned = "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n      - run: npm ci --ignore-scripts\n";
+    expect(workflowPinErrors(pinned, "ci.yml")).toEqual([]);
+    expect(lifecycleScriptErrors(pinned, "ci.yml")).toEqual([]);
+    expect(workflowPinErrors("      - uses: actions/checkout@v7\n", "ci.yml")).toEqual(["ci.yml:1: actions/checkout@v7 is not pinned to a full commit SHA"]);
+    expect(workflowPinErrors("      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1\n", "ci.yml")).toEqual(["ci.yml:1: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 needs a trailing version comment"]);
+    expect(workflowPinErrors("      - uses: ./.github/actions/local\n", "ci.yml")).toEqual([]);
+    expect(lifecycleScriptErrors("      - run: npm ci\n", "ci.yml")).toEqual(["ci.yml:1: npm ci must pass --ignore-scripts"]);
   });
 });
 

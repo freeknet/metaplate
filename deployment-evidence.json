@@ -61,6 +61,7 @@
       "id": "edge",
       "provider": "Cloudflare Workers/Vercel Edge/Netlify Edge",
       "runtime": "edge",
+      "edgeRuntime": true,
       "api": "not supported by metaplate/node",
       "status": "not-supported",
       "evidence": "docs/deployment.md",

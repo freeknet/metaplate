@@ -9,7 +9,6 @@ import {
   strongestReachability,
 } from "./dependency-model.mjs";
 import {
-  REACHABILITY_VALUES,
   SOCKET_RELEASE_POLICY,
   validateReleasePolicy,
   normalizeSeverity,
@@ -23,7 +22,7 @@ import {
   validateCapturedAt,
   validateNormalizedAt,
   validatePackageSizeBytes,
-  validateCanonicalSeverity,
+  validateDispositionAlert,
 } from "./socket-evidence.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -217,33 +216,17 @@ export function validateSocketReport(report, now = new Date()) {
       continue;
     }
 
-    const requiredStrings = ["type", "package", "version", "path", "reachability", "evidence", "verification"];
-    for (const field of requiredStrings) {
-      if (typeof alert[field] !== "string" || !alert[field].trim()) {
-        errors.push(`${prefix}: ${field} must be a non-empty string`);
-        break;
-      }
-    }
-    if (errors.length > 0 && errors[errors.length - 1].includes(prefix)) continue;
-
-    const sevErr = validateCanonicalSeverity(alert.severity);
-    if (sevErr) {
-      errors.push(`${prefix}: ${sevErr}`);
+    // Shared structural validation keeps the importer and verifier aligned.
+    const shapeError = validateDispositionAlert(alert, index);
+    if (shapeError) {
+      errors.push(shapeError);
       continue;
     }
-
     if (alert.disposition && !allowedDispositions.has(alert.disposition)) {
       errors.push(`${prefix}: disposition "${alert.disposition}" is not allowed by release policy`);
     }
 
-    if (!REACHABILITY_VALUES.includes(alert.reachability)) {
-      errors.push(`${prefix}: reachability "${alert.reachability}" is not a recognized value`);
-    }
-
-    if (!requireDispositionSeverities.has(alert.severity)) {
-      errors.push(`${prefix}: disposition reports should only contain high/critical alerts, got "${alert.severity}"`);
-    }
-
+    // Policy-required disposition
     if (requireDispositionSeverities.has(alert.severity) && !alert.disposition) {
       errors.push(`${prefix}: disposition required for ${alert.severity}`);
     }

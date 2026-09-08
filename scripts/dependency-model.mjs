@@ -1,11 +1,7 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-
-const INSTALL_SCRIPTS = new Set(["preinstall", "install", "postinstall", "prepare"]);
 const NATIVE_PATTERN = /(?:resvg|sharp|swc|compiler-binding|wasm|napi|canvas|esbuild)/i;
 
 export function packageNameFromLockPath(lockPath) {
-  const normalized = lockPath.replaceAll("\\\\", "/");
+  const normalized = lockPath.replaceAll("\\", "/");
   const marker = normalized.lastIndexOf("node_modules/");
   if (marker === -1) return undefined;
   const remainder = normalized.slice(marker + "node_modules/".length);
@@ -22,8 +18,15 @@ export function packageIdentityFromExample(example) {
   return { package: value.slice(0, at), version: value.slice(at + 1) };
 }
 
+/**
+ * Specifiers npm resolves outside the registry: git URLs and shorthands,
+ * direct tarball URLs, and local files. Registry ranges, tags, and aliases
+ * (`npm:name@range`) are not remote.
+ */
+export const REMOTE_SPECIFIER_PATTERN = /^(?:git(?:\+[a-z]+)?:|github:|gitlab:|bitbucket:|gist:|https?:|ssh:|file:)/i;
+
 export function isRemoteSpecifier(specifier) {
-  return /^(?:git(?:\\+|:)|https?:|ssh:|file:)/i.test(specifier);
+  return typeof specifier === "string" && REMOTE_SPECIFIER_PATTERN.test(specifier);
 }
 
 function packagePathCandidates(parentPath, dependency) {
@@ -32,15 +35,11 @@ function packagePathCandidates(parentPath, dependency) {
   while (true) {
     candidates.push(`${base}/node_modules/${dependency}`);
     const marker = base.lastIndexOf("/node_modules/");
-    if (marker >= 0) {
-      base = base.slice(0, marker);
-    } else if (base.startsWith("node_modules/")) {
-      candidates.push(`node_modules/${dependency}`);
-      break;
-    } else {
+    if (marker === -1) {
       candidates.push(`node_modules/${dependency}`);
       break;
     }
+    base = base.slice(0, marker);
   }
   return [...new Set(candidates)];
 }
@@ -52,12 +51,14 @@ function resolveLockPackage(packages, parentPath, dependency) {
   return undefined;
 }
 
-function packageHasInstallScript(root, lockPath, entry) {
-  if (typeof entry.hasInstallScript === "boolean") return entry.hasInstallScript;
-  const manifestPath = join(root, lockPath, "package.json");
-  if (!existsSync(manifestPath)) return false;
-  const installed = JSON.parse(readFileSync(manifestPath, "utf8"));
-  return Object.keys(installed.scripts ?? {}).some((script) => INSTALL_SCRIPTS.has(script));
+/**
+ * npm's lockfile records `hasInstallScript` for every package whose
+ * preinstall/install/postinstall would run. Reading installed manifests
+ * instead would make the inventory depend on which optional platform
+ * packages happen to be present on the machine that generated it.
+ */
+function packageHasInstallScript(entry) {
+  return entry.hasInstallScript === true;
 }
 
 function nativeEvidence(name, entry) {
@@ -141,19 +142,16 @@ function displayClassification(state) {
  * Runtime roots are regular dependencies and peers; development roots are only
  * used when a package is not already reachable from a runtime root.
  */
-export function classifyLockPackages({ root, manifest, lockfile }) {
+export function classifyLockPackages({ manifest, lockfile }) {
   const packages = lockfile.packages ?? {};
   const directKinds = directDependencyKinds(manifest);
   const classifications = new Map();
   const dependencyPaths = new Map();
-  const visited = new Set();
 
   function walk(path, state, edgeOptional = false, lineage = "", ancestry = new Set()) {
     const nextState = { ...state, optional: state.optional || edgeOptional };
     if (ancestry.has(path)) return;
-    const key = `${nextState.origin}:${path}:${nextState.optional}`;
     const nextAncestry = new Set(ancestry).add(path);
-    visited.add(key);
     const entry = packages[path];
     if (!entry) return;
 
@@ -170,13 +168,9 @@ export function classifyLockPackages({ root, manifest, lockfile }) {
     const merged = mergeState(current, { ...nextState, optional: nextState.optional || entry.optional === true });
     classifications.set(path, merged);
 
-    for (const [dependency, specifier] of Object.entries(entry.dependencies ?? {})) {
+    for (const dependency of Object.keys(entry.dependencies ?? {})) {
       const child = resolveLockPackage(packages, path, dependency);
-      if (child) {
-        walk(child, nextState, false, currentPath, nextAncestry);
-      } else if (isRemoteSpecifier(specifier)) {
-        classifications.set(`${path}:${dependency}`, "unknown");
-      }
+      if (child) walk(child, nextState, false, currentPath, nextAncestry);
     }
     for (const dependency of Object.keys(entry.optionalDependencies ?? {})) {
       const child = resolveLockPackage(packages, path, dependency);
@@ -220,8 +214,9 @@ export function classifyLockPackages({ root, manifest, lockfile }) {
       binaryEvidence: binaryEvidence(name, entry),
       platformSpecific: isPlatformSpecific(name),
       platformBinary: isPlatformSpecific(name) && binaryEvidence(name, entry).length > 0,
-      installScript: packageHasInstallScript(root, path, entry),
+      installScript: packageHasInstallScript(entry),
       resolved: entry.resolved ?? null,
+      integrity: entry.integrity ?? null,
       remoteDependency: Object.values(entry.dependencies ?? {}).some(isRemoteSpecifier),
       dependencyPaths: [...(dependencyPaths.get(path) ?? [])].sort(),
     });

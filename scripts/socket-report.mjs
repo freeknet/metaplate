@@ -9,6 +9,7 @@ import {
   strongestReachability,
 } from "./dependency-model.mjs";
 import {
+  SCORE_KEYS,
   normalizeSeverity,
   validateSocketSource,
   normalizeAlertIdentity,
@@ -33,10 +34,7 @@ function fail(message) {
 function assertScore(score, label) {
   const error = validateSocketScoreVector(score, label);
   if (error) throw new Error(error);
-  return Object.freeze(Object.fromEntries(
-    ["overall", "supplyChain", "maintenance", "quality", "vulnerability", "license"]
-      .map((key) => [key, score[key]]),
-  ));
+  return Object.freeze(Object.fromEntries(SCORE_KEYS.map((key) => [key, score[key]])));
 }
 
 /**
@@ -346,7 +344,7 @@ if (!input) {
       JSON.parse(text.replace(/^\uFEFF/, "")),
       inputSha256,
     );
-    writeFileSync(resolve(output), `${JSON.stringify(report, null, 2)}\n`);
+    writeFileSync(resolve(root, output), `${JSON.stringify(report, null, 2)}\n`);
     process.stdout.write(
       `Imported Socket report for ${report.package}@${report.version}: ${output}\n`,
     );

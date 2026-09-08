@@ -1,4 +1,5 @@
 export const REQUIRED_CHECKS: ReadonlySet<string>;
+export const REQUIRED_ARTIFACTS: readonly string[];
 export function validateCheckResults(
   checkResults: unknown,
   context: { commitSha: string; releaseVersion: string },

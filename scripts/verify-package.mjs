@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath, URL } from "node:url";
+import { releaseCommitSha } from "./run-script.mjs";
 import {
   CLI_IMAGE_FIXTURES,
   FONTSOURCE_FONT_FIXTURE,
@@ -31,7 +32,8 @@ import {
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const temporary = mkdtempSync(join(tmpdir(), "metaplate-package-"));
-const routeEvidence = { schemaVersion: 1, commitSha: process.env.GITHUB_SHA ?? "local", routes: {} };
+const commitSha = releaseCommitSha();
+const routeEvidence = { schemaVersion: 1, commitSha, routes: {} };
 const consumer = join(temporary, "consumer");
 const standalone = join(temporary, "standalone");
 const bare = join(temporary, "bare");
@@ -480,7 +482,7 @@ const image = social.openGraph.images[0];
       import { verifyImage } from "metaplate/image";
       import { createNodeOg } from "metaplate/node";
 
-      const routeEvidence = { schemaVersion: 1, commitSha: ${JSON.stringify(process.env.GITHUB_SHA ?? "local")}, routes: {} };
+      const routeEvidence = { schemaVersion: 1, commitSha: ${JSON.stringify(commitSha)}, routes: {} };
       const og = createNodeOg({
         alt: () => "Express smoke card",
         fonts: fontsourceFontLoader([${fontsourceFontSource}]),
@@ -556,7 +558,7 @@ const image = social.openGraph.images[0];
       import { createNodeOg } from "metaplate/node";
       import { writeFileSync } from "node:fs";
 
-      const routeEvidence = { schemaVersion: 1, commitSha: ${JSON.stringify(process.env.GITHUB_SHA ?? "local")}, routes: {} };
+      const routeEvidence = { schemaVersion: 1, commitSha: ${JSON.stringify(commitSha)}, routes: {} };
       const og = createNodeOg({
         alt: (copy) => \`${"${copy.title}"} deployment card\`,
         fonts: fontsourceFontLoader([${fontsourceFontSource}]),
@@ -628,8 +630,18 @@ const image = social.openGraph.images[0];
         const base = \`http://127.0.0.1:\${address.port}\`;
         const health = await fetch(base + "/health");
         if (!health.ok || (await health.json()).ok !== true) throw new Error("Node health endpoint failed.");
-        for (const path of ["/vercel/packed?slug=query", "/vercel-fetchable?slug=query", "/netlify/packed"]) {
+        // Each route is fetched twice with different slugs; identical bytes
+        // would mean the request never reached the copy resolver.
+        const routePairs = [
+          ["/vercel/packed?slug=query", "/vercel/packed?slug=other"],
+          ["/vercel-fetchable?slug=query", "/vercel-fetchable?slug=other"],
+          ["/netlify/packed", "/netlify/other"],
+        ];
+        for (const [path, alternatePath] of routePairs) {
           const result = await fetch(base + path);
+          const alternate = await fetch(base + alternatePath);
+          if (!alternate.ok) throw new Error(\`${"${alternatePath}"} returned \${alternate.status}.\`);
+          const alternateBytes = new Uint8Array(await alternate.arrayBuffer());
           if (!result.ok) throw new Error(\`${"${path}"} returned \${result.status}.\`);
           if (result.headers.get("content-type") !== ${JSON.stringify(SOCIAL_CARD_FIXTURE.contentType)}) {
             throw new Error(\`${"${path}"} returned the wrong content type.\`);
@@ -639,12 +651,16 @@ const image = social.openGraph.images[0];
           }
           const imageBytes = new Uint8Array(await result.arrayBuffer());
           const image = verifyImage(imageBytes, ${cardSizeSource}, "png");
+          verifyImage(alternateBytes, ${cardSizeSource}, "png");
+          if (Buffer.from(imageBytes).equals(Buffer.from(alternateBytes))) {
+            throw new Error(\`${"${path}"} rendered the same bytes for a different slug; the route did not resolve its copy from the request.\`);
+          }
           const routeId = path.startsWith("/netlify/") ? "netlify-node" : "vercel-node";
           routeEvidence.routes[routeId] = {
             packedArtifact: true,
             servedOutput: true,
             imageVerification: { verified: true, format: image.format, width: image.width, height: image.height, byteLength: imageBytes.byteLength },
-            responseVerification: { verified: true, contentType: result.headers.get("content-type"), queryOrPathResolved: true },
+            responseVerification: { verified: true, contentType: result.headers.get("content-type"), queryOrPathResolved: true, distinctSlugByteLengths: [imageBytes.byteLength, alternateBytes.byteLength] },
           };
         }
       } finally {
