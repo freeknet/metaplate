@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath, URL } from "node:url";
+import { releaseCommitSha } from "./run-script.mjs";
 import {
   CLI_IMAGE_FIXTURES,
   FONTSOURCE_FONT_FIXTURE,
@@ -31,6 +32,8 @@ import {
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const temporary = mkdtempSync(join(tmpdir(), "metaplate-package-"));
+const commitSha = releaseCommitSha();
+const routeEvidence = { schemaVersion: 1, commitSha, routes: {} };
 const consumer = join(temporary, "consumer");
 const standalone = join(temporary, "standalone");
 const bare = join(temporary, "bare");
@@ -474,10 +477,12 @@ const image = social.openGraph.images[0];
   runModule(
     `
       import express from "express";
+      import { writeFileSync } from "node:fs";
       import { fontsourceFontLoader } from "metaplate/fonts";
       import { verifyImage } from "metaplate/image";
       import { createNodeOg } from "metaplate/node";
 
+      const routeEvidence = { schemaVersion: 1, commitSha: ${JSON.stringify(commitSha)}, routes: {} };
       const og = createNodeOg({
         alt: () => "Express smoke card",
         fonts: fontsourceFontLoader([${fontsourceFontSource}]),
@@ -522,15 +527,150 @@ const image = social.openGraph.images[0];
         if (response.headers.get("cache-control") !== "public, max-age=86400") {
           throw new Error("Express returned the wrong cache policy.");
         }
-        verifyImage(new Uint8Array(await response.arrayBuffer()), ${cardSizeSource}, "png");
+        const imageBytes = new Uint8Array(await response.arrayBuffer());
+        const image = verifyImage(imageBytes, ${cardSizeSource}, "png");
+        routeEvidence.routes["node-service"] = {
+          packedArtifact: true,
+          servedOutput: true,
+          imageVerification: { verified: true, format: image.format, width: image.width, height: image.height, byteLength: imageBytes.byteLength },
+          responseVerification: { verified: true, contentType: response.headers.get("content-type"), cacheControl: response.headers.get("cache-control") },
+        };
       } finally {
         await new Promise((resolve, reject) =>
           server.close((error) => error ? reject(error) : resolve()),
         );
       }
+      writeFileSync(${JSON.stringify(join(expressApp, "node-route-evidence.json"))}, JSON.stringify(routeEvidence));
     `,
     expressApp,
   );
+  Object.assign(routeEvidence.routes, JSON.parse(readFileSync(join(expressApp, "node-route-evidence.json"), "utf8")).routes);
+
+  // Exercise provider-shaped Web Standard handlers from the exact packed
+  // artifact. These fixtures intentionally model provider contracts without
+  // importing provider SDKs: Vercel's Node function shape is a GET export over
+  // Request/Response, while Netlify supplies named path params in context.
+  runModule(
+    `
+      import http from "node:http";
+      import { fontsourceFontLoader } from "metaplate/fonts";
+      import { verifyImage } from "metaplate/image";
+      import { createNodeOg } from "metaplate/node";
+      import { writeFileSync } from "node:fs";
+
+      const routeEvidence = { schemaVersion: 1, commitSha: ${JSON.stringify(commitSha)}, routes: {} };
+      const og = createNodeOg({
+        alt: (copy) => \`${"${copy.title}"} deployment card\`,
+        fonts: fontsourceFontLoader([${fontsourceFontSource}]),
+        headers: { "Cache-Control": "public, max-age=86400" },
+        component: (copy) => ({
+          type: "div",
+          props: {
+            style: {
+              width: "100%",
+              height: "100%",
+              display: "flex",
+              alignItems: "center",
+              background: "#111827",
+              color: "#ffffff",
+              fontFamily: "Inter",
+              fontSize: 64,
+            },
+            children: copy.title,
+          },
+        }),
+      });
+
+      const vercelGet = og.handlerFrom((request) => {
+        const slug = new URL(request.url).searchParams.get("slug")?.slice(0, 80) || "home";
+        return { title: slug };
+      });
+      const vercelFetchable = og.fetchableFrom((request) => {
+        const slug = new URL(request.url).searchParams.get("slug")?.slice(0, 80) || "home";
+        return { title: slug };
+      });
+      const netlifyFunction = og.handlerFrom((_request, { params }) => ({
+        title: (params.slug ?? "home").slice(0, 80),
+      }));
+      const netlifyConfig = { path: "/netlify/:slug", method: "GET" };
+      if (netlifyConfig.path !== "/netlify/:slug" || netlifyConfig.method !== "GET") {
+        throw new Error("Netlify fixture config did not preserve its custom route contract.");
+      }
+
+      const server = http.createServer(async (request, response) => {
+        try {
+          const url = new URL(request.url ?? "/", "http://127.0.0.1");
+          let result;
+          if (url.pathname === "/vercel-fetchable") {
+            result = await vercelFetchable.fetch(new Request(url));
+          } else if (url.pathname.startsWith("/vercel/")) {
+            result = await vercelGet(new Request(url));
+          } else if (url.pathname.startsWith("/netlify/")) {
+            result = await netlifyFunction(new Request(url), {
+              params: { slug: url.pathname.slice("/netlify/".length) },
+            });
+          } else if (url.pathname === "/health") {
+            result = new Response(JSON.stringify({ ok: true }), {
+              headers: { "Content-Type": "application/json" },
+            });
+          } else {
+            result = new Response("Not found", { status: 404 });
+          }
+          response.writeHead(result.status, Object.fromEntries(result.headers));
+          response.end(Buffer.from(await result.arrayBuffer()));
+        } catch (error) {
+          response.writeHead(500, { "Content-Type": "text/plain" });
+          response.end(String(error));
+        }
+      });
+      await new Promise((resolve) => server.listen(Number(process.env.PORT ?? 0), "127.0.0.1", resolve));
+      try {
+        const address = server.address();
+        if (!address || typeof address === "string") throw new Error("Deployment fixture did not bind TCP.");
+        const base = \`http://127.0.0.1:\${address.port}\`;
+        const health = await fetch(base + "/health");
+        if (!health.ok || (await health.json()).ok !== true) throw new Error("Node health endpoint failed.");
+        // Each route is fetched twice with different slugs; identical bytes
+        // would mean the request never reached the copy resolver.
+        const routePairs = [
+          ["/vercel/packed?slug=query", "/vercel/packed?slug=other"],
+          ["/vercel-fetchable?slug=query", "/vercel-fetchable?slug=other"],
+          ["/netlify/packed", "/netlify/other"],
+        ];
+        for (const [path, alternatePath] of routePairs) {
+          const result = await fetch(base + path);
+          const alternate = await fetch(base + alternatePath);
+          if (!alternate.ok) throw new Error(\`${"${alternatePath}"} returned \${alternate.status}.\`);
+          const alternateBytes = new Uint8Array(await alternate.arrayBuffer());
+          if (!result.ok) throw new Error(\`${"${path}"} returned \${result.status}.\`);
+          if (result.headers.get("content-type") !== ${JSON.stringify(SOCIAL_CARD_FIXTURE.contentType)}) {
+            throw new Error(\`${"${path}"} returned the wrong content type.\`);
+          }
+          if (result.headers.get("cache-control") !== "public, max-age=86400") {
+            throw new Error(\`${"${path}"} returned the wrong cache policy.\`);
+          }
+          const imageBytes = new Uint8Array(await result.arrayBuffer());
+          const image = verifyImage(imageBytes, ${cardSizeSource}, "png");
+          verifyImage(alternateBytes, ${cardSizeSource}, "png");
+          if (Buffer.from(imageBytes).equals(Buffer.from(alternateBytes))) {
+            throw new Error(\`${"${path}"} rendered the same bytes for a different slug; the route did not resolve its copy from the request.\`);
+          }
+          const routeId = path.startsWith("/netlify/") ? "netlify-node" : "vercel-node";
+          routeEvidence.routes[routeId] = {
+            packedArtifact: true,
+            servedOutput: true,
+            imageVerification: { verified: true, format: image.format, width: image.width, height: image.height, byteLength: imageBytes.byteLength },
+            responseVerification: { verified: true, contentType: result.headers.get("content-type"), queryOrPathResolved: true, distinctSlugByteLengths: [imageBytes.byteLength, alternateBytes.byteLength] },
+          };
+        }
+      } finally {
+        await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+      }
+      writeFileSync(${JSON.stringify(join(expressApp, "provider-route-evidence.json"))}, JSON.stringify(routeEvidence));
+    `,
+    expressApp,
+  );
+  Object.assign(routeEvidence.routes, JSON.parse(readFileSync(join(expressApp, "provider-route-evidence.json"), "utf8")).routes);
 
   // Build and serve a current React Router framework-mode resource route.
   // This verifies its loader(args) convention and generated route types from
@@ -769,6 +909,32 @@ export const loader = og.handlerFrom(({ params }: Route.LoaderArgs) => ({
     throw new Error("Installed CLI did not report a dimension mismatch.");
   }
 
+  const jsonCheck = spawnSync(
+    process.execPath,
+    [
+      cliPath,
+      "verify",
+      "--json",
+      "--target",
+      "universal",
+      "--url",
+      absoluteFixtureImage,
+      "--alt",
+      "Packed card",
+      "--size",
+      cardSizeArgument,
+      CLI_IMAGE_FIXTURES.cardJpeg,
+    ],
+    { cwd: consumer, encoding: "utf8" },
+  );
+  if (jsonCheck.status !== 0) {
+    throw new Error(`Installed CLI JSON verification failed: ${jsonCheck.stdout}${jsonCheck.stderr}`);
+  }
+  const jsonReport = JSON.parse(jsonCheck.stdout);
+  if (jsonReport.schemaVersion !== 1 || jsonReport.files[0]?.targets?.universal?.compatible !== true) {
+    throw new Error("Installed CLI JSON verification did not report universal compatibility.");
+  }
+
   const formatCheck = spawnSync(
     process.execPath,
     [
@@ -855,6 +1021,15 @@ export const loader = og.handlerFrom(({ params }: Route.LoaderArgs) => ({
     });
 
     verifyPng(await plate.render({ title: "Standalone" }), plate.size);
+    const fetchable = plate.fetchableFrom(async (request, context) => ({
+      title: context.slug + ":" + new URL(request.url).pathname,
+    }));
+    const fetchableResponse = await fetchable.fetch(new Request("https://example.com/cards/packed"), { slug: "packed" });
+    verifyPng(await fetchableResponse.arrayBuffer(), plate.size);
+    const artifact = await plate.artifact("/cards/packed", { title: "Artifact" });
+    if (artifact.byteLength !== artifact.bytes.byteLength || artifact.image.format !== "png" || artifact.metadata.openGraph.images[0].url !== "/cards/packed/og-image") {
+      throw new Error("Packed artifact did not keep bytes, image facts, and metadata together.");
+    }
   `;
   runModule(standaloneSmoke, standalone);
 
@@ -1073,6 +1248,7 @@ export const loader = og.handlerFrom(({ params }: Route.LoaderArgs) => ({
   `;
   runModule(resolverSmoke, standalone);
 
+  writeFileSync(join(root, "deployment-contract-evidence.json"), `${JSON.stringify(routeEvidence, null, 2)}\n`);
   process.stdout.write(
     `Verified ${packed[0].filename} exports, CLI, and all consumer installs.\n`,
   );

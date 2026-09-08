@@ -3,6 +3,65 @@
 All notable changes to Metaplate are documented in this file. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] - Unreleased
+
+### Breaking
+
+- `createNodeOg` now throws a `TypeError` at definition time when `headers`
+  contains `Content-Type`, `Content-Length`, or `Content-Encoding`, or contains
+  `ETag` while automatic `etag` generation is enabled. Previously a caller
+  `Content-Type` was silently overwritten. A custom `output.contentType` must
+  now be a syntactically valid media type.
+- `socialImageCompatibility` throws a `TypeError` when the descriptor lacks
+  `width` or `height`, instead of surfacing the generic image-size error.
+
+### Added
+
+- Provider-neutral `fetchable` and `fetchableFrom` handlers on both
+  `createNodeOg` and `createNextOg` for Fetch-style deployments, plus a unified
+  Node `artifact(route, copy)` result that keeps encoded bytes, dimensions,
+  format, content type, metadata, and optional ETag together.
+- `verifySocialImage` and `SocialImageVerificationDescriptor` combine
+  structural image-byte validation with metadata agreement and social
+  compatibility reports. `metaplate verify` now accepts `--json`, repeatable
+  `--target`, `--url`, `--alt`, `--max-file-size`, and `--format gif`;
+  `--url` and `--alt` require at least one `--target`.
+- `socialImageCompatibility` accepts `SocialCompatibilityImage` descriptors
+  with optional `url`/`alt` and new `checkUrl`/`checkAlt` options, and reports
+  a LinkedIn 1.91:1 aspect-ratio warning.
+- GIF87a/GIF89a structural verification and an `etag: true | "sha256"` option
+  that adds deterministic SHA-256 strong ETags to Node responses.
+
+### Changed
+
+- Node responses own and compute `Content-Type` and `Content-Length`, never
+  set `Content-Encoding`, and preserve unrelated cache headers.
+- Dependency inventory now uses lockfile reachability, nested package identity,
+  optional/dev/peer state, and npm's authoritative `hasInstallScript` field.
+- Deployment certification and Socket release policy manifests are executable;
+  CI evidence reports include verified checks with captured failure output,
+  route status, artifact hashes, dependency summaries, toolchain details, and
+  commit/version context. The retained bundle is rejected unless every
+  required check passed for the same commit and version.
+- Dependency inventory controls are observed rather than declared: every
+  lockfile package must resolve to the npm registry with a sha512 integrity,
+  no package may declare a git, URL, or file dependency, every CI install runs
+  with lifecycle scripts disabled, and `hasInstallScript` comes only from the
+  lockfile so the inventory is identical on every platform.
+- `npm run check:workflows` pins every GitHub Actions reference to a full
+  commit SHA, and CI runs `npm audit signatures` so every installed package
+  carries a valid registry signature and, where published, a provenance
+  attestation.
+- Packed deployment fixtures now render two slugs per route and reject
+  identical bytes, so `queryOrPathResolved` is observed rather than asserted.
+
+### Fixed
+
+- Correct the Vercel example to consume a Web `Request` and the Netlify example
+  to read `params` from the second `context` argument.
+- Prevent empty or invalid custom encoder output and implausible custom media
+  types from becoming HTTP responses.
+
 ## [0.6.0] - 2026-08-24
 
 ### Added
@@ -351,7 +410,7 @@ reflects that `render` may return any consumer-encoded format ([#54]).
 - Typed package exports for framework-neutral, rendering, Node.js, Next.js,
   font, and PNG entry points.
 
-[Unreleased]: https://github.com/lnorton89/metaplate/compare/v0.6.0...HEAD
+[0.7.0]: https://github.com/lnorton89/metaplate/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/lnorton89/metaplate/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/lnorton89/metaplate/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/lnorton89/metaplate/compare/v0.4.0...v0.4.1

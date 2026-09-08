@@ -1,7 +1,7 @@
 {
   "name": "metaplate",
   "version": "0.6.0",
-  "description": "Composable, framework-neutral Open Graph image tooling for TypeScript.",
+  "description": "Typed social-image contracts for TypeScript: rendering, metadata, routes, and verification.",
   "keywords": [
     "open-graph",
     "og-image",
@@ -19,6 +19,7 @@
   "files": [
     "dist",
     "README.md",
+    "docs/deployment.md",
     "CHANGELOG.md",
     "LICENSE"
   ],
@@ -72,10 +73,17 @@
   },
   "scripts": {
     "build": "tsup",
-    "check": "npm run lint && npm run check:duplicates && npm run check:release-notes && npm run typecheck && npm run typecheck:examples && npm test && npm run build && npm pack --dry-run",
+    "check": "npm run lint && npm run check:duplicates && npm run check:workflows && npm run check:dependencies && npm run check:deployment && npm run check:release-notes && npm run typecheck && npm run typecheck:examples && npm test && npm run build && npm pack --dry-run",
     "check:duplicates": "jscpd src scripts tests examples --min-lines 8 --min-tokens 60 --reporters console --ignore \"**/fixtures/**\" --threshold 0",
+    "dependencies:report": "node scripts/dependency-inventory.mjs > dependency-inventory.json",
+    "check:dependencies": "node scripts/dependency-inventory.mjs --summary && node scripts/verify-dependency-inventory.mjs && node scripts/verify-socket-dispositions.mjs",
+    "check:deployment": "node scripts/verify-deployment-evidence.mjs",
+    "check:workflows": "node scripts/workflow-policy.mjs",
+    "release:evidence": "node scripts/release-checks.mjs && node scripts/release-evidence-report.mjs && node scripts/verify-evidence-bundle.mjs",
+    "socket:report": "node scripts/socket-report.mjs",
     "check:package": "node scripts/verify-package.mjs",
     "check:release-notes": "node scripts/validate-release-notes.mjs",
+    "check:evidence-bundle": "node scripts/verify-evidence-bundle.mjs",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",

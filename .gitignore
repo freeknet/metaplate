@@ -3,4 +3,9 @@ dist/
 coverage/
 *.tgz
 *.log
+dependency-inventory.json
+release-evidence-report.json
+release-check-results.json
+deployment-contract-evidence.json
+socket-export.json
 .DS_Store

@@ -6,19 +6,54 @@ GitHub Releases are the user-facing home for each version. They must explain why
 
 1. Update `package.json`, `package-lock.json`, `src/version.ts`, and `CHANGELOG.md` to the same version.
 2. Copy `.github/RELEASE_TEMPLATE.md` to `.github/releases/vX.Y.Z.md`.
+   `npm run check` validates the notes file for the version in `package.json`,
+   so the bump in step 1 fails the local gate until this file exists.
 3. Replace every placeholder with user-facing copy. Summarize outcomes rather than commit titles.
-4. For every framework-specific claim, link the exact official upstream page
-   that defines the routing, metadata, build, adapter, or deployment behavior.
-   Keep Metaplate's tested runtime/version boundary next to that link.
-5. Include explicit upgrade advice and write `None.` under breaking changes when there is no migration.
-6. Run the complete local gate:
+4. For every framework-specific or deployment claim, link the exact official
+   upstream page that defines the routing, metadata, build, adapter, runtime, or
+   deployment behavior. Keep Metaplate's tested runtime/version boundary next
+   to that link.
+5. Run `npm run dependencies:report` to generate the canonical local
+   `dependency-inventory.json`, then import the authenticated Socket export with
+   `npm run socket:report -- socket-score-report.json socket-export.json`, review
+   it, and record every Socket high/critical alert in `socket-dispositions.json`.
+   Do not describe `npm audit` as
+   equivalent to Socket analysis; behavioral and native-code signals need their
+   own evidence or an explicit time-bounded exception. An incomplete Socket
+   report must not be presented as clean. For fresh `socket-cli-import`
+   artifacts, `provenance.inputSha256` records the bytes consumed by the
+   importer, but it is trace metadata unless the corresponding raw
+   `socket-export.json` is retained. If independently verifiable raw-import
+   provenance is required, retain that raw export beside the release evidence
+   and verify its SHA-256 against `provenance.inputSha256`.
+
+   The Socket baseline is the last published version:
+   `scripts/verify-socket-dispositions.mjs` pins the accepted report version,
+   and `scripts/verify-deployment-evidence.mjs` pins the release being
+   certified. Move both pins forward as part of step 1 so a stale artifact
+   cannot pass as current evidence.
+6. Include explicit upgrade advice and write `None.` under breaking changes when there is no migration.
+7. Run the complete local gate:
 
    ```sh
    npm run check
    npm run check:package
+   npm run check:dependencies
+   npm run check:deployment
+   npm run check:workflows
+   npm run release:evidence
+   node scripts/verify-socket-dispositions.mjs
    ```
 
    `npm run check` validates the current version's release notes and rejects missing sections, placeholders, mismatched install commands, and generated-note-only bodies.
+
+   `npm run release:evidence` re-runs the build, packed-artifact, inventory,
+   deployment, Socket, and workflow checks, records each result with its
+   output in `release-check-results.json`, and binds the whole bundle to a
+   commit. CI supplies `GITHUB_SHA`; locally, export
+   `RELEASE_COMMIT_SHA=$(git rev-parse HEAD)` first so the bundle is not
+   labelled `local`. A failed check leaves its captured output in the results
+   file and fails the command.
 
 ## Create the draft
 
@@ -42,4 +77,17 @@ provenance attestation. A release is not complete until **Verify published
 artifact** passes.
 
 Then update version-specific badges when applicable and confirm the GitHub
-release remains the best single overview of the version.
+release remains the best single overview of the version. For 0.7.0 deployment
+claims, retain the complete evidence bundle:
+`dependency-inventory.json`, `release-evidence-report.json`,
+`release-check-results.json`, `deployment-contract-evidence.json`,
+`deployment-evidence.json`, `socket-score-report.json`, and
+`socket-dispositions.json`. The standard seven-file bundle validates the
+normalized Socket evidence but does not independently prove a fresh import's
+raw input bytes unless `socket-export.json` is additionally retained as
+specified above. A route is certified only after its packed-artifact,
+production-build, served/published output, image, and response-header evidence
+is recorded in a structured certification object. The packed Node fixtures
+verify response headers and route resolution; they do not claim page-level
+social metadata unless a page fixture emits and checks those tags. Local
+contract evidence must not be described as hosted provider certification.

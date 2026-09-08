@@ -29,8 +29,10 @@ npm run check
 npm run check:package
 ```
 
-`npm run check` lints, type-checks, tests, builds, and inspects the npm package
-contents. `npm run check:package` goes further: it creates the tarball, checks
+`npm run check` lints, scans for duplicated code, verifies the dependency
+inventory and Socket dispositions, verifies the deployment evidence manifest,
+validates the release notes for the current version, type-checks the sources and
+examples, tests, builds, and inspects the npm package contents. `npm run check:package` goes further: it creates the tarball, checks
 that every declared export is present, and installs it into two temporary
 consumers. The lean consumer imports every framework-neutral entry point, proves
 that no optional renderer peer was pulled in, and confirms the install guidance
@@ -44,16 +46,23 @@ npm run lint
 npm run typecheck
 npm test
 npm run build
+npm run check:dependencies
+npm run check:deployment
+npm run check:workflows
 ```
+
+`npm run check:workflows` requires every GitHub Actions `uses:` reference to
+be pinned to a full commit SHA with a version comment, and every `npm ci` to
+run with `--ignore-scripts`.
 
 ## Design constraints
 
 - The root entry point stays framework-neutral. Do not make consumers load
   Next.js, React, Satori, or Resvg merely to construct metadata.
-- `next`, `react`, `satori`, and `@resvg/resvg-js` remain optional peer
-  dependencies, and the standalone renderer imports Satori and Resvg on first
-  use so a lean install stays importable. Test behavior both with and without
-  optional peers when changing package boundaries.
+- `next` is the only optional peer dependency. `react`, `satori`, and
+  `@resvg/resvg-js` are required peers that the standalone renderer still
+  imports on first use, so a lean install stays importable. Test behavior both
+  with and without the renderer peers when changing package boundaries.
 - Public APIs need type coverage, behavior tests, and README documentation.
 - `examples/` is documentation that compiles. It type-checks against `src/`
   through `tsconfig.examples.json`, so renaming or resigning a public export
@@ -74,7 +83,11 @@ blocking peer dependency supports the newer release.
 
 Install lifecycle scripts are disabled in CI and release verification because
 this repository does not require them. A dependency that begins requiring a
-script needs an explicit review before that policy changes.
+script needs an explicit review before that policy changes. The dependency
+inventory command classifies lockfile packages by published/runtime reachability,
+native-code indicators, install scripts, and non-registry resolutions so Socket
+alerts can be triaged without treating expected native rendering packages as
+automatic malware findings.
 
 ## Releases
 

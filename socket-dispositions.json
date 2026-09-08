@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 2,
+  "package": "metaplate",
+  "version": "0.6.0",
+  "source": "https://socket.dev/npm/package/metaplate/alerts/0.6.0?tab=dependencies",
+  "status": "complete",
+  "export": {
+    "artifact": "socket-score-report.json",
+    "generatedAt": "2026-08-25",
+    "sha256": "efc9319c9f53d01088bd075e83e0106d3dda9a0b00a42d2ea985add95056a116"
+  },
+  "releasePolicy": {
+    "blockSeverities": [
+      "critical"
+    ],
+    "requireDispositionSeverities": [
+      "high",
+      "critical"
+    ],
+    "allowedDispositionTypes": [
+      "upgrade",
+      "replace",
+      "remove",
+      "isolate",
+      "accepted-with-evidence"
+    ],
+    "acceptedExceptionRequires": [
+      "owner",
+      "reason",
+      "expiry",
+      "verification"
+    ]
+  },
+  "alerts": [
+    {
+      "type": "socketUpgradeAvailable",
+      "severity": "high",
+      "package": "string.prototype.codepointat",
+      "version": "0.2.1",
+      "path": "metaplate > satori > @shuding/opentype.js > string.prototype.codepointat",
+      "reachability": "runtime-peer",
+      "disposition": "accepted-with-evidence",
+      "owner": "metaplate maintainers",
+      "reason": "Socket identifies a maintenance upgrade opportunity, not a vulnerability. The package is transitive to the release-tested Satori peer, and this baseline does not establish a compatible upstream Satori update that removes it.",
+      "expiry": "2026-12-31T00:00:00Z",
+      "evidence": "socket-score-report.json; official Socket CLI deep score captured 2026-08-25",
+      "verification": "npm audit --audit-level=high; package-lock.json registry/integrity checks; npm run check:package; Node 20/22/24 and Linux/Windows/macOS CI matrix"
+    }
+  ],
+  "requiredAlertShape": {
+    "type": "Socket alert category",
+    "severity": "critical|high|medium|low",
+    "package": "exact package name",
+    "version": "exact resolved version",
+    "path": "dependency path from metaplate",
+    "reachability": "published-runtime|runtime-peer|runtime-peer-optional|runtime-optional|development-only|development-optional|platform-binary|unknown|published-package-metadata",
+    "disposition": "upgrade|replace|remove|isolate|accepted-with-evidence",
+    "evidence": "Socket export/report URL or artifact",
+    "verification": "commands/results proving the disposition"
+  }
+}

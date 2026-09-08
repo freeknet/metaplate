@@ -77,7 +77,13 @@ describe("parseVerifyTargets", () => {
     { args: ["verify", "--size", "99999999999999999999x630", "image.png"] },
     { args: ["verify", "--size", "1200.5x630", "image.png"] },
     { args: ["verify", "--size", "-1200x630", "image.png"] },
-    { args: ["verify", "--format", "gif", "--size", "1200x630", "image.png"] },
+    { args: ["verify", "--max-file-size", "", "--size", "1200x630", "image.png"] },
+    { args: ["verify", "--max-file-size", "0x10", "--size", "1200x630", "image.png"] },
+    { args: ["verify", "--max-file-size", "-1", "--size", "1200x630", "image.png"] },
+    { args: ["verify", "--max-file-size", "1.5", "--size", "1200x630", "image.png"] },
+    { args: ["verify", "--target", "myspace", "--size", "1200x630", "image.png"] },
+    { args: ["verify", "--url", "https://example.com/og.png", "--size", "1200x630", "image.png"] },
+    { args: ["verify", "--alt", "Card", "--size", "1200x630", "image.png"] },
   ] satisfies { args: string[] }[])(`rejects invalid arguments: $args`, ({ args }) => {
     expect(() => parseVerifyTargets(args)).toThrow(VERIFY_USAGE);
   });
@@ -164,6 +170,110 @@ describe("verify CLI", () => {
     expect(result.stderr).toContain("✗ bad.png");
     expect(result.stderr).toContain("✗ does-not-exist.png");
     expect(result.stderr).toContain("2 of 3 files failed verification");
+  });
+
+  it("emits stable JSON for a compatible social target", async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "metaplate-cli-"));
+    await writeFile(path.join(cwd, "good.png"), png());
+
+    const result = run([
+      "verify",
+      "--json",
+      "--target",
+      "universal",
+      "--url",
+      "https://example.com/og.png",
+      "--alt",
+      "Project card",
+      "--size",
+      "1200x630",
+      "good.png",
+    ], cwd);
+    const report = JSON.parse(result.stdout) as {
+      schemaVersion: number;
+      files: Array<{
+        file: string;
+        valid: boolean;
+        image: { format: string; width: number; height: number; bytes: number };
+        globalIssues: Array<{ code?: string }>;
+        targets: Record<string, { compatible: boolean }>;
+      }>;
+    };
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(report.schemaVersion).toBe(1);
+    expect(report.files[0]).toMatchObject({
+      file: "good.png",
+      valid: true,
+      image: { format: "png", width: 1200, height: 630 },
+      globalIssues: [],
+      targets: { universal: { compatible: true } },
+    });
+  });
+
+  it("does not invent URL or alt metadata for target-only checks", async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "metaplate-cli-"));
+    await writeFile(path.join(cwd, "good.png"), png());
+    const result = run(["verify", "--json", "--target", "universal", "--size", "1200x630", "good.png"], cwd);
+    expect(result.status).toBe(0);
+    const report = JSON.parse(result.stdout) as { files: Array<{ valid: boolean; targets: Record<string, { compatible: boolean; issues: unknown[] }> }> };
+    expect(report.files[0]?.valid).toBe(true);
+    expect(report.files[0]?.targets.universal).toMatchObject({ compatible: true, issues: [] });
+  });
+
+  it("counts failed files rather than individual findings", async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "metaplate-cli-"));
+    await writeFile(path.join(cwd, "good.png"), png());
+    const result = run(["verify", "--target", "linkedin", "--max-file-size", "1", "--size", "1200x630", "good.png"], cwd);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("1 of 1 files failed verification");
+    expect(result.stderr).not.toContain("2 of 1 files failed verification");
+  });
+
+  it("enforces --max-file-size without requiring a social target", async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "metaplate-cli-"));
+    await writeFile(path.join(cwd, "good.png"), png());
+    const result = run(["verify", "--json", "--max-file-size", "1", "--size", "1200x630", "good.png"], cwd);
+    expect(result.status).toBe(1);
+    const report = JSON.parse(result.stdout) as {
+      files: Array<{ valid: boolean; globalIssues: Array<{ code?: string }> }>;
+    };
+    expect(report.files[0]?.valid).toBe(false);
+    expect(report.files[0]?.globalIssues.some(({ code }) => code === "file-size")).toBe(true);
+  });
+
+  it("verifies GIF files, reports them as universal-incompatible, and rejects a facebook-only claim mismatch", async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "metaplate-cli-"));
+    const gif = Uint8Array.from([
+      ...new TextEncoder().encode("GIF89a"),
+      0x10, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00,
+      0x2c, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x10, 0x00, 0x00,
+      0x02, 0x02, 0x44, 0x01, 0x00, 0x3b,
+    ]);
+    await writeFile(path.join(cwd, "card.gif"), gif);
+
+    const plain = run(["verify", "--format", "gif", "--size", "16x16", "card.gif"], cwd);
+    expect(plain.status).toBe(0);
+    expect(plain.stdout).toContain("✓ card.gif 16x16");
+
+    const universal = run(
+      ["verify", "--json", "--target", "universal", "--target", "facebook", "--size", "16x16", "card.gif"],
+      cwd,
+    );
+    expect(universal.status).toBe(1);
+    const report = JSON.parse(universal.stdout) as {
+      files: Array<{
+        valid: boolean;
+        image: { format: string };
+        targets: Record<string, { compatible: boolean; issues: Array<{ code?: string }> }>;
+      }>;
+    };
+    expect(report.files[0]?.valid).toBe(true);
+    expect(report.files[0]?.image.format).toBe("gif");
+    expect(report.files[0]?.targets.universal?.compatible).toBe(false);
+    expect(report.files[0]?.targets.universal?.issues.some(({ code }) => code === "format")).toBe(true);
+    expect(report.files[0]?.targets.facebook?.compatible).toBe(true);
   });
 
   it("honors --format and rejects a format mismatch", async () => {

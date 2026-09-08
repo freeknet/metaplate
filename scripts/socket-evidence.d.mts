@@ -1,0 +1,27 @@
+export const CANONICAL_SEVERITIES: readonly string[];
+export const REACHABILITY_VALUES: readonly string[];
+export const VALID_DEP_EVIDENCE_SOURCES: readonly string[];
+export const SCORE_KEYS: readonly string[];
+export const SOCKET_RELEASE_POLICY: {
+  readonly blockSeverities: readonly string[];
+  readonly requireDispositionSeverities: readonly string[];
+  readonly allowedDispositionTypes: readonly string[];
+  readonly acceptedExceptionRequires: readonly string[];
+};
+export function isIso8601Timestamp(value: unknown): boolean;
+export function isFullIso8601Timestamp(value: unknown): boolean;
+export function validateReleasePolicy(policy: unknown): string[];
+export function validateSocketScoreVector(score: unknown, label: string): string | undefined;
+export function normalizeSeverity(value: unknown): string | undefined;
+export function validateCanonicalSeverity(value: unknown): string | undefined;
+export function validateDeepAuxiliary(deep: unknown, label: string): string[];
+export function validateCapturedAt(value: unknown, fieldName?: string): string | undefined;
+export function validateNormalizedAt(value: unknown, fieldName?: string): string | undefined;
+export function validatePackageSizeBytes(value: unknown, fieldName?: string): string | undefined;
+export function validateDispositionAlert(alert: unknown, index: number): string | undefined;
+export function parseSocketPackageUrl(source: unknown): { package: string; version: string } | undefined;
+export function validateSocketSource(source: unknown, expectedPackage: string, expectedVersion: string): string | undefined;
+export function normalizeAlertIdentity(alert: Record<string, unknown>): { type: string; package?: string; version?: string } | { error: string };
+export function validateScoreAlert(alert: unknown, index: string | number): string | undefined;
+export function validateResolvedEvidence(alert: Record<string, unknown>, index: string | number): string | undefined;
+export function validateUnresolvedEvidence(alert: Record<string, unknown>, index: string | number): string | undefined;

@@ -410,6 +410,22 @@ it(
 );
 
 it(
+  "rejects empty custom encoder output and invalid media types",
+  async () => {
+    expect(() => createNodeOg({
+      ...definition,
+      output: { contentType: "not-a-media-type", checkSignature: false, encode: () => Uint8Array.of(1) },
+    })).toThrow(/Invalid output contentType/);
+    const plate = createNodeOg({
+      ...definition,
+      output: { format: "jpeg", encode: () => new Uint8Array() },
+    });
+    await expect(plate.render({ title: "Empty" })).rejects.toThrow(/non-empty image bytes/);
+  },
+  20_000,
+);
+
+it(
   "serves a declared custom format through the escape hatch",
   async () => {
     const bytes = Uint8Array.of(1, 2, 3, 4);
@@ -424,6 +440,69 @@ it(
 
     expect(plate.contentType).toBe("image/avif");
     expect(await plate.render({ title: "Custom" })).toEqual(bytes);
+  },
+  20_000,
+);
+
+it(
+  "supports Fetchable handlers with async multi-argument resolvers",
+  async () => {
+    const plate = createNodeOg(definition);
+    const route = plate.fetchableFrom(async (request: Request, context: { params: { slug: string } }) => ({
+      title: `${context.params.slug}:${new URL(request.url).pathname}`,
+    }));
+    const response = await route.fetch(new Request("https://example.com/cards/guide"), {
+      params: { slug: "guide" },
+    });
+    expect(response.headers.get("content-type")).toBe("image/png");
+    verifyPng(await response.arrayBuffer(), plate.size);
+  },
+  20_000,
+);
+
+it(
+  "returns a byte and metadata artifact from the same copy",
+  async () => {
+    const plate = createNodeOg({ ...definition, etag: "sha256", origin: "https://example.com" });
+    const artifact = await plate.artifact("/docs", { title: "Docs" });
+    expect(artifact.byteLength).toBe(artifact.bytes.byteLength);
+    expect(artifact.contentType).toBe("image/png");
+    expect(artifact.image).toEqual({ width: 1200, height: 630, format: "png" });
+    expect(artifact.metadata.openGraph.images[0]?.url).toBe("https://example.com/docs/og-image");
+    expect(artifact.etag).toBeDefined();
+    expect(artifact.etag?.length).toBe(66);
+    expect(artifact.etag?.startsWith('"')).toBe(true);
+  },
+  20_000,
+);
+
+it(
+  "owns representation headers and computes length and ETag",
+  async () => {
+    const plate = createNodeOg({ ...definition, etag: true, headers: { "Cache-Control": "public, max-age=60" } });
+    const response = await plate.response({ title: "Headers" });
+    expect(response.headers.get("content-length")).toBe(String(Number(response.headers.get("content-length"))));
+    expect(response.headers.get("content-encoding")).toBeNull();
+    expect(response.headers.get("etag")).toBeDefined();
+    expect(response.headers.get("etag")?.length).toBe(66);
+    expect(response.headers.get("etag")?.startsWith('"')).toBe(true);
+    expect(response.headers.get("cache-control")).toBe("public, max-age=60");
+    expect(() => createNodeOg({ ...definition, headers: { "Content-Length": "1" } })).toThrow(/owned by Metaplate/);
+    expect(() => createNodeOg({ ...definition, headers: { "Content-Encoding": "gzip" } })).toThrow(/owned by Metaplate/);
+    expect(() => createNodeOg({ ...definition, etag: true, headers: { ETag: "\"caller\"" } })).toThrow(/automatic Metaplate ETag generation/);
+  },
+  20_000,
+);
+
+it(
+  "preserves a caller ETag when automatic ETag generation is disabled",
+  async () => {
+    const plate = createNodeOg({
+      ...definition,
+      headers: { ETag: "\"caller\"" },
+    });
+    const response = await plate.response({ title: "Caller ETag" });
+    expect(response.headers.get("etag")).toBe('"caller"');
   },
   20_000,
 );
