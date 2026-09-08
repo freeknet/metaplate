@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "release": "0.7.0",
-  "status": "in-progress",
+  "status": "complete",
   "policy": {
     "certifiedRequires": [
       "packed-artifact",
