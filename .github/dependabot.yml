@@ -14,6 +14,12 @@ updates:
     ignore:
       - dependency-name: typescript
         versions: [">=6"]
+      # The published peer range is `satori >=0.33.3 <0.34`, and the package
+      # verifier requires the lockfile to carry the newest release inside
+      # that range. Widening the peer range is a deliberate release decision,
+      # so Dependabot stays on the 0.33 line until then.
+      - dependency-name: satori
+        versions: [">=0.34"]
     commit-message:
       prefix: build
       include: scope
