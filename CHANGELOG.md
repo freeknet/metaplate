@@ -10,6 +10,11 @@ All notable changes to Metaplate are documented in this file. The project uses
 - Document that Satori lays a React fragment out as a box of its own, so
   absolutely positioned children of a fragment anchor to that box instead of
   the positioned parent, and pin the behavior with a test.
+- Document using `metaplate/node` inside a Next.js 16 app for JPEG or WebP
+  cards: Turbopack cannot bundle Resvg's native binary or Satori's HarfBuzz
+  wasm, so both must be listed in `serverExternalPackages`, and a route folder
+  named after `imagePath` (`og-image.jpg/`) gives static exports a real file
+  extension.
 
 ## [0.7.0] - 2026-09-08
 
