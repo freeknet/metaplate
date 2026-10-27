@@ -30,6 +30,7 @@ It works with plain Node, static build scripts, Next.js, and Node-compatible fra
   - [Channel-specific images and X Cards](#channel-specific-images-and-x-cards)
   - [Social compatibility profiles](#social-compatibility-profiles)
   - [Next.js static export and `basePath`](#nextjs-static-export-and-basepath)
+  - [JPEG or WebP cards in Next.js](#jpeg-or-webp-cards-in-nextjs)
 - [Fonts](#fonts)
 - [Plate constraints](#plate-constraints)
 - [Static hosts](#static-hosts)
@@ -645,6 +646,65 @@ This emits `/project/og-image.png`, which Next resolves against
 `https://example.github.io/project/og-image.png`. Verify both
 `public/og-image.png` and the copied `out/og-image.png`, and inspect the
 exported HTML to confirm its social tags carry the deployment prefix.
+
+### JPEG or WebP cards in Next.js
+
+`metaplate/next` renders through `next/og`, which always produces PNG. A card
+that composites a photograph is usually several times smaller as JPEG (see
+[Other output formats](#other-output-formats)), and that needs the Node
+renderer's `output` encoder. `createNodeOg` works inside a Next route handler
+with one piece of configuration.
+
+Next 16 builds with Turbopack, which cannot bundle the two renderer peers:
+Resvg ships a native `.node` binary, and Satori locates its HarfBuzz `.wasm`
+relative to its own file. Next's
+[built-in external list](https://nextjs.org/docs/app/api-reference/config/next-config-js/serverExternalPackages)
+covers `sharp` but not these, so without configuration the build fails with:
+
+```
+./node_modules/@resvg/resvg-js/js-binding.js
+Error: non-ecmascript placeable asset
+```
+
+and, once Resvg is external, every render aborts with:
+
+```
+Error: ENOENT: no such file or directory, open '…/node_modules/harfbuzzjs/hb.wasm'
+```
+
+List both in
+[`serverExternalPackages`](https://nextjs.org/docs/app/api-reference/config/next-config-js/serverExternalPackages)
+so Next requires them from `node_modules` instead of bundling them:
+
+```ts
+// next.config.ts
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  serverExternalPackages: ["@resvg/resvg-js", "satori"],
+};
+
+export default nextConfig;
+```
+
+This applies to any module graph that reaches `metaplate/node`, including a
+page that imports the plate only to call `og.metadata()`: the renderer loads
+lazily at runtime, but the bundler still traces the import.
+
+Name the route folder after the file the plate writes. With
+`imagePath: "og-image.jpg"`, the handler lives at
+`app/<route>/og-image.jpg/route.ts`, so a static export emits a real
+`og-image.jpg` and static hosts serve it as `image/jpeg` without the
+per-path header rules in [Static hosts](#static-hosts):
+
+```ts
+// app/roadmap/og-image.jpg/route.ts
+import { og } from "@/lib/og";
+import { copy } from "../page";
+
+export const dynamic = "force-static";
+export const GET = og.handler(copy);
+```
 
 ## Fonts
 
