@@ -148,13 +148,11 @@
         "example": "npm/@img/sharp-linux-arm@0.35.3",
         "dependencyEvidence": {
           "source": "package-lock.json",
-          "paths": [
-            "metaplate > astro > sharp > @img/sharp-linux-arm",
-            "metaplate > next > sharp > @img/sharp-linux-arm"
-          ],
-          "reachability": "runtime-peer-optional"
-        },
-        "dependencyPath": "metaplate > astro > sharp > @img/sharp-linux-arm"
+          "paths": [],
+          "reachability": "unknown",
+          "unresolved": true,
+          "reason": "@img/sharp-linux-arm@0.35.3 not found in the current dependency inventory"
+        }
       },
       {
         "name": "usesEval",
@@ -163,25 +161,11 @@
         "example": "npm/source-map-js@1.2.1",
         "dependencyEvidence": {
           "source": "package-lock.json",
-          "paths": [
-            "metaplate > @react-router/dev > vite > postcss > source-map-js",
-            "metaplate > @react-router/dev > vite-node > vite > postcss > source-map-js",
-            "metaplate > astro > magicast > source-map-js",
-            "metaplate > astro > svgo > css-tree > source-map-js",
-            "metaplate > astro > svgo > csso > css-tree > source-map-js",
-            "metaplate > astro > unifont > css-tree > source-map-js",
-            "metaplate > astro > vite > postcss > source-map-js",
-            "metaplate > astro > vitefu > vite > postcss > source-map-js",
-            "metaplate > next > postcss > source-map-js",
-            "metaplate > tsup > postcss > source-map-js",
-            "metaplate > tsup > postcss-load-config > postcss > source-map-js",
-            "metaplate > vite > postcss > source-map-js",
-            "metaplate > vitest > @vitest/mocker > vite > postcss > source-map-js",
-            "metaplate > vitest > vite > postcss > source-map-js"
-          ],
-          "reachability": "runtime-peer-optional"
-        },
-        "dependencyPath": "metaplate > @react-router/dev > vite > postcss > source-map-js"
+          "paths": [],
+          "reachability": "unknown",
+          "unresolved": true,
+          "reason": "source-map-js@1.2.1 not found in the current dependency inventory"
+        }
       },
       {
         "name": "copyleftLicense",
@@ -204,13 +188,11 @@
         "example": "npm/sharp@0.35.3",
         "dependencyEvidence": {
           "source": "package-lock.json",
-          "paths": [
-            "metaplate > astro > sharp",
-            "metaplate > next > sharp"
-          ],
-          "reachability": "runtime-peer-optional"
-        },
-        "dependencyPath": "metaplate > astro > sharp"
+          "paths": [],
+          "reachability": "unknown",
+          "unresolved": true,
+          "reason": "sharp@0.35.3 not found in the current dependency inventory"
+        }
       },
       {
         "name": "dynamicRequire",
