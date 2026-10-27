@@ -3,6 +3,16 @@
 All notable changes to Metaplate are documented in this file. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Documentation
+
+- Document using `metaplate/node` inside a Next.js 16 app for JPEG or WebP
+  cards: Turbopack cannot bundle Resvg's native binary or Satori's HarfBuzz
+  wasm, so both must be listed in `serverExternalPackages`, and a route folder
+  named after `imagePath` (`og-image.jpg/`) gives static exports a real file
+  extension.
+
 ## [0.7.0] - 2026-09-08
 
 ### Breaking
