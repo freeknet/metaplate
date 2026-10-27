@@ -121,12 +121,11 @@
         "example": "npm/satori@0.33.4",
         "dependencyEvidence": {
           "source": "package-lock.json",
-          "paths": [
-            "metaplate > satori"
-          ],
-          "reachability": "runtime-peer"
-        },
-        "dependencyPath": "metaplate > satori"
+          "paths": [],
+          "reachability": "unknown",
+          "unresolved": true,
+          "reason": "satori@0.33.4 not found in the current dependency inventory"
+        }
       },
       {
         "name": "shellAccess",
