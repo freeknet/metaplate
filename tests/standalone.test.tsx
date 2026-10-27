@@ -1,4 +1,4 @@
-import { createElement } from "react";
+import { createElement, Fragment, type ReactNode } from "react";
 import { expect, it } from "vitest";
 import { packageFontLoader } from "../src/fonts.js";
 import { createNextOg } from "../src/next.js";
@@ -519,4 +519,49 @@ it("advertises the output content type in metadata", async () => {
     "image/jpeg",
   );
   expect(plate.image("/docs", { title: "Docs" }).url).toBe("/docs/og-image.jpg");
+});
+
+// README "Plate constraints" documents that Satori lays a fragment out as a
+// box, so absolute children anchor to it rather than to the positioned
+// parent. This pins that behavior: if Satori starts flattening fragments the
+// way the DOM does, this test fails and the README bullet can be retired.
+it("anchors absolute children of a fragment to the fragment's own box", async () => {
+  const panel = (children: ReactNode) =>
+    createElement(
+      "div",
+      { style: { width: "100%", height: "100%", display: "flex", fontFamily: "Inter" } },
+      createElement("div", { style: { width: 680, height: 630, display: "flex" } }),
+      createElement(
+        "div",
+        {
+          style: {
+            width: 520,
+            height: 630,
+            display: "flex",
+            position: "relative",
+            alignItems: "center",
+            justifyContent: "center",
+          },
+        },
+        children,
+      ),
+    );
+  const marker = () =>
+    createElement("div", {
+      key: "marker",
+      style: { position: "absolute", left: 0, top: 0, width: 100, height: 100, backgroundColor: "#123456" },
+    });
+  const markerRect = /<rect x="([\d.]+)" y="([\d.]+)" width="100" height="100" fill="#123456"/;
+
+  const direct = await createSvgOg({ ...definition, component: () => panel(marker()) }).renderSvg({
+    title: "Direct",
+  });
+  expect(direct.match(markerRect)?.slice(1, 3)).toEqual(["680", "0"]);
+
+  const fragment = await createSvgOg({
+    ...definition,
+    component: () => panel(createElement(Fragment, null, marker())),
+  }).renderSvg({ title: "Fragment" });
+  // The fragment's zero-sized box is centered in the 520x630 panel.
+  expect(fragment.match(markerRect)?.slice(1, 3)).toEqual(["940", "315"]);
 });

@@ -807,7 +807,7 @@ Return `undefined` to fall back to the default resolution.
 
 ## Plate constraints
 
-A plate is a Satori layout that rasterises to an image, not a DOM tree. Four
+A plate is a Satori layout that rasterises to an image, not a DOM tree. Five
 differences bite in practice:
 
 - **Inline SVG `<title>` renders as visible text.** Satori supports a subset of
@@ -823,6 +823,30 @@ differences bite in practice:
   child need an explicit `display`, as does any element whose `children` is an
   array; see
   [Authoring without a JSX toolchain](#authoring-without-a-jsx-toolchain).
+- **A fragment is laid out as a box.** In the DOM, `<>…</>` adds nothing to
+  layout. Satori gives it a box of its own, positioned by the parent's flex
+  rules like any other child. Absolutely positioned children of a fragment
+  therefore resolve `left`/`top` against that box rather than against the
+  nearest positioned ancestor. Inside a parent that centers its children, the
+  fragment's box is zero-sized and sits at the parent's center, so a
+  full-bleed background placed with `left: 0, top: 0` starts from the middle
+  of the panel and is clipped to a quarter. Nothing errors. Render such
+  children directly, as separate conditionals or a keyed array, rather than
+  wrapped in a fragment:
+
+  ```tsx
+  // Clipped: the photo and its overlay anchor to the fragment's box.
+  {photo ? (
+    <>
+      <img src={photo} style={{ position: "absolute", left: 0, top: 0 }} />
+      <div style={{ position: "absolute", left: 0, top: 0, width: 160, height: "100%" }} />
+    </>
+  ) : null}
+
+  // Anchored to the panel.
+  {photo ? <img src={photo} style={{ position: "absolute", left: 0, top: 0 }} /> : null}
+  {photo ? <div style={{ position: "absolute", left: 0, top: 0, width: 160, height: "100%" }} /> : null}
+  ```
 - **Resvg may not resize the raster behind the plate's back.** Dimension-changing
   `fitTo` values and `crop` are rejected because metadata, `plate.size`, raw
   pixels, and encoded output must agree. Define the intended `size` on the
