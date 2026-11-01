@@ -1,0 +1,7 @@
+# Netlify Edge Functions certification fixture for metaplate/edge.
+# https://docs.netlify.com/build/edge-functions/overview/
+# https://docs.netlify.com/build/edge-functions/api/
+# Edge functions live in netlify/edge-functions/ and npm packages installed in
+# node_modules are imported by name; the CLI bundles them at deploy time.
+[build]
+  publish = "public"

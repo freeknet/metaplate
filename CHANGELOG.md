@@ -60,6 +60,22 @@ All notable changes to Metaplate are documented in this file. The project uses
   function is 2.13 MB after gzip and the Hobby plan's Edge limit is 1 MB.
   Raw outputs are in `.planning/hosted-evidence/vercel-2026-11-01.json`, and
   the deployed fixtures are in `examples/hosted/vercel/`.
+- Hosted Netlify certification from dated production deployments
+  (2026-11-01) of the packed 0.8.0 tarball, each to a new Netlify site.
+  `netlify-node` moves from `certified-local-contract` to `certified`: a
+  Netlify Function (`nodejs24.x`) whose default export is `metaplate/node`
+  `handlerFrom` reading `context.params.slug`, with the Linux Resvg binding
+  shipped through `external_node_modules` and the Fontsource files through
+  `included_files`. A new `netlify-edge` route is `certified` for
+  `metaplate/edge` `fetchableFrom` on Netlify Edge Functions, with
+  `resvg.wasm`, `layout.wasm`, and the font served as static files and
+  fetched as bytes; it is the first hosted edge certification. Both were
+  checked for two slugs with `metaplate verify-url`, a plain GET for status
+  and headers, distinct bytes, and a decoded check that each image is not
+  uniform, added after the edge site's first deploy served blank cards that
+  format and size checks accepted. Raw outputs are in
+  `.planning/hosted-evidence/netlify-2026-11-01.json`, and the deployed
+  fixtures are in `examples/hosted/netlify/`.
 - `verify-deployment-evidence.mjs` now allows a `certified` edge route only
   when its `api` names `metaplate/edge`. The native renderer still cannot be
   certified on an edge runtime.
