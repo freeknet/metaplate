@@ -8,12 +8,13 @@ updates:
       day: monday
     open-pull-requests-limit: 10
     versioning-strategy: increase-if-necessary
-    # TypeScript 6 currently fails tsup's declaration build on its baseUrl
-    # deprecation, while typescript-eslint 8 supports only TypeScript <6.1.
-    # Revisit this alongside tsup and typescript-eslint updates.
+    # typescript-eslint 8 supports only TypeScript <6.1, and TypeScript 7 is
+    # the native-compiler line. tsup 8's declaration build also needs
+    # `ignoreDeprecations: "6.0"` in tsconfig.json until tsup 9 can be adopted,
+    # which requires dropping Node 20 from the compatibility matrix.
     ignore:
       - dependency-name: typescript
-        versions: [">=6"]
+        versions: [">=6.1"]
     commit-message:
       prefix: build
       include: scope
