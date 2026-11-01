@@ -1,5 +1,10 @@
 import type { ImageSize } from "./core.js";
-import { createPlateSocial } from "./plate.js";
+import {
+  createPlateSocial,
+  createPlateViews,
+  type PlateContext,
+  type PlateVariants,
+} from "./plate.js";
 import { loadSatori } from "./peers.js";
 
 export const SVG_CONTENT_TYPE = "image/svg+xml" as const;
@@ -87,14 +92,31 @@ export type SatoriNode =
   | undefined
   | readonly SatoriNode[];
 
-export type SvgOgDefinition<Copy> = {
-  /** Satori-compatible JSX or a plain `{ type, props }` object tree. */
-  component: (copy: Copy) => SatoriNode;
+export type {
+  PlateContext,
+  PlateMetadataOptions,
+  PlateVariant,
+  PlateVariants,
+  PlateView,
+} from "./plate.js";
+
+export type SvgOgDefinition<Copy, Variant extends string = string> = {
+  /**
+   * Satori-compatible JSX or a plain `{ type, props }` object tree. The
+   * second argument names the variant and size being rendered so the layout
+   * can reflow; a single-argument component ignores it.
+   */
+  component: (copy: Copy, context: PlateContext<Variant>) => SatoriNode;
   alt: (copy: Copy) => string;
   /** Satori does not bundle a default font, so at least one face is required. */
   fonts: StandaloneFontLoader;
-  /** One plate renders one size; `plate.size` is the size every render uses. */
+  /**
+   * The default size. Each view of a plate renders one size: `plate.size`
+   * for the default, `plate.variant(name).size` for a declared variant.
+   */
   size?: ImageSize;
+  /** Additional named sizes rendered from the same copy and component. */
+  variants?: PlateVariants<Copy, Variant>;
   imagePath?: string;
   basePath?: string;
   /** Scheme for absolute image URLs, such as `https://example.com`. */
@@ -103,37 +125,47 @@ export type SvgOgDefinition<Copy> = {
 };
 
 /** Defines a framework-neutral social image renderer that emits SVG text. */
-export function createSvgOg<Copy>(definition: SvgOgDefinition<Copy>) {
+export function createSvgOg<Copy, Variant extends string = string>(
+  definition: SvgOgDefinition<Copy, Variant>,
+) {
   const social = createPlateSocial(definition, SVG_CONTENT_TYPE);
-  const { size } = social;
 
-  async function renderSvg(copy: Copy) {
-    const satori = await loadSatori();
-    const fonts = await definition.fonts();
-    if (fonts.length === 0) {
-      throw new Error("Standalone Metaplate renderers require at least one font");
-    }
+  return createPlateViews(social.variants, (name) => {
+    const view = social.view(name);
+    return {
+      size: view.context.size,
+      image: view.image,
+      metadata: view.metadata,
+      contentType: SVG_CONTENT_TYPE,
+      renderSvg: (copy: Copy) => renderSvg(definition, copy, view.context),
+    };
+  });
+}
 
-    // SatoriNode is structurally what Satori walks; its own declarations type
-    // the parameter as React's ReactNode, and its FontOptions narrow the font
-    // data to `Buffer | ArrayBuffer`, so the boundary cast keeps the public
-    // type surface free of React and of Node's Buffer global (which is also
-    // why `definition.satori` is cast across the Satori boundary rather than
-    // typed against it).
-    return satori(
-      definition.component(copy) as Parameters<typeof satori>[0],
-      {
-        ...(definition.satori as unknown as Parameters<typeof satori>[1]),
-        width: size.width,
-        height: size.height,
-        fonts: [...fonts],
-      } as unknown as Parameters<typeof satori>[1],
-    );
+async function renderSvg<Copy, Variant extends string>(
+  definition: SvgOgDefinition<Copy, Variant>,
+  copy: Copy,
+  context: PlateContext<Variant>,
+) {
+  const satori = await loadSatori();
+  const fonts = await definition.fonts();
+  if (fonts.length === 0) {
+    throw new Error("Standalone Metaplate renderers require at least one font");
   }
 
-  return Object.freeze({
-    ...social,
-    contentType: SVG_CONTENT_TYPE,
-    renderSvg,
-  });
+  // SatoriNode is structurally what Satori walks; its own declarations type
+  // the parameter as React's ReactNode, and its FontOptions narrow the font
+  // data to `Buffer | ArrayBuffer`, so the boundary cast keeps the public
+  // type surface free of React and of Node's Buffer global (which is also
+  // why `definition.satori` is cast across the Satori boundary rather than
+  // typed against it).
+  return satori(
+    definition.component(copy, context) as Parameters<typeof satori>[0],
+    {
+      ...(definition.satori as unknown as Parameters<typeof satori>[1]),
+      width: context.size.width,
+      height: context.size.height,
+      fonts: [...fonts],
+    } as unknown as Parameters<typeof satori>[1],
+  );
 }
