@@ -16,7 +16,10 @@ instead.
 
 ## Development
 
-Metaplate requires Node.js 20 or newer. Install the locked dependency tree:
+Metaplate requires Node.js 20 or newer. The full local gate needs Node.js
+22.23.4 or newer (CI runs it on Node 24) because the packed-package fixtures
+build real Astro 7.4 and React Router 8 apps, which set that floor. Install the
+locked dependency tree:
 
 ```sh
 npm ci

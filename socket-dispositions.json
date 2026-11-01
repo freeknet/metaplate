@@ -7,7 +7,7 @@
   "export": {
     "artifact": "socket-score-report.json",
     "generatedAt": "2026-08-25",
-    "sha256": "add0c80ef7688ed0eade07cf7bae0756880bcc97d71a9f6ba959ea9551430a13"
+    "sha256": "f51cff07ddeefccf1ad02759e5fef0f6dd5ea3f39baa3919ab00bf52b8a90774"
   },
   "releasePolicy": {
     "blockSeverities": [

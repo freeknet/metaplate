@@ -823,16 +823,17 @@ differences bite in practice:
   child need an explicit `display`, as does any element whose `children` is an
   array; see
   [Authoring without a JSX toolchain](#authoring-without-a-jsx-toolchain).
-- **A fragment is laid out as a box.** In the DOM, `<>…</>` adds nothing to
-  layout. Satori gives it a box of its own, positioned by the parent's flex
-  rules like any other child. Absolutely positioned children of a fragment
+- **A fragment is laid out as a box on Satori older than 0.38.2.** In the
+  DOM, `<>…</>` adds nothing to layout. Satori 0.38.2 and newer flatten it the
+  same way, but earlier releases inside the supported peer range give it a box
+  of its own, positioned by the parent's flex rules like any other child. Absolutely positioned children of a fragment
   therefore resolve `left`/`top` against that box rather than against the
   nearest positioned ancestor. Inside a parent that centers its children, the
   fragment's box is zero-sized and sits at the parent's center, so a
   full-bleed background placed with `left: 0, top: 0` starts from the middle
-  of the panel and is clipped to a quarter. Nothing errors. Render such
-  children directly, as separate conditionals or a keyed array, rather than
-  wrapped in a fragment:
+  of the panel and is clipped to a quarter. Nothing errors. Unless every
+  deployment pins Satori 0.38.2 or newer, render such children directly, as
+  separate conditionals or a keyed array, rather than wrapped in a fragment:
 
   ```tsx
   // Clipped: the photo and its overlay anchor to the fragment's box.
