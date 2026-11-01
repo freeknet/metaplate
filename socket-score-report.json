@@ -70,6 +70,22 @@
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [
+            "metaplate > @astrojs/node > astro > @astrojs/compiler-rs > @astrojs/compiler-binding > @astrojs/compiler-binding-wasm32-wasi > @emnapi/core > @emnapi/wasi-threads > tslib",
+            "metaplate > @astrojs/node > astro > @astrojs/compiler-rs > @astrojs/compiler-binding > @astrojs/compiler-binding-wasm32-wasi > @emnapi/core > tslib",
+            "metaplate > @astrojs/node > astro > @astrojs/compiler-rs > @astrojs/compiler-binding > @astrojs/compiler-binding-wasm32-wasi > @emnapi/runtime > tslib",
+            "metaplate > @astrojs/node > astro > @astrojs/compiler-rs > @astrojs/compiler-binding > @astrojs/compiler-binding-wasm32-wasi > @napi-rs/wasm-runtime > @emnapi/core > @emnapi/wasi-threads > tslib",
+            "metaplate > @astrojs/node > astro > @astrojs/compiler-rs > @astrojs/compiler-binding > @astrojs/compiler-binding-wasm32-wasi > @napi-rs/wasm-runtime > @emnapi/core > tslib",
+            "metaplate > @astrojs/node > astro > @astrojs/compiler-rs > @astrojs/compiler-binding > @astrojs/compiler-binding-wasm32-wasi > @napi-rs/wasm-runtime > @emnapi/runtime > tslib",
+            "metaplate > @astrojs/node > astro > @astrojs/compiler-rs > @astrojs/compiler-binding > @astrojs/compiler-binding-wasm32-wasi > @napi-rs/wasm-runtime > @tybys/wasm-util > tslib",
+            "metaplate > @astrojs/node > astro > @astrojs/markdown-satteri > satteri > @bruits/satteri-wasm32-wasi > @emnapi/core > @emnapi/wasi-threads > tslib",
+            "metaplate > @astrojs/node > astro > @astrojs/markdown-satteri > satteri > @bruits/satteri-wasm32-wasi > @emnapi/core > tslib",
+            "metaplate > @astrojs/node > astro > @astrojs/markdown-satteri > satteri > @bruits/satteri-wasm32-wasi > @emnapi/runtime > tslib",
+            "metaplate > @astrojs/node > astro > @astrojs/markdown-satteri > satteri > @bruits/satteri-wasm32-wasi > @napi-rs/wasm-runtime > @emnapi/core > @emnapi/wasi-threads > tslib",
+            "metaplate > @astrojs/node > astro > @astrojs/markdown-satteri > satteri > @bruits/satteri-wasm32-wasi > @napi-rs/wasm-runtime > @emnapi/core > tslib",
+            "metaplate > @astrojs/node > astro > @astrojs/markdown-satteri > satteri > @bruits/satteri-wasm32-wasi > @napi-rs/wasm-runtime > @emnapi/runtime > tslib",
+            "metaplate > @astrojs/node > astro > @astrojs/markdown-satteri > satteri > @bruits/satteri-wasm32-wasi > @napi-rs/wasm-runtime > @tybys/wasm-util > tslib",
+            "metaplate > @astrojs/node > astro > sharp > @img/sharp-freebsd-wasm32 > @img/sharp-wasm32 > @emnapi/runtime > tslib",
+            "metaplate > @astrojs/node > astro > sharp > @img/sharp-webcontainers-wasm32 > @img/sharp-wasm32 > @emnapi/runtime > tslib",
             "metaplate > astro > @astrojs/compiler-rs > @astrojs/compiler-binding > @astrojs/compiler-binding-wasm32-wasi > @emnapi/core > @emnapi/wasi-threads > tslib",
             "metaplate > astro > @astrojs/compiler-rs > @astrojs/compiler-binding > @astrojs/compiler-binding-wasm32-wasi > @emnapi/core > tslib",
             "metaplate > astro > @astrojs/compiler-rs > @astrojs/compiler-binding > @astrojs/compiler-binding-wasm32-wasi > @emnapi/runtime > tslib",
@@ -92,7 +108,7 @@
           ],
           "reachability": "runtime-peer-optional"
         },
-        "dependencyPath": "metaplate > astro > @astrojs/compiler-rs > @astrojs/compiler-binding > @astrojs/compiler-binding-wasm32-wasi > @emnapi/core > @emnapi/wasi-threads > tslib"
+        "dependencyPath": "metaplate > @astrojs/node > astro > @astrojs/compiler-rs > @astrojs/compiler-binding > @astrojs/compiler-binding-wasm32-wasi > @emnapi/core > @emnapi/wasi-threads > tslib"
       },
       {
         "category": "supplyChainRisk",
@@ -184,12 +200,13 @@
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [
+            "metaplate > @astrojs/node > astro > sharp > @img/sharp-linux-s390x",
             "metaplate > astro > sharp > @img/sharp-linux-s390x",
             "metaplate > next > sharp > @img/sharp-linux-s390x"
           ],
           "reachability": "runtime-peer-optional"
         },
-        "dependencyPath": "metaplate > astro > sharp > @img/sharp-linux-s390x"
+        "dependencyPath": "metaplate > @astrojs/node > astro > sharp > @img/sharp-linux-s390x"
       },
       {
         "category": "supplyChainRisk",
@@ -201,6 +218,11 @@
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [
+            "metaplate > @astrojs/node > astro > @astrojs/compiler-rs > @astrojs/compiler-binding > @astrojs/compiler-binding-wasm32-wasi > @emnapi/runtime",
+            "metaplate > @astrojs/node > astro > @astrojs/compiler-rs > @astrojs/compiler-binding > @astrojs/compiler-binding-wasm32-wasi > @napi-rs/wasm-runtime > @emnapi/runtime",
+            "metaplate > @astrojs/node > astro > @astrojs/markdown-satteri > satteri > @bruits/satteri-wasm32-wasi > @napi-rs/wasm-runtime > @emnapi/runtime",
+            "metaplate > @astrojs/node > astro > sharp > @img/sharp-freebsd-wasm32 > @img/sharp-wasm32 > @emnapi/runtime",
+            "metaplate > @astrojs/node > astro > sharp > @img/sharp-webcontainers-wasm32 > @img/sharp-wasm32 > @emnapi/runtime",
             "metaplate > astro > @astrojs/compiler-rs > @astrojs/compiler-binding > @astrojs/compiler-binding-wasm32-wasi > @emnapi/runtime",
             "metaplate > astro > @astrojs/compiler-rs > @astrojs/compiler-binding > @astrojs/compiler-binding-wasm32-wasi > @napi-rs/wasm-runtime > @emnapi/runtime",
             "metaplate > astro > @astrojs/markdown-satteri > satteri > @bruits/satteri-wasm32-wasi > @napi-rs/wasm-runtime > @emnapi/runtime",
@@ -211,7 +233,7 @@
           ],
           "reachability": "runtime-peer-optional"
         },
-        "dependencyPath": "metaplate > astro > @astrojs/compiler-rs > @astrojs/compiler-binding > @astrojs/compiler-binding-wasm32-wasi > @emnapi/runtime"
+        "dependencyPath": "metaplate > @astrojs/node > astro > @astrojs/compiler-rs > @astrojs/compiler-binding > @astrojs/compiler-binding-wasm32-wasi > @emnapi/runtime"
       },
       {
         "category": "license",
@@ -239,12 +261,13 @@
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [
+            "metaplate > @astrojs/node > astro > sharp",
             "metaplate > astro > sharp",
             "metaplate > next > sharp"
           ],
           "reachability": "runtime-peer-optional"
         },
-        "dependencyPath": "metaplate > astro > sharp"
+        "dependencyPath": "metaplate > @astrojs/node > astro > sharp"
       },
       {
         "category": "supplyChainRisk",
@@ -369,6 +392,7 @@
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [
+            "metaplate > @astrojs/node > send > escape-html",
             "metaplate > @react-router/dev > @react-router/serve > @react-router/express > express > escape-html",
             "metaplate > @react-router/dev > @react-router/serve > @react-router/express > express > finalhandler > escape-html",
             "metaplate > @react-router/dev > @react-router/serve > @react-router/express > express > send > escape-html",
@@ -398,7 +422,7 @@
           ],
           "reachability": "runtime-peer"
         },
-        "dependencyPath": "metaplate > @react-router/dev > @react-router/serve > @react-router/express > express > escape-html"
+        "dependencyPath": "metaplate > @astrojs/node > send > escape-html"
       },
       {
         "category": "supplyChainRisk",
