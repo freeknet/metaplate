@@ -1,4 +1,5 @@
-import { execFileSync, spawnSync } from "node:child_process";
+import { Buffer } from "node:buffer";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
   copyFileSync,
   cpSync,
@@ -12,10 +13,12 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import process from "node:process";
-import { fileURLToPath, URL } from "node:url";
+import { setTimeout as delay } from "node:timers/promises";
+import { fileURLToPath, pathToFileURL, URL } from "node:url";
 import { releaseCommitSha } from "./run-script.mjs";
 import {
   CLI_IMAGE_FIXTURES,
@@ -23,6 +26,7 @@ import {
   FRAMEWORK_DEPENDENCIES,
   PACKAGE_FONT_FIXTURE,
   REQUIRED_RENDERER_PEERS,
+  SERVER_FIXTURE,
   SOCIAL_CARD_FIXTURE,
   commonJsResolutionSmoke,
   esmImportSmoke,
@@ -39,6 +43,7 @@ const standalone = join(temporary, "standalone");
 const bare = join(temporary, "bare");
 const nextApp = join(temporary, "next-app");
 const astroApp = join(temporary, "astro-app");
+const astroServerApp = join(temporary, "astro-server-app");
 const expressApp = join(temporary, "express-app");
 const routerApp = join(temporary, "router-app");
 const svelteApp = join(temporary, "svelte-app");
@@ -59,6 +64,38 @@ const absoluteFixtureImage = new URL(
   `${SOCIAL_CARD_FIXTURE.origin}/`,
 ).href;
 const npmCli = process.env.npm_execpath;
+// Node 20+ provides the WHATWG fetch globals the server fixtures use.
+const { AbortSignal, fetch } = globalThis;
+// One Satori-compatible plate component shared by the generated fixtures.
+const plateComponentSource = `(copy: { title: string }) => ({
+    type: "div",
+    props: {
+      style: {
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        alignItems: "center",
+        background: "#111827",
+        color: "#ffffff",
+        fontFamily: "Inter",
+        fontSize: 64,
+      },
+      children: copy.title,
+    },
+  })`;
+const astroPlateSource = `import { fontsourceFontLoader } from "metaplate/fonts";
+import { createNodeOg } from "metaplate/node";
+
+export const og = createNodeOg({
+  alt: (copy: { title: string }) => \`${"${copy.title}"} social card\`,
+  fonts: fontsourceFontLoader([${fontsourceFontSource}]),
+  imagePath: ${JSON.stringify(SOCIAL_CARD_FIXTURE.imagePath)},
+  origin: ${JSON.stringify(SOCIAL_CARD_FIXTURE.origin)},
+  component: ${plateComponentSource},
+});
+`;
+// `verifyImage` from the installed tarball, loaded once the consumer exists.
+let verifyPackedImage;
 
 if (!npmCli) {
   throw new Error("Run package verification through `npm run check:package`.");
@@ -148,17 +185,277 @@ function copyLockedDependency(directory, name) {
   cpSync(source, destination, { recursive: true });
 }
 
-/** Copies an installed, lockfile-verified runtime dependency closure offline. */
+/**
+ * Copies an installed, lockfile-verified runtime dependency closure offline.
+ * Optional dependencies are followed only when npm installed them here, which
+ * is how platform binaries (Next's SWC, sharp's libvips) arrive: npm can keep
+ * several candidates, such as glibc and musl builds on Linux, and the package
+ * selects the one for the current runtime.
+ */
 function copyLockedDependencyTree(directory, name, copied = new Set()) {
   if (copied.has(name)) return copied;
   copyLockedDependency(directory, name);
   copied.add(name);
 
   const { installed } = lockedDependency(name);
-  for (const dependency of Object.keys(installed.dependencies ?? {})) {
+  const installedOptional = Object.keys(installed.optionalDependencies ?? {}).filter(
+    (dependency) => existsSync(join(root, "node_modules", ...dependency.split("/"))),
+  );
+  for (const dependency of [...Object.keys(installed.dependencies ?? {}), ...installedOptional]) {
     copyLockedDependencyTree(directory, dependency, copied);
   }
   return copied;
+}
+
+/** Runs a framework's production build and surfaces its output on failure. */
+function buildFixture(label, cli, cwd, env) {
+  try {
+    execFileSync(process.execPath, [cli, "build"], {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, ...env },
+    });
+  } catch (error) {
+    const details = error instanceof Error && "stderr" in error
+      ? `${error.stdout ?? ""}${error.stderr ?? ""}`
+      : error;
+    throw new Error(`${label} failed: ${details}`, { cause: error });
+  }
+}
+
+/** Writes an Astro app around the shared plate from the packed artifact. */
+function writeAstroApp(directory, archive, dependencies, { config, pages }) {
+  install(directory, [archive]);
+  for (const dependency of dependencies) {
+    linkLockedDependency(directory, dependency);
+  }
+  mkdirSync(join(directory, "src", "lib"), { recursive: true });
+  writeFileSync(join(directory, "astro.config.mjs"), config);
+  writeFileSync(join(directory, "src", "lib", "og.ts"), astroPlateSource);
+  for (const [page, source] of Object.entries(pages)) {
+    const file = join(directory, "src", "pages", page);
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, source);
+  }
+  return join(directory, "node_modules", "astro", "bin", "astro.mjs");
+}
+
+/** An Astro page emitting the social tags `socialImageMetadata` derives for a route. */
+function astroSocialPage(routeExpression, body) {
+  return `---
+import { socialImageMetadata } from "metaplate";
+const social = socialImageMetadata(${routeExpression}, "Metaplate Astro smoke card", {
+  origin: ${JSON.stringify(SOCIAL_CARD_FIXTURE.origin)},
+  imagePath: ${JSON.stringify(SOCIAL_CARD_FIXTURE.imagePath)},
+  type: ${JSON.stringify(SOCIAL_CARD_FIXTURE.contentType)},
+});
+const image = social.openGraph.images[0];
+---
+<html><head>
+  <meta property="og:image" content={image.url} />
+  <meta property="og:image:width" content={String(image.width)} />
+  <meta property="og:image:height" content={String(image.height)} />
+  <meta property="og:image:type" content={image.type} />
+  <meta property="og:image:alt" content={image.alt} />
+  <meta name="twitter:card" content={social.twitter.card} />
+  <meta name="twitter:image" content={social.twitter.images[0].url} />
+</head><body>${body}</body></html>
+`;
+}
+
+/** Reserves a free loopback port for server CLIs that reject port 0. */
+async function freePort() {
+  const server = createServer();
+  await new Promise((listening, failed) => {
+    server.once("error", failed);
+    server.listen(0, "127.0.0.1", listening);
+  });
+  const { port } = server.address();
+  await new Promise((closed) => server.close(closed));
+  return port;
+}
+
+/**
+ * Stops a production server and every process it spawned. Windows has no
+ * process groups, so `taskkill /T` walks the tree; on POSIX the server was
+ * started as its own process-group leader and the whole group is signalled.
+ */
+async function stopProcessTree(child, exited) {
+  const signalTree = (signal) => {
+    if (child.exitCode !== null || child.signalCode !== null) return;
+    if (process.platform === "win32") {
+      spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
+        stdio: "ignore",
+        windowsHide: true,
+      });
+      return;
+    }
+    try {
+      process.kill(-child.pid, signal);
+    } catch {
+      // The group exited between the check and the signal.
+    }
+  };
+  const settled = (milliseconds) =>
+    Promise.race([exited, delay(milliseconds, "timeout", { ref: false })]);
+
+  signalTree("SIGTERM");
+  if ((await settled(10_000)) !== "timeout") return;
+  signalTree("SIGKILL");
+  if ((await settled(5_000)) === "timeout") {
+    throw new Error(`Production server process ${child.pid} did not exit.`);
+  }
+}
+
+/** Polls until the server answers any HTTP response, or fails fast if it exits. */
+async function waitForServer(url, exited, timeoutMilliseconds = 90_000) {
+  let exit;
+  void exited.then((result) => {
+    exit = result;
+  });
+  const deadline = Date.now() + timeoutMilliseconds;
+  while (Date.now() < deadline) {
+    if (exit) {
+      throw new Error(`Server exited before it was ready (code ${exit.code}, signal ${exit.signal}).`);
+    }
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+      await response.arrayBuffer();
+      return;
+    } catch {
+      await delay(250);
+    }
+  }
+  throw new Error(`Server did not answer ${url} within ${timeoutMilliseconds} ms.`);
+}
+
+/**
+ * Starts a built framework's production server on a free loopback port,
+ * waits until it answers, runs `verify(base)` against it, and always stops
+ * the whole process tree, including when the build output fails verification.
+ */
+async function withProductionServer({ label, cwd, readyPath, start }, verify) {
+  const port = await freePort();
+  const { args, env } = start(port);
+  const child = spawn(process.execPath, args, {
+    cwd,
+    env: { ...process.env, ...env },
+    stdio: ["ignore", "pipe", "pipe"],
+    detached: process.platform !== "win32",
+    windowsHide: true,
+  });
+  let output = "";
+  const capture = (chunk) => {
+    output += chunk;
+  };
+  child.stdout.setEncoding("utf8").on("data", capture);
+  child.stderr.setEncoding("utf8").on("data", capture);
+  const exited = new Promise((stopped) => {
+    child.once("exit", (code, signal) => stopped({ code, signal }));
+    child.once("error", (error) => stopped({ code: null, signal: String(error) }));
+  });
+  const base = `http://127.0.0.1:${port}`;
+  try {
+    await waitForServer(`${base}${readyPath}`, exited);
+    return await verify(base);
+  } catch (error) {
+    throw new Error(`${label} production server verification failed: ${error.message}\n${output}`, {
+      cause: error,
+    });
+  } finally {
+    await stopProcessTree(child, exited);
+  }
+}
+
+/** Reads one rendered `<meta>` tag by property or name. */
+function metaContent(html, key) {
+  const match = new RegExp(`<meta (?:property|name)="${key}" content="([^"]*)"`).exec(html);
+  if (!match) throw new Error(`Page did not emit ${key} metadata.`);
+  return match[1].replaceAll("&amp;", "&");
+}
+
+/**
+ * Fetches each fixture slug's page and checks that its Open Graph and X image
+ * tags are absolute fixture-origin URLs at the expected per-slug paths.
+ */
+async function verifySocialPages(base, expected) {
+  const pages = [];
+  for (const slug of SERVER_FIXTURE.slugs) {
+    const response = await fetch(`${base}/${slug}`);
+    if (!response.ok) throw new Error(`/${slug} returned ${response.status}.`);
+    const html = await response.text();
+    const { ogImagePath, ogImageType, twitterImagePath } = expected(slug);
+    const ogImage = new URL(metaContent(html, "og:image"));
+    const twitterImage = new URL(metaContent(html, "twitter:image"));
+    for (const [tag, url, path] of [
+      ["og:image", ogImage, ogImagePath],
+      ["twitter:image", twitterImage, twitterImagePath],
+    ]) {
+      if (url.origin !== SOCIAL_CARD_FIXTURE.origin || url.pathname !== path) {
+        throw new Error(`/${slug} advertised ${tag} ${url.href}; expected ${SOCIAL_CARD_FIXTURE.origin}${path}.`);
+      }
+    }
+    if (
+      metaContent(html, "og:image:type") !== ogImageType ||
+      metaContent(html, "og:image:width") !== String(cardSize.width) ||
+      metaContent(html, "og:image:height") !== String(cardSize.height)
+    ) {
+      throw new Error(`/${slug} advertised the wrong og:image type or dimensions.`);
+    }
+    pages.push({ ogImage, twitterImage });
+  }
+  return pages;
+}
+
+/**
+ * Fetches a dynamic image route for each slug and verifies status, media type,
+ * length, cache policy, format, and dimensions with the packed `verifyImage`.
+ * Identical bytes for different slugs would mean the route never resolved
+ * its copy from the request.
+ */
+async function verifyDynamicImageRoute(base, paths, { contentType, format, cacheControl }) {
+  const results = [];
+  for (const path of paths) {
+    const response = await fetch(`${base}${path}`);
+    if (!response.ok) throw new Error(`${path} returned ${response.status}.`);
+    const servedType = response.headers.get("content-type");
+    if (servedType !== contentType) {
+      throw new Error(`${path} returned content type ${servedType}; expected ${contentType}.`);
+    }
+    if (cacheControl && response.headers.get("cache-control") !== cacheControl) {
+      throw new Error(`${path} returned cache policy ${response.headers.get("cache-control")}.`);
+    }
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    const contentLength = response.headers.get("content-length");
+    if (contentLength !== null && Number(contentLength) !== bytes.byteLength) {
+      throw new Error(`${path} declared ${contentLength} bytes but sent ${bytes.byteLength}.`);
+    }
+    const image = verifyPackedImage(bytes, cardSize, format);
+    results.push({ path, response, bytes, image });
+  }
+  const [first, second] = results;
+  if (Buffer.from(first.bytes).equals(Buffer.from(second.bytes))) {
+    throw new Error(`${second.path} rendered the same bytes as ${first.path}; the route did not resolve its copy per request.`);
+  }
+  return {
+    imageVerification: {
+      verified: true,
+      format: first.image.format,
+      width: first.image.width,
+      height: first.image.height,
+      byteLength: first.bytes.byteLength,
+    },
+    responseVerification: {
+      verified: true,
+      paths,
+      contentType: first.response.headers.get("content-type"),
+      cacheControl: first.response.headers.get("cache-control"),
+      contentLength: first.response.headers.get("content-length"),
+      queryOrPathResolved: true,
+      distinctSlugByteLengths: results.map(({ bytes }) => bytes.byteLength),
+    },
+  };
 }
 
 try {
@@ -212,6 +509,9 @@ try {
     throw new Error("The one-command install pulled optional framework peer next.");
   }
 
+  ({ verifyImage: verifyPackedImage } = await import(
+    pathToFileURL(join(consumer, "node_modules", manifest.name, manifest.exports["./image"].import)).href
+  ));
   runModule(esmImportSmoke(packageEntries), consumer);
   runModule(nextPeerGuidanceSmoke(), consumer);
 
@@ -255,24 +555,13 @@ try {
   for (const dependency of FRAMEWORK_DEPENDENCIES.next) {
     copyLockedDependencyTree(nextApp, dependency, copiedNextPackages);
   }
-  const nextManifest = JSON.parse(
-    readFileSync(join(root, "node_modules", "next", "package.json"), "utf8"),
-  );
-  const installedSwc = Object.keys(nextManifest.optionalDependencies ?? {}).filter(
-    (dependency) =>
-      dependency.startsWith("@next/swc-") &&
-      existsSync(join(root, "node_modules", ...dependency.split("/"))),
-  );
-  if (installedSwc.length === 0) {
+  // The closure follows Next's installed optional dependencies, so every
+  // installed SWC candidate arrives with it; Next selects the binary for the
+  // current runtime rather than the verifier assuming exactly one.
+  if (![...copiedNextPackages].some((dependency) => dependency.startsWith("@next/swc-"))) {
     throw new Error(
       "Expected at least one locally installed Next SWC package, found none.",
     );
-  }
-  // npm can retain both glibc and musl candidates on Linux. Copy every
-  // installed, lockfile-verified candidate and let Next select the binary for
-  // the current runtime rather than assuming the install contains exactly one.
-  for (const swcPackage of installedSwc) {
-    copyLockedDependencyTree(nextApp, swcPackage, copiedNextPackages);
   }
 
   mkdirSync(join(nextApp, "app"));
@@ -328,17 +617,9 @@ export default function Image() {
   );
 
   const nextCli = join(nextApp, "node_modules", "next", "dist", "bin", "next");
-  try {
-    execFileSync(process.execPath, [nextCli, "build"], {
-      cwd: nextApp,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1" },
-    });
-  } catch (error) {
-    const details = error instanceof Error && "stderr" in error ? error.stderr : error;
-    throw new Error(`Packed-package Next static export failed: ${details}`, { cause: error });
-  }
+  buildFixture("Packed-package Next static export", nextCli, nextApp, {
+    NEXT_TELEMETRY_DISABLED: "1",
+  });
 
   const exportedImage = findExportedFile(join(nextApp, "out"), "opengraph-image");
   if (!exportedImage) {
@@ -364,88 +645,213 @@ export default function Image() {
     nextApp,
   );
 
-  // Build an actual Astro static site from the packed artifact. This proves
-  // the APIRoute handler contract, production bundling of the optional native
-  // renderer boundary, emitted image path, bytes, dimensions, and page tags.
-  install(astroApp, [archive]);
-  for (const dependency of FRAMEWORK_DEPENDENCIES.astro) {
-    linkLockedDependency(astroApp, dependency);
+  // Next's default server output is a separate production path from the
+  // static export above: the metadata image route and route handlers render
+  // per request under `next start`. Reuse the copied closure (Turbopack needs
+  // `next` physically inside its workspace, and the copy is the slowest step)
+  // once the export's artifacts are verified, and configure the server app
+  // exactly as the README's "JPEG or WebP cards in Next.js" section does.
+  // sharp, the README's JPEG encoder, is one of Next's optional dependencies.
+  if (!copiedNextPackages.has("sharp")) {
+    throw new Error("Next's optional sharp dependency is not installed; the JPEG route encodes with it.");
   }
-  mkdirSync(join(astroApp, "src", "lib"), { recursive: true });
-  mkdirSync(join(astroApp, "src", "pages"), { recursive: true });
-  writeFileSync(join(astroApp, "astro.config.mjs"), "export default {};\n");
+  for (const staticOutput of ["app", "out", ".next", "next.config.mjs"]) {
+    rmSync(join(nextApp, staticOutput), { recursive: true, force: true });
+  }
+  for (const dependency of FRAMEWORK_DEPENDENCIES.nextServer) {
+    linkLockedDependency(nextApp, dependency);
+  }
+  const jpegImagePath = SERVER_FIXTURE.jpegImagePath;
+  mkdirSync(join(nextApp, "app", "[slug]", jpegImagePath), { recursive: true });
+  mkdirSync(join(nextApp, "lib"));
   writeFileSync(
-    join(astroApp, "src", "lib", "og.ts"),
-    `import { fontsourceFontLoader } from "metaplate/fonts";
+    join(nextApp, "next.config.ts"),
+    `import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  serverExternalPackages: ["@resvg/resvg-js", "satori"],
+};
+
+export default nextConfig;
+`,
+  );
+  writeFileSync(
+    join(nextApp, "tsconfig.json"),
+    JSON.stringify({
+      compilerOptions: {
+        target: "ES2022",
+        lib: ["dom", "dom.iterable", "esnext"],
+        strict: true,
+        noEmit: true,
+        module: "esnext",
+        moduleResolution: "bundler",
+        jsx: "react-jsx",
+        isolatedModules: true,
+        esModuleInterop: true,
+        skipLibCheck: true,
+        plugins: [{ name: "next" }],
+      },
+      include: ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+      exclude: ["node_modules"],
+    }),
+  );
+  writeFileSync(
+    join(nextApp, "lib", "og.ts"),
+    `import sharp from "sharp";
+import { fontsourceFontLoader } from "metaplate/fonts";
 import { createNodeOg } from "metaplate/node";
 
-export const og = createNodeOg({
+export const jpegOg = createNodeOg({
   alt: (copy: { title: string }) => \`${"${copy.title}"} social card\`,
   fonts: fontsourceFontLoader([${fontsourceFontSource}]),
-  imagePath: ${JSON.stringify(SOCIAL_CARD_FIXTURE.imagePath)},
+  imagePath: ${JSON.stringify(jpegImagePath)},
   origin: ${JSON.stringify(SOCIAL_CARD_FIXTURE.origin)},
-  component: (copy: { title: string }) => ({
-    type: "div",
-    props: {
-      style: {
-        width: "100%",
-        height: "100%",
-        display: "flex",
-        alignItems: "center",
-        background: "#111827",
-        color: "#ffffff",
-        fontFamily: "Inter",
-        fontSize: 64,
-      },
-      children: copy.title,
-    },
-  }),
+  headers: { "Cache-Control": ${JSON.stringify(SERVER_FIXTURE.cacheControl)} },
+  output: {
+    format: "jpeg",
+    encode: ({ pixels, width, height }) =>
+      sharp(pixels, { raw: { width, height, channels: 4 } }).jpeg({ quality: 80 }).toBuffer(),
+  },
+  component: ${plateComponentSource},
 });
 `,
   );
   writeFileSync(
-    join(astroApp, "src", "pages", `${SOCIAL_CARD_FIXTURE.imagePath}.ts`),
-    `import type { APIRoute } from "astro";
+    join(nextApp, "app", "layout.tsx"),
+    `import type { Metadata } from "next";
+import type { ReactNode } from "react";
+
+export const metadata: Metadata = { metadataBase: new URL(${JSON.stringify(SOCIAL_CARD_FIXTURE.origin)}) };
+
+export default function Layout({ children }: { children: ReactNode }) {
+  return <html lang="en"><body>{children}</body></html>;
+}
+`,
+  );
+  // The page imports the metaplate/node plate only for metadata, which the
+  // README warns still makes the bundler trace the renderer peers.
+  writeFileSync(
+    join(nextApp, "app", "[slug]", "page.tsx"),
+    `import type { Metadata } from "next";
+import { jpegOg } from "../../lib/og";
+
+type Props = { params: Promise<{ slug: string }> };
+
+export const dynamic = "force-dynamic";
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params;
+  return { title: slug, twitter: jpegOg.metadata(\`/${"${slug}"}\`, { title: slug }).twitter };
+}
+
+export default async function Page({ params }: Props) {
+  const { slug } = await params;
+  return <main>Metaplate Next server fixture: {slug}</main>;
+}
+`,
+  );
+  writeFileSync(
+    join(nextApp, "app", "[slug]", "opengraph-image.tsx"),
+    `import { createNextOg } from "metaplate/next";
+
+const og = createNextOg({
+  component: (copy: { title: string }) => (
+    <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", background: "#111827", color: "#ffffff", fontSize: 64 }}>
+      {copy.title}
+    </div>
+  ),
+  alt: (copy) => \`${"${copy.title}"} metadata card\`,
+});
+
+export const dynamic = "force-dynamic";
+export const size = og.size;
+export const contentType = og.contentType;
+
+export default async function Image({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  return og.render({ title: slug.slice(0, 80) });
+}
+`,
+  );
+  writeFileSync(
+    join(nextApp, "app", "[slug]", jpegImagePath, "route.ts"),
+    `import { jpegOg } from "../../../lib/og";
+
+type Context = { params: Promise<{ slug: string }> };
+
+export const dynamic = "force-dynamic";
+export const GET = jpegOg.handlerFrom(async (_request: Request, { params }: Context) => ({
+  title: (await params).slug.slice(0, 80),
+}));
+`,
+  );
+  buildFixture("Packed-package Next server build", nextCli, nextApp, {
+    NEXT_TELEMETRY_DISABLED: "1",
+  });
+  routeEvidence.routes["next-server"] = await withProductionServer(
+    {
+      label: "Next",
+      cwd: nextApp,
+      readyPath: `/${SERVER_FIXTURE.slugs[0]}`,
+      start: (port) => ({
+        args: [nextCli, "start", "--hostname", "127.0.0.1", "--port", String(port)],
+        env: { NEXT_TELEMETRY_DISABLED: "1" },
+      }),
+    },
+    async (base) => {
+      const pages = await verifySocialPages(base, (slug) => ({
+        ogImagePath: `/${slug}/opengraph-image`,
+        ogImageType: "image/png",
+        twitterImagePath: `/${slug}/${jpegImagePath}`,
+      }));
+      // Next appends a cache-busting query to metadata image URLs; fetch the
+      // exact advertised URL rather than reconstructing it.
+      const metadataFile = await verifyDynamicImageRoute(
+        base,
+        pages.map(({ ogImage }) => `${ogImage.pathname}${ogImage.search}`),
+        { contentType: "image/png", format: "png" },
+      );
+      const routeHandler = await verifyDynamicImageRoute(
+        base,
+        pages.map(({ twitterImage }) => twitterImage.pathname),
+        { contentType: "image/jpeg", format: "jpeg", cacheControl: SERVER_FIXTURE.cacheControl },
+      );
+      return {
+        packedArtifact: true,
+        productionBuild: true,
+        servedOutput: true,
+        imageVerification: {
+          verified: true,
+          metadataFile: metadataFile.imageVerification,
+          routeHandler: routeHandler.imageVerification,
+        },
+        responseVerification: {
+          verified: true,
+          metadataFile: metadataFile.responseVerification,
+          routeHandler: routeHandler.responseVerification,
+        },
+      };
+    },
+  );
+
+  // Build an actual Astro static site from the packed artifact. This proves
+  // the APIRoute handler contract, production bundling of the optional native
+  // renderer boundary, emitted image path, bytes, dimensions, and page tags.
+  const astroCli = writeAstroApp(astroApp, archive, FRAMEWORK_DEPENDENCIES.astro, {
+    config: "export default {};\n",
+    pages: {
+      [`${SOCIAL_CARD_FIXTURE.imagePath}.ts`]: `import type { APIRoute } from "astro";
 import { og } from "../lib/og";
 
 export const prerender = true;
 export const GET = og.handler({ title: "Metaplate Astro smoke" }) satisfies APIRoute;
 `,
-  );
-  writeFileSync(
-    join(astroApp, "src", "pages", "index.astro"),
-    `---
-import { socialImageMetadata } from "metaplate";
-const social = socialImageMetadata("/", "Metaplate Astro smoke card", {
-  origin: ${JSON.stringify(SOCIAL_CARD_FIXTURE.origin)},
-  imagePath: ${JSON.stringify(SOCIAL_CARD_FIXTURE.imagePath)},
-  type: ${JSON.stringify(SOCIAL_CARD_FIXTURE.contentType)},
-});
-const image = social.openGraph.images[0];
----
-<html><head>
-  <meta property="og:image" content={image.url} />
-  <meta property="og:image:width" content={String(image.width)} />
-  <meta property="og:image:height" content={String(image.height)} />
-  <meta property="og:image:type" content={image.type} />
-  <meta property="og:image:alt" content={image.alt} />
-  <meta name="twitter:card" content={social.twitter.card} />
-  <meta name="twitter:image" content={social.twitter.images[0].url} />
-</head><body>Metaplate Astro fixture</body></html>
-`,
-  );
-  const astroCli = join(astroApp, "node_modules", "astro", "bin", "astro.mjs");
-  try {
-    execFileSync(process.execPath, [astroCli, "build"], {
-      cwd: astroApp,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, ASTRO_TELEMETRY_DISABLED: "1" },
-    });
-  } catch (error) {
-    const details = error instanceof Error && "stderr" in error ? error.stderr : error;
-    throw new Error(`Packed-package Astro static build failed: ${details}`, { cause: error });
-  }
+      "index.astro": astroSocialPage(JSON.stringify("/"), "Metaplate Astro fixture"),
+    },
+  });
+  buildFixture("Packed-package Astro static build", astroCli, astroApp, {
+    ASTRO_TELEMETRY_DISABLED: "1",
+  });
   const astroImage = join(astroApp, "dist", SOCIAL_CARD_FIXTURE.imagePath);
   const astroIndex = readFileSync(join(astroApp, "dist", "index.html"), "utf8");
   if (
@@ -456,18 +862,54 @@ const image = social.openGraph.images[0];
   ) {
     throw new Error("Astro static build did not emit the expected absolute social metadata.");
   }
-  runModule(
-    `
-      import { readFile } from "node:fs/promises";
-      import { verifyImage } from "metaplate/image";
-      const result = verifyImage(
-        await readFile(${JSON.stringify(astroImage)}),
-        ${cardSizeSource},
-        "png",
+  verifyPackedImage(readFileSync(astroImage), cardSize, "png");
+
+  // Serve the same plate on demand through Astro's official Node adapter in
+  // standalone mode: a dynamic `[slug]` endpoint whose GET is `handlerFrom`,
+  // and a server-rendered page emitting its social tags, from the built
+  // `dist/server/entry.mjs` rather than the dev server.
+  const astroServerCli = writeAstroApp(astroServerApp, archive, FRAMEWORK_DEPENDENCIES.astroServer, {
+    config: `import node from "@astrojs/node";
+
+export default { output: "server", adapter: node({ mode: "standalone" }) };
+`,
+    pages: {
+      [`[slug]/${SOCIAL_CARD_FIXTURE.imagePath}.ts`]: `import type { APIContext, APIRoute } from "astro";
+import { og } from "../../lib/og";
+
+export const GET = og.handlerFrom(({ params }: APIContext) => ({
+  title: (params.slug ?? "missing").slice(0, 80),
+})) satisfies APIRoute;
+`,
+      "[slug]/index.astro": astroSocialPage("`/${Astro.params.slug}`", "Metaplate Astro server fixture"),
+    },
+  });
+  buildFixture("Packed-package Astro server build", astroServerCli, astroServerApp, {
+    ASTRO_TELEMETRY_DISABLED: "1",
+  });
+  routeEvidence.routes["astro-server"] = await withProductionServer(
+    {
+      label: "Astro",
+      cwd: astroServerApp,
+      readyPath: `/${SERVER_FIXTURE.slugs[0]}`,
+      start: (port) => ({
+        args: [join(astroServerApp, "dist", "server", "entry.mjs")],
+        env: { HOST: "127.0.0.1", PORT: String(port), ASTRO_TELEMETRY_DISABLED: "1" },
+      }),
+    },
+    async (base) => {
+      const pages = await verifySocialPages(base, (slug) => ({
+        ogImagePath: `/${slug}/${SOCIAL_CARD_FIXTURE.imagePath}`,
+        ogImageType: SOCIAL_CARD_FIXTURE.contentType,
+        twitterImagePath: `/${slug}/${SOCIAL_CARD_FIXTURE.imagePath}`,
+      }));
+      const endpoint = await verifyDynamicImageRoute(
+        base,
+        pages.map(({ ogImage }) => ogImage.pathname),
+        { contentType: SOCIAL_CARD_FIXTURE.contentType, format: "png" },
       );
-      if (result.format !== "png") throw new Error("Astro endpoint did not emit PNG bytes.");
-    `,
-    astroApp,
+      return { packedArtifact: true, productionBuild: true, servedOutput: true, ...endpoint };
+    },
   );
 
   // Exercise the documented raw-byte bridge through a real Express 5 server,

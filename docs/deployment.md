@@ -31,7 +31,8 @@ into an image or asset element; allowlist remote assets or keep them local.
 | Vercel Function | `handler()` / `handlerFrom()` or `response()` | Vercel Node.js runtime | `/api/og` or framework route | Locally certified provider-shaped contract; hosted provider certification is separate |
 | Netlify Function | `handler()` / `handlerFrom()` or `response()` | Netlify Node.js Function | Function path or custom path | Locally certified provider-shaped contract; generated framework functions use project settings |
 | Railway/Render service | `response()` or `render()` + `Buffer.from()` | Long-lived Node.js service | Application route | Locally certified generic Node contract; provider deployment remains a recipe |
-| Next.js native route | `metaplate/next` | Next build/Node runtime | Metadata file or route handler | Supported by the Next integration contract |
+| Next.js native route | `metaplate/next`, or `metaplate/node` in a route handler | Next build/Node runtime | Metadata file or route handler | Static export and `next start` server output locally certified from the packed artifact; hosted Next deployment is separate |
+| Astro on-demand endpoint | `handlerFrom()` as the endpoint `GET` | `@astrojs/node` standalone server | `src/pages/[slug]/og-image.png.ts` | Locally certified from the packed artifact through the built `entry.mjs`; hosted Astro adapters are separate |
 | SvelteKit `+server` route | `handlerFrom()` as the `GET` `RequestHandler` | `adapter-node` on Node.js | `src/routes/[slug]/og-image.png/+server.ts` | Locally certified framework contract; hosted deployment of the Node server remains a recipe |
 | Cloudflare Workers / Vercel Edge / Netlify Edge | `metaplate/edge` (`fetchable()` / `fetchableFrom()`), not `metaplate/node` | `@resvg/resvg-wasm` with caller-supplied Wasm | Provider route | Tested in Node against the Wasm renderer; not certified on a hosted edge platform |
 

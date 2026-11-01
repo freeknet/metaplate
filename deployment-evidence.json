@@ -58,6 +58,37 @@
       "officialDocs": "https://docs.railway.com/guides/express"
     },
     {
+      "id": "next-server",
+      "provider": "Next.js self-hosted server (next start)",
+      "runtime": "long-lived Node.js",
+      "api": "metaplate/next dynamic opengraph-image metadata file; metaplate/node handlerFrom route handler",
+      "status": "certified-local-contract",
+      "evidence": "scripts/verify-package.mjs packed-artifact Next server fixture: next build (default server output) and next start on 127.0.0.1",
+      "runtimeBoundary": "Next.js 16.3.2-16.x on Node.js 24, local next start only; hosted Next deployments (Vercel, Netlify, containers) are not certified",
+      "officialDocs": "https://nextjs.org/docs/app/api-reference/file-conventions/route",
+      "officialReferences": [
+        "https://nextjs.org/docs/app/api-reference/file-conventions/route",
+        "https://nextjs.org/docs/app/api-reference/file-conventions/metadata/opengraph-image",
+        "https://nextjs.org/docs/app/api-reference/config/next-config-js/serverExternalPackages",
+        "https://nextjs.org/docs/app/api-reference/cli/next"
+      ]
+    },
+    {
+      "id": "astro-server",
+      "provider": "Astro on-demand rendering (@astrojs/node standalone)",
+      "runtime": "long-lived Node.js",
+      "api": "Astro APIRoute GET from metaplate/node handlerFrom",
+      "status": "certified-local-contract",
+      "evidence": "scripts/verify-package.mjs packed-artifact Astro server fixture: astro build (output server) and dist/server/entry.mjs on 127.0.0.1",
+      "runtimeBoundary": "Astro 7 with @astrojs/node 11 standalone mode on Node.js 24, local entry.mjs only; hosted Astro adapters are not certified",
+      "officialDocs": "https://docs.astro.build/en/guides/on-demand-rendering/",
+      "officialReferences": [
+        "https://docs.astro.build/en/guides/on-demand-rendering/",
+        "https://docs.astro.build/en/guides/endpoints/",
+        "https://docs.astro.build/en/guides/integrations-guide/node/"
+      ]
+    },
+    {
       "id": "sveltekit-node",
       "provider": "SvelteKit adapter-node",
       "runtime": "long-lived Node.js",
