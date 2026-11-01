@@ -2,7 +2,9 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, expect, it, vi } from "vitest";
+import { gzipSync } from "node:zlib";
+import { build as esbuild } from "esbuild";
+import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { fontLoader } from "../src/font-data.js";
 import { imageDimensions, verifyImage } from "../src/image.js";
 import { createNodeOg } from "../src/node.js";
@@ -15,6 +17,8 @@ const installed = (...segments: string[]) =>
   readFileSync(path.join(root, "node_modules", ...segments));
 const resvgWasm = installed("@resvg", "resvg-wasm", "index_bg.wasm");
 const layoutWasm = installed("satori", "layout.wasm");
+/** Both Wasm modules every edge plate needs, as a Worker would import them. */
+const wasm = { resvg: { wasm: resvgWasm }, layout: { wasm: layoutWasm } };
 
 const definition = {
   alt: (copy: { title: string }) => `${copy.title} social card`,
@@ -66,7 +70,7 @@ it(
   "renders a PNG through @resvg/resvg-wasm with caller-supplied Wasm bytes",
   async () => {
     const { createEdgeOg } = await edgeEntry();
-    const plate = createEdgeOg({ ...definition, resvg: { wasm: resvgWasm } });
+    const plate = createEdgeOg({ ...definition, ...wasm });
 
     expect(plate.contentType).toBe("image/png");
     const png = await plate.render({ title: "Edge PNG" });
@@ -95,7 +99,7 @@ it(
       origin: "https://example.com",
       headers: { "Cache-Control": "public, max-age=3600" },
     };
-    const edge = createEdgeOg({ ...shared, resvg: { wasm: resvgWasm } });
+    const edge = createEdgeOg({ ...shared, ...wasm });
     const node = createNodeOg(shared);
     const copy = { title: "Parity" };
 
@@ -136,13 +140,13 @@ it(
 );
 
 it(
-  "lays out through satori/standalone when the Yoga module is supplied",
+  "resolves lazily supplied Wasm sources on the first render",
   async () => {
     const { createEdgeOg } = await edgeEntry();
     const plate = createEdgeOg({
       ...definition,
       resvg: { wasm: () => Promise.resolve(resvgWasm) },
-      layout: { wasm: layoutWasm },
+      layout: { wasm: () => Promise.resolve(layoutWasm) },
     });
 
     const route = plate.fetchableFrom((request: Request) => ({
@@ -157,10 +161,10 @@ it(
 );
 
 it(
-  "takes the Wasm module once through initEdgeRenderer",
+  "takes both Wasm modules once through initEdgeRenderer",
   async () => {
     const { createEdgeOg, initEdgeRenderer } = await edgeEntry();
-    await initEdgeRenderer(resvgWasm);
+    await initEdgeRenderer(resvgWasm, { layout: layoutWasm });
     const plate = createEdgeOg(definition);
 
     const response = await plate.fetchable({ title: "Initialised" }).fetch();
@@ -177,7 +181,7 @@ it(
     const contexts: { variant: string | undefined; width: number; height: number }[] = [];
     const plate = createEdgeOg({
       ...definition,
-      resvg: { wasm: resvgWasm },
+      ...wasm,
       imagePath: "og-image.png",
       variants: { square: { size: { width: 1080, height: 1080 } } },
       component: (copy: { title: string }, { variant, size }) => {
@@ -230,7 +234,7 @@ it(
 
 it("offers Fetch-shaped handlers and no copy-bound handler", async () => {
   const { createEdgeOg } = await edgeEntry();
-  const plate = createEdgeOg({ ...definition, resvg: { wasm: resvgWasm } });
+  const plate = createEdgeOg({ ...definition, ...wasm });
 
   expect(typeof plate.fetchable).toBe("function");
   expect(typeof plate.fetchableFrom).toBe("function");
@@ -267,11 +271,57 @@ it(
       },
     }));
     const { createEdgeOg } = await edgeEntry();
-    const plate = createEdgeOg(definition);
+    const plate = createEdgeOg({ ...definition, layout: { wasm: layoutWasm } });
 
     await expect(plate.render({ title: "No Wasm" })).rejects.toThrow(
-      /pass it as resvg\.wasm to createEdgeOg or call initEdgeRenderer\(wasm\) first/i,
+      /pass it as resvg\.wasm to createEdgeOg or to initEdgeRenderer\(wasm, \{ layout \}\)/i,
     );
+  },
+  30_000,
+);
+
+const MISSING_LAYOUT =
+  /no satori\/layout\.wasm module.*pass it as layout\.wasm to createEdgeOg or to initEdgeRenderer/is;
+
+it(
+  "requires satori/layout.wasm and accepts it once supplied after a failed render",
+  async () => {
+    const { createEdgeOg, initEdgeRenderer } = await edgeEntry();
+    const plate = createEdgeOg({ ...definition, resvg: { wasm: resvgWasm } });
+
+    await expect(plate.render({ title: "No layout" })).rejects.toThrow(MISSING_LAYOUT);
+    await expect(
+      initEdgeRenderer(resvgWasm, {} as Parameters<typeof initEdgeRenderer>[1]),
+    ).rejects.toThrow(MISSING_LAYOUT);
+
+    // A layout source supplied later, here through initEdgeRenderer, serves
+    // the plate that failed: the slot only fills once a source exists.
+    await initEdgeRenderer(resvgWasm, { layout: layoutWasm });
+    verifyImage(await plate.render({ title: "Layout supplied" }), plate.size, "png");
+  },
+  30_000,
+);
+
+it(
+  "retries a layout source whose first initialisation failed",
+  async () => {
+    const { createEdgeOg } = await edgeEntry();
+    let calls = 0;
+    const plate = createEdgeOg({
+      ...definition,
+      resvg: { wasm: resvgWasm },
+      layout: {
+        wasm: () => {
+          calls += 1;
+          if (calls === 1) throw new Error("layout fetch failed");
+          return layoutWasm;
+        },
+      },
+    });
+
+    await expect(plate.render({ title: "First" })).rejects.toThrow("layout fetch failed");
+    verifyImage(await plate.render({ title: "Second" }), plate.size, "png");
+    expect(calls).toBe(2);
   },
   30_000,
 );
@@ -293,6 +343,8 @@ it(
       };
     });
     const { createEdgeOg } = await edgeEntry();
+    // No layout module either: a missing package is reported before a missing
+    // Wasm source, so the install command comes first.
     const plate = createEdgeOg({ ...definition, resvg: { wasm: resvgWasm } });
 
     await expect(plate.render({ title: "Missing" })).rejects.toThrow(
@@ -303,35 +355,103 @@ it(
   30_000,
 );
 
-// The same check package verification applies to `metaplate/font-data`, run
-// against a build of this entry with the project's own tsup configuration so
-// it does not depend on a stale or absent dist directory.
-it(
-  "bundles metaplate/edge without Node built-ins or CommonJS require",
-  async () => {
+/**
+ * `dist/edge.js` as the project's own tsup configuration builds it, so the
+ * bundle checks below never depend on a stale or absent dist directory.
+ */
+let edgeBuild: Promise<{ outDir: string; entry: string }> | undefined;
+
+function buildEdgeEntry() {
+  edgeBuild ??= (async () => {
     const { build } = await import("tsup");
     const { default: config } = await import("../tsup.config.js");
     const outDir = mkdtempSync(path.join(tmpdir(), "metaplate-edge-build-"));
-    try {
-      await build({
-        ...(config as object),
-        entry: { edge: path.join(root, "src", "edge.ts") },
-        outDir,
-        dts: false,
-        sourcemap: false,
-        clean: false,
-        silent: true,
-      });
-      const source = readFileSync(path.join(outDir, "edge.js"), "utf8");
+    await build({
+      ...(config as object),
+      entry: { edge: path.join(root, "src", "edge.ts") },
+      outDir,
+      dts: false,
+      sourcemap: false,
+      clean: false,
+      silent: true,
+    });
+    return { outDir, entry: path.join(outDir, "edge.js") };
+  })();
+  return edgeBuild;
+}
 
-      expect(source).not.toMatch(/\bnode:/);
-      expect(source).not.toMatch(/\brequire\(/);
-      expect(source).not.toMatch(/\bBuffer\b/);
-      expect(source).not.toContain("@resvg/resvg-js");
-      expect(source).toContain('import("@resvg/resvg-wasm")');
-    } finally {
-      rmSync(outDir, { recursive: true, force: true });
-    }
+afterAll(async () => {
+  if (edgeBuild) rmSync((await edgeBuild).outDir, { recursive: true, force: true });
+});
+
+// The same check package verification applies to `metaplate/font-data`.
+// Satori's default build embeds its own Yoga, so referencing it as well as
+// `satori/standalone` would make every edge bundler ship both builds.
+it(
+  "bundles metaplate/edge without Node built-ins, CommonJS require, or Satori's default build",
+  async () => {
+    const source = readFileSync((await buildEdgeEntry()).entry, "utf8");
+
+    expect(source).not.toMatch(/\bnode:/);
+    expect(source).not.toMatch(/\brequire\(/);
+    expect(source).not.toMatch(/\bBuffer\b/);
+    expect(source).not.toContain("@resvg/resvg-js");
+    expect(source).toContain('import("@resvg/resvg-wasm")');
+    expect(source).toContain('import("satori/standalone")');
+    // The peer description names the package; no import may use it bare.
+    expect(source).not.toMatch(/\b(?:import\s*\(\s*|from\s*|import\s*)(["'`])satori\1/);
+  },
+  60_000,
+);
+
+// What an edge platform's bundler does with the entry: esbuild (which
+// Wrangler, Vercel, and Netlify build on) follows every dynamic import, so the
+// metafile lists each Satori build the deployed function would carry. The
+// Wasm imports stay external, as Wrangler uploads them as separate modules.
+it(
+  "lets an esbuild-bundled edge consumer carry only satori/standalone",
+  async () => {
+    const { entry } = await buildEdgeEntry();
+    const consumer = `
+      import resvgWasm from "@resvg/resvg-wasm/index_bg.wasm";
+      import layoutWasm from "satori/layout.wasm";
+      import { createEdgeOg } from ${JSON.stringify(entry.replaceAll("\\", "/"))};
+
+      export default createEdgeOg({
+        alt: (copy) => copy.title,
+        resvg: { wasm: resvgWasm },
+        layout: { wasm: layoutWasm },
+        fonts: () => [],
+        component: (copy) => ({ type: "div", props: { children: copy.title } }),
+      }).fetchableFrom(() => ({ title: "Edge" }));
+    `;
+    const result = await esbuild({
+      stdin: { contents: consumer, resolveDir: root, sourcefile: "edge-consumer.js" },
+      bundle: true,
+      write: false,
+      metafile: true,
+      minify: true,
+      format: "esm",
+      platform: "browser",
+      conditions: ["workerd", "worker", "browser"],
+      nodePaths: [path.join(root, "node_modules")],
+      external: ["*.wasm"],
+      logLevel: "silent",
+    });
+
+    const satoriInputs = Object.keys(result.metafile.inputs)
+      .map((input) => input.replaceAll("\\", "/"))
+      .filter((input) => input.includes("node_modules/satori/"));
+    expect(satoriInputs).toEqual(["node_modules/satori/dist/standalone.js"]);
+    expect(satoriInputs.some((input) => input.includes("node_modules/satori/dist/index"))).toBe(false);
+
+    const bytes = result.outputFiles[0]!.contents;
+    // Recorded in the test output: the JavaScript an edge function ships
+    // besides the two Wasm modules.
+    console.info(
+      `metaplate/edge consumer bundle (minified, Wasm external): ${bytes.byteLength} bytes, ` +
+        `${gzipSync(bytes).byteLength} bytes gzip`,
+    );
   },
   60_000,
 );
