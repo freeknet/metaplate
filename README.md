@@ -216,11 +216,14 @@ For dynamic copy, `handlerFrom` forwards every framework argument to a sync or
 async resolver. For example, a SvelteKit
 [`+server` route](https://svelte.dev/docs/kit/routing#server) deployed with the
 official [Node adapter](https://svelte.dev/docs/kit/adapter-node) can use its
-typed params without a wrapper around every plate:
+typed params without a wrapper around every plate. SvelteKit 3 configures the
+adapter through `sveltekit({ adapter: adapter() })` in `vite.config.js` and
+resolves [`#lib`](https://svelte.dev/docs/kit/$lib) through the `imports`
+field of `package.json` (`"#lib/*": "./src/lib/*"`):
 
 ```ts
 import type { RequestHandler } from "./$types";
-import { og } from "$lib/og";
+import { og } from "#lib/og.js";
 
 export const GET: RequestHandler = og.handlerFrom(({ params }) => ({
   title: titleFor(params.slug),
@@ -284,7 +287,7 @@ set actually exercised by the release gate.
 | `metaplate/next` | [Metadata and OG images](https://nextjs.org/docs/app/getting-started/metadata-and-og-images), [metadata files](https://nextjs.org/docs/app/api-reference/file-conventions/metadata/opengraph-image), and [static exports](https://nextjs.org/docs/app/guides/static-exports) | Next.js 16.3.2–16.x Node/build pipeline | Exact packed artifact is built through a real Next static export in the release gate. Next 15 is not claimed because its remaining dependency advisories fail this project's release audit. |
 | Astro static endpoints | [Static and server endpoints](https://docs.astro.build/en/guides/endpoints/) | Astro 7 build on Node 24 | Exact packed artifact produces the endpoint, PNG bytes, dimensions, and separately tested page metadata. |
 | React Router resource routes | [Resource routes](https://reactrouter.com/how-to/resource-routes) | React Router 8 framework mode on Node 22.22+ | Exact packed artifact is type-generated, typechecked, built, served, and fetched through a dynamic `loader(args)` route. |
-| SvelteKit | [`+server` routing](https://svelte.dev/docs/kit/routing#server) and [`adapter-node`](https://svelte.dev/docs/kit/adapter-node) | Node-compatible adapters | `handlerFrom` follows its `RequestHandler` contract, but certification is deferred while the latest stable Kit line retains an upstream Cookie advisory. |
+| SvelteKit `+server` routes | [`+server` routing](https://svelte.dev/docs/kit/routing#server) and [`adapter-node`](https://svelte.dev/docs/kit/adapter-node) | SvelteKit 3 with `adapter-node` 6 on Node 22.17+ | Exact packed artifact is synced, typechecked against the generated `RequestHandler`, built with `adapter-node`, served, and fetched through a dynamic `handlerFrom` `GET` route and a page emitting its social metadata. |
 | Express | [Express 5 response API](https://expressjs.com/en/5x/api/#res.send) | Express 5 on Node | Exact packed artifact is served over an ephemeral HTTP server and checked for headers, bytes, and dimensions. |
 | Workers, Deno, and other edge runtimes | Consult the framework's adapter/runtime documentation | Not supported by `metaplate/node` | Native Resvg cannot be inferred from Web `Response` support. Use a compatible renderer instead. |
 
