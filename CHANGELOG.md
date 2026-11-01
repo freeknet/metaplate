@@ -53,6 +53,22 @@ All notable changes to Metaplate are documented in this file. The project uses
   the new optional `officialReferences` and `runtimeBoundary` fields.
 - `@astrojs/node` 11.1.9 is a pinned development dependency for the Astro
   server fixture. It is not a dependency or peer of the published package.
+- Hosted Vercel certification from a dated production deployment
+  (2026-11-01) of the packed 0.8.0 tarball. `vercel-node` moves from
+  `certified-local-contract` to `certified`: a Vercel Function on the Node.js
+  runtime whose `GET` is `metaplate/node` `handlerFrom`. A new `vercel-next`
+  route is `certified` for Next.js 16.4.3 on Vercel, serving a `metaplate/next`
+  `[slug]/opengraph-image` and a `metaplate/node` JPEG route handler. Both
+  were checked for two slugs with `metaplate verify-url` and a plain GET for
+  status, media type, dimensions, response headers, and distinct bytes. A
+  `metaplate/edge` Vercel Edge Function was attempted and is recorded as
+  `vercel-edge`, `not-supported`: the deploy was rejected because the
+  function is 2.13 MB after gzip and the Hobby plan's Edge limit is 1 MB.
+  Raw outputs are in `.planning/hosted-evidence/vercel-2026-11-01.json`, and
+  the deployed fixtures are in `examples/hosted/vercel/`.
+- `verify-deployment-evidence.mjs` now allows a `certified` edge route only
+  when its `api` names `metaplate/edge`. The native renderer still cannot be
+  certified on an edge runtime.
 
 ### Changed
 

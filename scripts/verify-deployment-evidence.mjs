@@ -78,7 +78,11 @@ export function validateDeploymentManifest(manifest) {
     }
     if (!allowedStatuses.has(route.status)) errors.push(`${route.id}: unknown status ${route.status}`);
     if (!present(route.evidence)) errors.push(`${route.id}: evidence is required`);
-    if ((route.edgeRuntime === true || /edge|workers/i.test(route.runtime) || route.id === "edge") && route.status === "certified") {
+    // The native renderer cannot run on an edge runtime, so an edge route may
+    // be certified only when its api names the Wasm entry, metaplate/edge.
+    const edgeRoute = route.edgeRuntime === true || /edge|workers/i.test(route.runtime) || route.id === "edge";
+    const usesEdgeRenderer = typeof route.api === "string" && /\bmetaplate\/edge\b/.test(route.api);
+    if (edgeRoute && !usesEdgeRenderer && route.status === "certified") {
       errors.push(`${route.id}: native edge runtime cannot be certified without an edge renderer`);
     }
     if (route.status === "not-supported" && !present(route.reason)) {
