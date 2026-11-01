@@ -70,4 +70,22 @@ describe("deployment certification boundaries", () => {
       "next-server: runtimeBoundary must be a non-empty string",
     ]);
   });
+
+  it("requires related upstream references to be HTTPS URLs", () => {
+    const route = {
+      id: "sveltekit-node",
+      provider: "SvelteKit adapter-node",
+      runtime: "long-lived Node.js",
+      status: "certified-local-contract",
+      evidence: "packed local contract fixture",
+    };
+    expect(validateDeploymentManifest({
+      ...base,
+      routes: [{ ...route, relatedDocs: ["https://svelte.dev/docs/kit/routing#server"] }],
+    })).toEqual([]);
+    expect(validateDeploymentManifest({
+      ...base,
+      routes: [{ ...route, relatedDocs: ["http://svelte.dev/docs/kit/routing"] }],
+    })).toContain("sveltekit-node: relatedDocs must be an array of HTTPS URLs");
+  });
 });

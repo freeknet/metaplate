@@ -89,6 +89,18 @@
       ]
     },
     {
+      "id": "sveltekit-node",
+      "provider": "SvelteKit adapter-node",
+      "runtime": "long-lived Node.js",
+      "api": "+server RequestHandler via handlerFrom",
+      "status": "certified-local-contract",
+      "evidence": "scripts/verify-package.mjs packed-artifact SvelteKit fixture",
+      "officialDocs": "https://svelte.dev/docs/kit/adapter-node",
+      "relatedDocs": [
+        "https://svelte.dev/docs/kit/routing#server"
+      ]
+    },
+    {
       "id": "bun",
       "provider": "Bun",
       "runtime": "Bun 1.x Node compatibility",
