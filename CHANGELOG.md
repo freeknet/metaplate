@@ -7,8 +7,18 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Added
 
-- `metaplate/edge` renders plates to PNG through `@resvg/resvg-wasm` for
-  Cloudflare Workers, Deno, and other Fetch-shaped runtimes. `createEdgeOg`
+- `metaplate/edge` renders plates to PNG through `@resvg/resvg-wasm` on
+  Deno-based edges such as Netlify Edge Functions (hosted-certified on
+  2026-11-01), and on other Fetch-shaped runtimes that allow WebAssembly to be
+  compiled at run time. It does not run on Cloudflare Workers: Satori's
+  bundled HarfBuzz text shaper reads `self.location.href` and compiles its
+  Wasm from embedded bytes, and Workers define no `location` and forbid
+  run-time Wasm compilation, so every render failed under `wrangler dev`
+  (workerd). Every Satori release that exports `satori/layout.wasm` bundles
+  that HarfBuzz build and Satori accepts no precompiled HarfBuzz module, so
+  `metaplate/edge` rethrows either failure as an error that names the
+  limitation (the original error is its `cause`); other errors pass through
+  unchanged. Vercel's Edge runtime forbids the same compilation. `createEdgeOg`
   shares `metaplate/node`'s SVG rendering, size variants, dimension checks,
   owned headers, ETags (computed with Web Crypto), `artifact`, `response`,
   `fetchable`, `fetchableFrom`, and `handlerFrom`, and imports no Node
@@ -23,8 +33,7 @@ All notable changes to Metaplate are documented in this file. The project uses
   gzip of Wasm, about 1.6 MB in all: within Vercel Pro's 2 MB Edge Function
   limit, not Vercel Hobby's 1 MB. Output is PNG only: `output` encoders are
   rejected because `@resvg/resvg-wasm` has no JPEG or WebP encoder. The entry
-  is tested in Node against the Wasm renderer and from the packed tarball, not
-  yet on a hosted edge platform.
+  is tested in Node against the Wasm renderer and from the packed tarball.
 - `@resvg/resvg-wasm` (`>=2.6.2 <3`) is a new optional peer. `npm install
   metaplate` does not install it, and a missing peer reports
   `npm install @resvg/resvg-wasm`.

@@ -1,0 +1,3 @@
+# Written by wrangler dev and wrangler deploy --dry-run --outdir dist
+.wrangler/
+dist/

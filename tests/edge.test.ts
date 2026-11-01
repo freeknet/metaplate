@@ -64,6 +64,8 @@ function missingModule(specifier: string) {
 afterEach(() => {
   vi.doUnmock("@resvg/resvg-wasm");
   vi.doUnmock("../src/peers.js");
+  vi.doUnmock("satori/standalone");
+  vi.unstubAllGlobals();
 });
 
 it(
@@ -351,6 +353,74 @@ it(
       "Cannot find @resvg/resvg-wasm, required by metaplate/edge. " +
         "Install it with: npm install @resvg/resvg-wasm",
     );
+  },
+  30_000,
+);
+
+/**
+ * Replaces `satori/standalone` with a build whose render rejects with
+ * `error`, as Satori's bundled HarfBuzz does in Cloudflare Workers, and
+ * returns what a render of an otherwise complete edge plate rejects with.
+ */
+async function renderFailure(error: unknown): Promise<unknown> {
+  vi.doMock("satori/standalone", () => ({
+    init: () => undefined,
+    default: () => Promise.reject(error),
+  }));
+  const { createEdgeOg } = await edgeEntry();
+  const plate = createEdgeOg({ ...definition, ...wasm });
+  return plate.render({ title: "HarfBuzz" }).then(
+    () => expect.fail("the render should have failed"),
+    (failure: unknown) => failure,
+  );
+}
+
+const HARFBUZZ_RUNTIME =
+  /Satori's bundled HarfBuzz text shaper compiles WebAssembly at runtime and expects self\.location, which this runtime forbids \(Cloudflare Workers and other V8 isolates that disallow Wasm code generation\)\. metaplate\/edge runs on edge runtimes that allow it, such as Deno and Netlify Edge Functions\. See https:\/\/github\.com\/lnorton89\/metaplate#edge-runtimes-with-metaplateedge/;
+
+/** Asserts that a render failing with `original` rejects with the explanation. */
+async function expectExplained(original: Error): Promise<void> {
+  const failure = await renderFailure(original);
+
+  expect(failure).toBeInstanceOf(Error);
+  expect((failure as Error).message).toMatch(HARFBUZZ_RUNTIME);
+  expect((failure as Error).cause).toBe(original);
+}
+
+it(
+  "explains HarfBuzz's self.location read in a worker scope without location",
+  async () => {
+    // workerd defines WorkerGlobalScope but no location; Node has neither.
+    vi.stubGlobal("WorkerGlobalScope", class WorkerGlobalScope {});
+    expect(typeof (globalThis as { location?: unknown }).location).toBe("undefined");
+
+    await expectExplained(new TypeError("Cannot read properties of undefined (reading 'href')"));
+  },
+  30_000,
+);
+
+it(
+  "explains a refused HarfBuzz Wasm compilation",
+  async () => {
+    await expectExplained(
+      new WebAssembly.RuntimeError(
+        "Aborted(CompileError: WebAssembly.instantiate(): Wasm code generation disallowed by embedder). " +
+          "Build with -sASSERTIONS for more info.",
+      ),
+    );
+  },
+  30_000,
+);
+
+it(
+  "passes other Satori errors through unchanged",
+  async () => {
+    // Outside a worker scope, the same href message is not HarfBuzz's.
+    const href = new TypeError("Cannot read properties of undefined (reading 'href')");
+    expect(await renderFailure(href)).toBe(href);
+
+    const unrelated = new Error("Unsupported CSS property: grid");
+    expect(await renderFailure(unrelated)).toBe(unrelated);
   },
   30_000,
 );
