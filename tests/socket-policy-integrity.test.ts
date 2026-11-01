@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { validateSocketReport } from "../scripts/verify-socket-dispositions.mjs";
+import { isFullIso8601Timestamp, isIso8601Timestamp } from "../scripts/socket-evidence.mjs";
 
 type JsonObject = Record<string, unknown>;
 
@@ -105,7 +106,7 @@ describe("Socket evidence integrity", () => {
 
   it("rejects score artifact with source for wrong package", async () => {
     const tampered = await withScore(scoreReport, (score) => {
-      (score as JsonObject).source = "https://socket.dev/npm/package/other-package@0.6.0";
+      (score as JsonObject).source = "https://socket.dev/npm/package/other-package@0.7.0";
       return score;
     });
     expect(validateSocketReport(tampered.report).some((error) => error.includes("source") || error.includes("package"))).toBe(true);
@@ -113,7 +114,7 @@ describe("Socket evidence integrity", () => {
 
   it("rejects score artifact with URL suffix garbage", async () => {
     const tampered = await withScore(scoreReport, (score) => {
-      (score as JsonObject).source = "https://socket.dev/npm/package/metaplate@0.6.0/garbage";
+      (score as JsonObject).source = "https://socket.dev/npm/package/metaplate@0.7.0/garbage";
       return score;
     });
     expect(validateSocketReport(tampered.report).some((error) => error.includes("source"))).toBe(true);
@@ -129,7 +130,7 @@ describe("Socket evidence integrity", () => {
 
   it("rejects score artifact with URL with credentials", async () => {
     const tampered = await withScore(scoreReport, (score) => {
-      (score as JsonObject).source = "https://user:pass@socket.dev/npm/package/metaplate@0.6.0";
+      (score as JsonObject).source = "https://user:pass@socket.dev/npm/package/metaplate@0.7.0";
       return score;
     });
     expect(validateSocketReport(tampered.report).some((error) => error.includes("source"))).toBe(true);
@@ -141,7 +142,7 @@ describe("Socket evidence integrity", () => {
   });
 
   it("rejects disposition report with wrong source hostname", async () => {
-    const tampered = { ...dispositionReport, source: "https://evil.dev/npm/package/metaplate@0.6.0" };
+    const tampered = { ...dispositionReport, source: "https://evil.dev/npm/package/metaplate@0.7.0" };
     expect(validateSocketReport(tampered).some((error) => error.includes("source"))).toBe(true);
   });
 
@@ -344,8 +345,14 @@ describe("Socket evidence integrity", () => {
     expect(validateSocketReport(tampered.report).some((e) => e.includes("capturedAt"))).toBe(true);
   });
 
-  it("accepts the committed score artifact capturedAt as valid ISO-8601", () => {
-    expect(typeof scoreReport.capturedAt).toBe("string");
+  it("records valid ISO-8601 capture times on the committed score artifact", () => {
+    // A fresh CLI import carries capturedAt only when the raw export supplies
+    // one; the importer always stamps a full normalizedAt timestamp.
+    expect(scoreReport.captureKind).toBe("socket-cli-import");
+    expect(isFullIso8601Timestamp(scoreReport.normalizedAt)).toBe(true);
+    if (scoreReport.capturedAt !== undefined) {
+      expect(isIso8601Timestamp(scoreReport.capturedAt)).toBe(true);
+    }
   });
 
   it("the committed score artifact has no top-level reachability on alerts", () => {

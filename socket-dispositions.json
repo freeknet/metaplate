@@ -1,13 +1,13 @@
 {
   "schemaVersion": 2,
   "package": "metaplate",
-  "version": "0.6.0",
-  "source": "https://socket.dev/npm/package/metaplate/alerts/0.6.0?tab=dependencies",
+  "version": "0.7.0",
+  "source": "https://socket.dev/npm/package/metaplate/alerts/0.7.0?tab=dependencies",
   "status": "complete",
   "export": {
     "artifact": "socket-score-report.json",
-    "generatedAt": "2026-08-25",
-    "sha256": "f51cff07ddeefccf1ad02759e5fef0f6dd5ea3f39baa3919ab00bf52b8a90774"
+    "generatedAt": "2026-10-31",
+    "sha256": "915c8e473d88809e323310169ae75589587bc0c9f51ab8b2147105e609c0626a"
   },
   "releasePolicy": {
     "blockSeverities": [
@@ -41,10 +41,24 @@
       "reachability": "runtime-peer",
       "disposition": "accepted-with-evidence",
       "owner": "metaplate maintainers",
-      "reason": "Socket identifies a maintenance upgrade opportunity, not a vulnerability. The package is transitive to the release-tested Satori peer, and this baseline does not establish a compatible upstream Satori update that removes it.",
-      "expiry": "2026-12-31T00:00:00Z",
-      "evidence": "socket-score-report.json; official Socket CLI deep score captured 2026-08-25",
+      "reason": "Socket identifies a maintenance upgrade opportunity, not a vulnerability. The package is transitive to the release-tested Satori peer through @shuding/opentype.js, and this baseline does not establish a compatible upstream Satori update that removes it. The 0.6.0 evaluation of string.prototype.codepointat@1.0.1 through an npm override returned the same Socket scores and alert set while growing the lockfile from 700 to 773 packages, so the override remains rejected as a net-negative supply-chain change.",
+      "expiry": "2027-04-30T00:00:00Z",
+      "evidence": "socket-score-report.json; Socket CLI deep score of metaplate@0.7.0 captured 2026-10-31 (socket package score npm metaplate@0.7.0 --json); raw export sha256 f6248d50ee8a60912bb28f85138fd6120eb11d977743266387993a2fb97bf330",
       "verification": "npm audit --audit-level=high; package-lock.json registry/integrity checks; npm run check:package; Node 20/22/24 and Linux/Windows/macOS CI matrix"
+    },
+    {
+      "type": "unstableOwnership",
+      "severity": "high",
+      "package": "tslib",
+      "version": "2.9.1",
+      "path": "metaplate > astro > @astrojs/compiler-rs > @astrojs/compiler-binding > @astrojs/compiler-binding-wasm32-wasi > @emnapi/core > @emnapi/wasi-threads > tslib",
+      "reachability": "runtime-peer-optional",
+      "disposition": "accepted-with-evidence",
+      "owner": "metaplate maintainers",
+      "reason": "Socket flags an ownership change, not a vulnerability or malicious behavior. tslib 2.9.1 was published on 2026-10-30 by Microsoft's npm identity microsoft1es <npmjs@microsoft.com> instead of typescript-bot; the maintainer list still includes the TypeScript team (typescript-bot, weswigham, andrewbranch, jakebailey) alongside the new microsoft-oss-releases account. The repository is unchanged at github.com/Microsoft/tslib, where tag v2.9.1 points at commit f167789 (\"Bump tslib to 2.9.1 (#299)\") with a GitHub release published by typescript-automation[bot] on 2026-10-30, and the preceding commit 5d4a32e (\"Stop running tests in the Azure release pipeline (#298)\") is consistent with publishing moving to Microsoft's Azure pipeline. The tarball carries two npm registry signatures but no SLSA provenance attestation. The change is consistent with Microsoft consolidating its npm publishing but was not confirmed with the maintainers. metaplate has no runtime dependencies and does not ship tslib; the lockfile reaches it only through the optional next peer (@swc/helpers and sharp's wasm32 fallback) and the development-only astro fixture's wasm32-wasi fallback bindings, never through the required satori, @resvg/resvg-js, or react peers, so it is development tooling for metaplate itself. Re-evaluate this exception at the next Socket baseline capture.",
+      "expiry": "2027-04-30T00:00:00Z",
+      "evidence": "socket-score-report.json; Socket CLI deep score of metaplate@0.7.0 captured 2026-10-31 (socket package score npm metaplate@0.7.0 --json); raw export sha256 f6248d50ee8a60912bb28f85138fd6120eb11d977743266387993a2fb97bf330; npm registry metadata for tslib@2.9.1 (_npmUser, maintainers, dist.signatures, no dist.attestations); upstream tag v2.9.1 at github.com/Microsoft/tslib commit f167789 and its GitHub release",
+      "verification": "npm audit --audit-level=high; package-lock.json registry/integrity checks; npm run check:package; Node 20/22/24 and Linux/Windows/macOS CI matrix; npm audit signatures"
     }
   ],
   "requiredAlertShape": {
