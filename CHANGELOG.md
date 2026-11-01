@@ -22,6 +22,21 @@ All notable changes to Metaplate are documented in this file. The project uses
 - `@resvg/resvg-wasm` (`>=2.6.2 <3`) is a new optional peer. `npm install
   metaplate` does not install it, and a missing peer reports
   `npm install @resvg/resvg-wasm`.
+- `metaplate verify-url <url>` fetches a deployed image and runs the same size,
+  format, and social-target checks as `verify`, plus a check that the response
+  `Content-Type` matches the bytes. It reports the final URL after redirects
+  and the byte count, in human output and in `--json` (`urls` entries). The
+  fetcher refuses non-http(s) schemes, non-default ports unless allowed with
+  `--allow-port`, URLs with user information, and any hostname that resolves
+  to a loopback, private, link-local, unique-local, unspecified, multicast, or
+  IPv4-mapped address unless `--allow-private` is passed for local
+  development. It connects to the address it checked, so DNS rebinding cannot
+  move the request, re-checks every redirect hop (at most 3 by default), caps
+  the body at 16 MiB while streaming, bounds the fetch with total and
+  per-connection timeouts, and sends no cookies or credentials.
+- `metaplate/node` exports the fetcher as `fetchRemoteImage` and
+  `verifyRemoteImage`, with `RemoteImageError` carrying a stable `code` for
+  each refusal.
 - Size variants: a plate definition can declare `variants`, such as
   `{ square: { size: { width: 1080, height: 1080 } } }`, beside its default
   `size`, and every renderer (`createSvgOg`, `createNodeOg`, `createEdgeOg`,
