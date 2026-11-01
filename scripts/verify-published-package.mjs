@@ -83,12 +83,12 @@ try {
     const fonts = portable.fontLoader([{
       name: "Portable",
       weight: 400,
-      data: () => { calls += 1; return Uint8Array.of(1, 2, 3); },
+      data: () => { calls += 1; return Uint8Array.of(0x77, 0x4f, 0x46, 0x46, 1, 2, 3); },
     }]);
     const first = await fonts();
     assert.equal(first, await fonts());
     assert.equal(calls, 1);
-    assert.equal(first[0].data.byteLength, 3);
+    assert.equal(first[0].data.byteLength, 7);
   `;
   run(process.execPath, ["--input-type=module", "--eval", runtimeSmoke]);
 
