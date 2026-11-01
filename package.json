@@ -47,6 +47,11 @@
       "import": "./dist/node.js",
       "default": "./dist/node.js"
     },
+    "./edge": {
+      "types": "./dist/edge.d.ts",
+      "import": "./dist/edge.js",
+      "default": "./dist/edge.js"
+    },
     "./fonts": {
       "types": "./dist/fonts.d.ts",
       "import": "./dist/fonts.js",
@@ -92,11 +97,15 @@
   },
   "peerDependencies": {
     "@resvg/resvg-js": ">=2.6.2 <3",
+    "@resvg/resvg-wasm": ">=2.6.2 <3",
     "next": ">=16.3.2 <17",
     "react": ">=18.2.0 <20",
     "satori": ">=0.33.3 <1"
   },
   "peerDependenciesMeta": {
+    "@resvg/resvg-wasm": {
+      "optional": true
+    },
     "next": {
       "optional": true
     }
@@ -109,6 +118,7 @@
     "@react-router/node": "8.5.1",
     "@react-router/serve": "8.5.1",
     "@resvg/resvg-js": "^2.6.2",
+    "@resvg/resvg-wasm": "2.6.2",
     "@sveltejs/adapter-node": "6.0.1",
     "@sveltejs/kit": "3.1.1",
     "@sveltejs/vite-plugin-svelte": "7.3.1",

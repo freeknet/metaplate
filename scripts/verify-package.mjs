@@ -542,6 +542,7 @@ try {
     `,
     consumer,
   );
+  (await import("./package-fixtures-edge.mjs")).verifyEdgeFixture({ archive, consumer, temporary, manifest, lockfile, install, runModule, linkLockedDependency });
 
   // The Next adapter must work in an actual static export, not merely in a
   // mocked response or a plain Node process (which cannot resolve Next's

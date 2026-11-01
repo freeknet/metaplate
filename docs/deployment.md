@@ -14,8 +14,9 @@ brand. Choose the route that matches the entry point you use.
    provider to its Node runtime, not its Edge runtime.
 3. **Does the provider run only an edge runtime?** `metaplate/node` is not
    supported there because it loads the native `@resvg/resvg-js` binding. Use
-   static generation or a separately tested edge/Wasm renderer. Web
-   `Request`/`Response` support alone is not enough.
+   static generation or `metaplate/edge`, which renders PNG through
+   `@resvg/resvg-wasm`. Web `Request`/`Response` support alone is not enough
+   for `metaplate/node`.
 
 Generated responses are buffered and rendering is CPU/memory intensive. For
 public dynamic routes, bound route text, use stable path keys, set cache headers,
@@ -33,7 +34,7 @@ into an image or asset element; allowlist remote assets or keep them local.
 | Next.js native route | `metaplate/next`, or `metaplate/node` in a route handler | Next build/Node runtime | Metadata file or route handler | Static export and `next start` server output locally certified from the packed artifact; hosted Next deployment is separate |
 | Astro on-demand endpoint | `handlerFrom()` as the endpoint `GET` | `@astrojs/node` standalone server | `src/pages/[slug]/og-image.png.ts` | Locally certified from the packed artifact through the built `entry.mjs`; hosted Astro adapters are separate |
 | SvelteKit `+server` route | `handlerFrom()` as the `GET` `RequestHandler` | `adapter-node` on Node.js | `src/routes/[slug]/og-image.png/+server.ts` | Locally certified framework contract; hosted deployment of the Node server remains a recipe |
-| Cloudflare Workers / Vercel Edge / Netlify Edge | Not `metaplate/node` | Edge/Wasm renderer required | Provider route | Not supported by the current native renderer |
+| Cloudflare Workers / Vercel Edge / Netlify Edge | `metaplate/edge` (`fetchable()` / `fetchableFrom()`), not `metaplate/node` | `@resvg/resvg-wasm` with caller-supplied Wasm | Provider route | Tested in Node against the Wasm renderer; not certified on a hosted edge platform |
 
 ## Static generation
 
@@ -252,10 +253,14 @@ assets as files and load them using stable URLs/paths.
 Cloudflare Workers, Vercel Edge, and Netlify Edge implement Web APIs, but that
 does not make the native Resvg binding executable there. Cloudflare documents
 that Node compatibility includes both supported APIs and importable shims whose
-methods may throw. A future edge integration must use a separately tested
-Wasm-compatible renderer, font loader, and asset policy.
+methods may throw. `metaplate/edge` is the Wasm-compatible path: it renders
+PNG through `@resvg/resvg-wasm`, takes the Wasm module and fonts as bytes from
+the caller, and imports no Node built-ins. See the README section
+[Edge runtimes with `metaplate/edge`](../README.md#edge-runtimes-with-metaplateedge).
+It is tested in Node against the Wasm renderer and from the packed tarball, but
+no hosted edge deployment is certified yet.
 
-Until that exists:
+Where that is not enough, or where JPEG or WebP output is required:
 
 - generate images during a Node build and publish static files; or
 - run the image route on the provider's Node runtime/service.

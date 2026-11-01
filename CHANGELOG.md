@@ -7,6 +7,21 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Added
 
+- `metaplate/edge` renders plates to PNG through `@resvg/resvg-wasm` for
+  Cloudflare Workers, Deno, and other Fetch-shaped runtimes. `createEdgeOg`
+  shares `metaplate/node`'s SVG rendering, size variants, dimension checks,
+  owned headers, ETags (computed with Web Crypto), `artifact`, `response`,
+  `fetchable`, `fetchableFrom`, and `handlerFrom`, and imports no Node
+  built-ins. The caller supplies the Wasm module through `resvg.wasm` or
+  `initEdgeRenderer`, and may supply Satori's Yoga module through
+  `layout.wasm` for runtimes, such as Workers, that only instantiate
+  pre-compiled modules. Output is PNG only: `output` encoders are rejected
+  because `@resvg/resvg-wasm` has no JPEG or WebP encoder. The entry is tested
+  in Node against the Wasm renderer and from the packed tarball, not yet on a
+  hosted edge platform.
+- `@resvg/resvg-wasm` (`>=2.6.2 <3`) is a new optional peer. `npm install
+  metaplate` does not install it, and a missing peer reports
+  `npm install @resvg/resvg-wasm`.
 - `npm run check:package` now serves two production-server fixtures from the
   packed tarball, alongside the existing Next static export and Astro static
   build. A default-output `next build` started with `next start` on
@@ -59,15 +74,17 @@ All notable changes to Metaplate are documented in this file. The project uses
   each refusal.
 - Size variants: a plate definition can declare `variants`, such as
   `{ square: { size: { width: 1080, height: 1080 } } }`, beside its default
-  `size`, and every renderer (`createSvgOg`, `createNodeOg`, `createNextOg`)
-  passes the component a second argument, `{ variant, size }`, so each size is
-  laid out rather than cropped. One-argument components are unaffected.
+  `size`, and every renderer (`createSvgOg`, `createNodeOg`, `createEdgeOg`,
+  `createNextOg`) passes the component a second argument, `{ variant, size }`,
+  so each size is laid out rather than cropped. One-argument components are
+  unaffected.
 - `plate.variant(name)` returns the same plate bound to one variant, with the
   full plate surface (`render`, `renderSvg`, `renderPixels`, `response`,
   `handler`, `handlerFrom`, `fetchable`, `fetchableFrom`, `artifact`, `image`,
-  `metadata`, `size`, `contentType`); `plate.variants` lists the declared names
-  and `plate.variantName` names the view. Variant names are inferred from the
-  definition when no type arguments are given.
+  `metadata`, `size`, `contentType`; `metaplate/edge` omits `handler`);
+  `plate.variants` lists the declared names and `plate.variantName` names the
+  view. Variant names are inferred from the definition when no type arguments
+  are given.
 - A variant's `imagePath` defaults to the plate's with `-<name>` inserted
   before the extension (`og-image.png` to `og-image-square.png`), exported as
   `variantImagePath` from `metaplate`; per-variant `imagePath` and `alt`
@@ -77,8 +94,9 @@ All notable changes to Metaplate are documented in this file. The project uses
   `twitter:image` stays the default unless `twitter.variant` selects another.
   Plates without variants produce byte-for-byte the same metadata as 0.8.0.
 - `PlateContext`, `PlateVariant`, `PlateVariants`, `PlateView`, and
-  `PlateMetadataOptions` types from `metaplate/render`, `metaplate/node`, and
-  `metaplate/next`, and `SocialImageVariantOptions` from `metaplate`.
+  `PlateMetadataOptions` types from `metaplate/render`, `metaplate/node`,
+  `metaplate/edge`, and `metaplate/next`, and `SocialImageVariantOptions` from
+  `metaplate`.
 - Package verification now builds and serves a SvelteKit 3 app from the exact
   packed artifact. The fixture syncs route types, typechecks the README's
   `+server` route against the generated `RequestHandler`, builds it with
@@ -94,14 +112,6 @@ All notable changes to Metaplate are documented in this file. The project uses
   audit's high threshold.
 - Deployment evidence routes may list extra upstream references in
   `relatedDocs`, which the manifest validator requires to be HTTPS URLs.
-
-### Documentation
-
-- The support table claims SvelteKit 3 `+server` routes with `adapter-node` 6
-  on Node 22.17 or newer. The SvelteKit example now imports from `#lib`,
-  because SvelteKit 3 removed `$lib` in favor of `package.json` subpath
-  imports, and notes that SvelteKit 3 configures its adapter in
-  `vite.config.js`. The deployment guide's matrix lists the route.
 - The root entry exports `socialMetaTags(metadata, options?)` and
   `socialMetaHtml(metadata, options?)`, a framework-neutral serializer for
   `SocialImageMetadata`. `socialMetaTags` returns an ordered, deduplicated
@@ -127,12 +137,23 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Changed
 
+- `metaplate/node`'s renderer-independent code moved into internal modules
+  shared with `metaplate/edge`. Its public API, types, and output are
+  unchanged.
 - The README support table no longer groups Deno with edge runtimes. Bun and
   Deno now have their own row, stating what the smoke proves and that
   certification is still in progress; the not-supported row is narrowed to
   Workers and other edge isolates, where the native Resvg binding cannot load.
   `deployment-evidence.json` records Bun and Deno as `documented`, not
   certified.
+
+### Documentation
+
+- The support table claims SvelteKit 3 `+server` routes with `adapter-node` 6
+  on Node 22.17 or newer. The SvelteKit example now imports from `#lib`,
+  because SvelteKit 3 removed `$lib` in favor of `package.json` subpath
+  imports, and notes that SvelteKit 3 configures its adapter in
+  `vite.config.js`. The deployment guide's matrix lists the route.
 
 ### Known gaps
 
