@@ -1,0 +1,4 @@
+# Written by npm run assets
+public/wasm/
+public/fonts/
+.netlify/

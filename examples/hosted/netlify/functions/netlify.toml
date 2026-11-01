@@ -1,0 +1,19 @@
+# Netlify Functions (Node.js) certification fixture for metaplate/node.
+# https://docs.netlify.com/build/functions/get-started/
+# https://docs.netlify.com/build/configure-builds/file-based-configuration/#functions
+[build]
+  publish = "public"
+
+[functions]
+  node_bundler = "esbuild"
+  # Resvg is a napi-rs native addon whose loader picks the platform package
+  # (@resvg/resvg-js-linux-x64-gnu on Netlify's Linux x64 runtime) with a
+  # dynamic require, so it is copied as-is rather than inlined.
+  external_node_modules = ["@resvg/resvg-js", "@resvg/resvg-js-linux-x64-gnu"]
+  # fontsourceFontLoader reads package.json, metadata.json, and the WOFF from
+  # node_modules at runtime, so all three must be included.
+  included_files = [
+    "node_modules/@fontsource/inter/package.json",
+    "node_modules/@fontsource/inter/metadata.json",
+    "node_modules/@fontsource/inter/files/inter-latin-700-normal.woff",
+  ]

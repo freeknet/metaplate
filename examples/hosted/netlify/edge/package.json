@@ -1,0 +1,14 @@
+{
+  "name": "metaplate-hosted-netlify-edge",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "assets": "node scripts/copy-assets.mjs"
+  },
+  "dependencies": {
+    "@fontsource/inter": "5.3.0",
+    "@resvg/resvg-wasm": "2.6.2",
+    "metaplate": "file:./metaplate-0.8.0.tgz",
+    "satori": "0.63.2"
+  }
+}
