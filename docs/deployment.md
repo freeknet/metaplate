@@ -28,7 +28,7 @@ into an image or asset element; allowlist remote assets or keep them local.
 | Deployment shape | API | Runtime | Recommended output | Support status |
 | --- | --- | --- | --- | --- |
 | Static site/CDN | `render()` or `renderSvg()` in a build script | Node at build time only | `public/og-image.png` or `.jpg` | Supported |
-| Vercel Function | `handler()` / `handlerFrom()` or `response()` | Vercel Node.js runtime | `/api/og` or framework route | Locally certified provider-shaped contract; hosted provider certification is separate |
+| Vercel Function | `handler()` / `handlerFrom()` or `response()` | Vercel Node.js runtime | `/api/og` or framework route | Hosted-certified on a dated Vercel production deployment (2026-11-01, Node.js runtime); Next.js 16.4.3 on Vercel likewise |
 | Netlify Function | `handler()` / `handlerFrom()` or `response()` | Netlify Node.js Function | Function path or custom path | Locally certified provider-shaped contract; generated framework functions use project settings |
 | Railway/Render service | `response()` or `render()` + `Buffer.from()` | Long-lived Node.js service | Application route | Locally certified generic Node contract; provider deployment remains a recipe |
 | Next.js native route | `metaplate/next`, or `metaplate/node` in a route handler | Next build/Node runtime | Metadata file or route handler | Static export and `next start` server output locally certified from the packed artifact; hosted Next deployment is separate |
@@ -169,10 +169,49 @@ handler, Netlify-style `context.params` handler/config shape, and generic Node
 service over HTTP. This proves Metaplate's contract and bytes from the exact npm
 artifact; it does not prove a hosted provider build or account configuration.
 
+### Hosted Vercel evidence
+
+The `vercel-node` and `vercel-next` routes in `deployment-evidence.json` are
+certified from real production deployments made on 2026-11-01 from the packed
+0.8.0 tarball, each to a new Vercel project. The deployed sources are in
+[`examples/hosted/vercel`](https://github.com/lnorton89/metaplate/tree/main/examples/hosted/vercel) and the raw
+`verify-url` output, response headers, build logs, and deployment IDs are in
+`.planning/hosted-evidence/vercel-2026-11-01.json`.
+
+- **Vercel Function, Node.js runtime.** `api/og/[slug].mjs` exports
+  `GET = og.handlerFrom(...)` and reads the slug from the request path. Vercel's
+  install picks the Linux `@resvg/resvg-js` binding and file tracing copies the
+  native `.node` file into the function without configuration. Tracing cannot
+  see `fontsourceFontLoader`'s run-time read, so `vercel.json` adds the font
+  with `functions["api/og/*.mjs"].includeFiles`. Vercel's CDN consumes
+  `s-maxage` and forwards the rest of the plate's `Cache-Control`.
+- **Next.js 16.4.3 on Vercel.** A dynamic `[slug]/opengraph-image.tsx` through
+  `createNextOg` and an `[slug]/og-image.jpg/route.ts` through `createNodeOg`
+  with a sharp JPEG encoder, configured as in the README with
+  `serverExternalPackages: ["@resvg/resvg-js", "satori"]`. The font needs
+  `outputFileTracingIncludes`, whose keys are picomatch globs over route paths:
+  `"/*/og-image.jpg"` matches, a literal `"/[slug]/og-image.jpg"` does not.
+  The page's `og:image` (with Next's `?<hash>` query) and `twitter:image` were
+  fetched exactly as advertised.
+- **Vercel Edge, `metaplate/edge`: not certified.** Edge cannot compile Wasm
+  from bytes, so both modules were `?module` imports
+  (`@resvg/resvg-wasm/index_bg.wasm?module` as `resvg.wasm`,
+  `satori/layout.wasm?module` as `layout.wasm`). The build accepted them, but
+  the deploy was rejected: the function is 2.13 MB after gzip and the Hobby
+  plan's Edge limit is 1 MB. The Resvg Wasm alone is 0.95 MB gzip, and the
+  bundle also carries Satori's default build beside `satori/standalone`. Pro's
+  2 MB limit is untested. Use the Node.js runtime on Vercel.
+
+Each certification covers that dated deployment, its runtime, and the packed
+version; it is not a guarantee for later Vercel or Next releases.
+
 - [Vercel Functions](https://vercel.com/docs/functions)
 - [Vercel Node.js runtime](https://vercel.com/docs/functions/runtimes/node-js)
 - [Vercel runtimes](https://vercel.com/docs/functions/runtimes)
 - [Vercel Edge runtime](https://vercel.com/docs/functions/runtimes/edge)
+- [Vercel WebAssembly](https://vercel.com/docs/functions/runtimes/wasm)
+- [Vercel `functions` configuration and `includeFiles`](https://vercel.com/docs/project-configuration/vercel-json)
+- [Next.js on Vercel](https://vercel.com/docs/frameworks/full-stack/nextjs)
 
 ## Netlify Functions
 
