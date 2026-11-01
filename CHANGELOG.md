@@ -3,6 +3,39 @@
 All notable changes to Metaplate are documented in this file. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `scripts/verify-runtime.mjs`, a runtime-neutral smoke of the built package.
+  It imports `metaplate` alone and produces metadata, then imports
+  `metaplate/render`, `metaplate/node`, `metaplate/fonts`, and
+  `metaplate/image`, loads Inter through `fontsourceFontLoader`, renders a
+  1200x630 SVG through Satori, rasterizes it through native Resvg with
+  `createNodeOg(...).artifact`, serves it through `handlerFrom`, and checks the
+  PNG with `verifyImage`. Every step always runs; a failure exits non-zero
+  with a JSON report naming the step. It imports `dist/` by relative path, so
+  run `npm run build` first.
+- A `runtimes` CI job runs that smoke on Bun (latest 1.x) and Deno 2.x on
+  ubuntu-latest, after the same smoke under Node as a control.
+
+### Changed
+
+- The README support table no longer groups Deno with edge runtimes. Bun and
+  Deno now have their own row, stating what the smoke proves and that
+  certification is still in progress; the not-supported row is narrowed to
+  Workers and other edge isolates, where the native Resvg binding cannot load.
+  `deployment-evidence.json` records Bun and Deno as `documented`, not
+  certified.
+
+### Known gaps
+
+- TODO: the `runtimes` jobs run with `continue-on-error: true` and are not
+  required status checks, because they have not yet passed on main. Once
+  `Runtime smoke / bun` and `Runtime smoke / deno` have passed consistently on
+  main, remove `continue-on-error`, add both to the required checks, and only
+  then consider a certified status for Bun and Deno.
+
 ## [0.8.0] - 2026-10-31
 
 ### Added
@@ -455,6 +488,7 @@ reflects that `render` may return any consumer-encoded format ([#54]).
 - Typed package exports for framework-neutral, rendering, Node.js, Next.js,
   font, and PNG entry points.
 
+[Unreleased]: https://github.com/lnorton89/metaplate/compare/v0.8.0...HEAD
 [0.8.0]: https://github.com/lnorton89/metaplate/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/lnorton89/metaplate/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/lnorton89/metaplate/compare/v0.5.0...v0.6.0
