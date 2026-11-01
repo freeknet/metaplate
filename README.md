@@ -32,6 +32,7 @@ It works with plain Node, static build scripts, Next.js, and Node-compatible fra
   - [Channel-specific images and X Cards](#channel-specific-images-and-x-cards)
   - [Social compatibility profiles](#social-compatibility-profiles)
   - [Emitting the meta tags yourself](#emitting-the-meta-tags-yourself)
+  - [Video and audio previews](#video-and-audio-previews)
   - [Next.js static export and `basePath`](#nextjs-static-export-and-basepath)
   - [JPEG or WebP cards in Next.js](#jpeg-or-webp-cards-in-nextjs)
 - [Fonts](#fonts)
@@ -960,6 +961,98 @@ Next.js `generateMetadata` can carry the tags through `other`, as
 renders every `other` entry with a `name` attribute and groups repeated keys.
 That is faithful for a single Open Graph image only; with several images, use
 Next's `openGraph` and `twitter` fields.
+
+### Video and audio previews
+
+The [Open Graph protocol](https://ogp.me/#structured) defines `og:video` and
+`og:audio` as optional properties with structured properties: a video has the
+same five as an image (`url`, `secure_url`, `type`, `width`, `height`), and
+audio has only `url`, `secure_url`, and `type`. Pass them as `media`; they are
+copied onto `metadata.openGraph.videos` and `metadata.openGraph.audio`, beside
+the images:
+
+```ts
+import { socialImageMetadata, socialMetaTags } from "metaplate";
+
+const social = socialImageMetadata("/launch", "Launch card", {
+  origin: "https://example.com",
+  media: {
+    videos: [
+      {
+        url: "https://cdn.example.com/trailer.mp4",
+        secureUrl: "https://cdn.example.com/trailer.mp4",
+        type: "video/mp4",
+        width: 1280,
+        height: 720,
+      },
+    ],
+    audio: [{ url: "https://cdn.example.com/theme.mp3", type: "audio/mpeg" }],
+  },
+});
+
+socialMetaTags(social, { url: "https://example.com/launch" });
+```
+
+`socialMetaTags` and `socialMetaHtml` emit them after every `og:image` group
+and before the `twitter:*` tags:
+
+1. For each video, in caller order: `og:video`, `og:video:secure_url`,
+   `og:video:type`, `og:video:width`, `og:video:height`.
+2. Then for each audio item: `og:audio`, `og:audio:secure_url`,
+   `og:audio:type`.
+
+```html
+<meta property="og:image" content="https://example.com/launch/og-image">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Launch card">
+<meta property="og:video" content="https://cdn.example.com/trailer.mp4">
+<meta property="og:video:secure_url" content="https://cdn.example.com/trailer.mp4">
+<meta property="og:video:type" content="video/mp4">
+<meta property="og:video:width" content="1280">
+<meta property="og:video:height" content="720">
+<meta property="og:audio" content="https://cdn.example.com/theme.mp3">
+<meta property="og:audio:type" content="audio/mpeg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://example.com/launch/og-image">
+<meta name="twitter:image:alt" content="Launch card">
+<meta property="og:url" content="https://example.com/launch">
+<meta property="og:type" content="website">
+```
+
+As with images, a missing field emits no tag, a relative `url` is resolved
+against the canonical page `url`, and a group whose resolved URL repeats an
+earlier one of the same kind is dropped. Metadata without `media` emits
+exactly the tags it did before. Validation runs in both `socialImageMetadata`
+and `socialMetaTags`:
+
+- `url` must be non-empty, and an absolute `url` must be a credential-free
+  http(s) URL.
+- `secureUrl` (`secure_url`) must be an absolute, credential-free https URL.
+- `type` must be a media type such as `video/mp4` or `audio/mpeg`.
+- Video `width` and `height` must be integers from 1 to 65535, the same range
+  as image dimensions. Audio has no dimensions.
+
+Plates accept the same option per call, for the default size and for a
+variant: `plate.metadata(route, copy, { media: { videos, audio } })`.
+
+**Next.js.** The descriptor fields match Next's
+[`openGraph.videos` and `openGraph.audio`](https://nextjs.org/docs/app/api-reference/functions/generate-metadata#opengraph)
+(`url`, `secureUrl`, `type`, `width`, `height`), so `openGraph: social.openGraph`
+passes them through unchanged, and Next renders the same tag order. Next
+resolves only images against `metadataBase` and documents video and audio URLs
+as "Must be an absolute URL", so `metaplate/next`'s `metadata()` rejects a
+relative video or audio URL instead of emitting one a crawler cannot follow.
+[`examples/og-media.ts`](examples/og-media.ts) shows both paths.
+
+**Where they render.** Open Graph defines the tags; it does not promise any
+client plays them. Meta's [sharing guide](https://developers.facebook.com/docs/sharing/webmasters)
+documents `og:video` and its structured properties, asks for secure URLs in
+both `og:video:url` and `og:video:secure_url`, and notes that a video "is not
+guaranteed to play in-line". That guide does not document `og:audio`. X Cards
+describe video with their own Player Card (`twitter:player`), which `media`
+does not emit. Metaplate makes no rendering claim for other platforms; check
+each one's debugger after deployment.
 
 ### Next.js static export and `basePath`
 

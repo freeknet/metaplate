@@ -1,11 +1,13 @@
 import type { ReactElement } from "react";
 import { OG_CONTENT_TYPE, type ImageSize } from "./core.js";
+import { assertAbsoluteMedia } from "./og-media.js";
 import { optionalPeer } from "./optional-peer.js";
 import {
   createPlateHandlers,
   createPlateSocial,
   createPlateViews,
   type PlateContext,
+  type PlateMetadataOptions,
   type PlateVariants,
 } from "./plate.js";
 
@@ -84,7 +86,16 @@ export function createNextOg<Copy, Variant extends string = string>(
     return {
       size,
       image: view.image,
-      metadata: view.metadata,
+      /**
+       * Next-ready metadata: pass `openGraph` and `twitter` to Next's
+       * `Metadata`. Video and audio URLs must be absolute, because Next.js
+       * emits them without resolving `metadataBase`.
+       */
+      metadata: (route: string, copy: Copy, options?: PlateMetadataOptions<Variant>) => {
+        const metadata = view.metadata(route, copy, options);
+        assertAbsoluteMedia(metadata.openGraph, "metaplate/next");
+        return metadata;
+      },
       contentType: OG_CONTENT_TYPE,
       render,
       ...createPlateHandlers(render),
