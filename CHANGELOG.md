@@ -14,6 +14,12 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Changed
 
+- The Socket baseline moves from the historical 0.6.0 snapshot to a fresh
+  Socket CLI deep score of the published 0.7.0 package, with the importer and
+  verifier pins moved to 0.7.0. Both high alerts carry time-bounded
+  dispositions: the `string.prototype.codepointat` upgrade signal under Satori,
+  and the `unstableOwnership` signal on `tslib@2.9.1`, which the lockfile now
+  audits because Socket resolves it through the optional `next` peer.
 - The build and type checks now run on TypeScript 6.0, tsup 9, and vitest 5.
   tsup 9 no longer injects the deprecated `baseUrl` option into its
   declaration build, so TypeScript 6 needs no `ignoreDeprecations` escape
