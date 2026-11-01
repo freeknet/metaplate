@@ -3,6 +3,34 @@
 All notable changes to Metaplate are documented in this file. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Package verification now builds and serves a SvelteKit 3 app from the exact
+  packed artifact. The fixture syncs route types, typechecks the README's
+  `+server` route against the generated `RequestHandler`, builds it with
+  `adapter-node`, starts the adapter's server on an ephemeral port, checks the
+  page's social metadata, and verifies the PNG bytes, dimensions, headers, and
+  per-slug output of a dynamic `handlerFrom` `GET` route. The route is recorded
+  as the `sveltekit-node` local contract in `deployment-evidence.json`.
+  SvelteKit 3.1.1 depends on `cookie` 2, so the Cookie advisory that deferred
+  this fixture is gone from the tree. The new dev dependencies are
+  `@sveltejs/kit` 3.1.1, `@sveltejs/adapter-node` 6.0.1,
+  `@sveltejs/vite-plugin-svelte` 7.3.1, and `svelte` 5.57.3; they add one
+  low-severity advisory, `deepmerge` GHSA-gcqx-w48m-w2h4, under the release
+  audit's high threshold.
+- Deployment evidence routes may list extra upstream references in
+  `relatedDocs`, which the manifest validator requires to be HTTPS URLs.
+
+### Documentation
+
+- The support table claims SvelteKit 3 `+server` routes with `adapter-node` 6
+  on Node 22.17 or newer. The SvelteKit example now imports from `#lib`,
+  because SvelteKit 3 removed `$lib` in favor of `package.json` subpath
+  imports, and notes that SvelteKit 3 configures its adapter in
+  `vite.config.js`. The deployment guide's matrix lists the route.
+
 ## [0.8.0] - 2026-10-31
 
 ### Added

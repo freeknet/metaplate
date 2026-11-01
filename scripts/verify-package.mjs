@@ -41,6 +41,7 @@ const nextApp = join(temporary, "next-app");
 const astroApp = join(temporary, "astro-app");
 const expressApp = join(temporary, "express-app");
 const routerApp = join(temporary, "router-app");
+const svelteApp = join(temporary, "svelte-app");
 const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const lockfile = JSON.parse(readFileSync(join(root, "package-lock.json"), "utf8"));
 const packageEntries = packageEntrySpecifiers(manifest.exports);
@@ -848,6 +849,192 @@ export const loader = og.handlerFrom(({ params }: Route.LoaderArgs) => ({
     `,
     routerApp,
   );
+
+  // Build and serve a SvelteKit 3 `+server` route through the official Node
+  // adapter. Kit 3 reads its configuration from the `sveltekit()` Vite plugin
+  // (svelte.config.js is no longer supported) and resolves `#lib` through
+  // package.json subpath imports, so the fixture uses exactly those contracts.
+  install(svelteApp, [archive]);
+  for (const dependency of FRAMEWORK_DEPENDENCIES.sveltekit) {
+    linkLockedDependency(svelteApp, dependency);
+  }
+  // adapter-node bundles everything except production dependencies, so the
+  // packed artifact stays an external runtime import with its native renderer.
+  writeFileSync(
+    join(svelteApp, "package.json"),
+    JSON.stringify({
+      private: true,
+      type: "module",
+      imports: { "#lib": "./src/lib/index.js", "#lib/*": "./src/lib/*" },
+      dependencies: { metaplate: manifest.version },
+      devDependencies: Object.fromEntries(
+        FRAMEWORK_DEPENDENCIES.sveltekit.map((dependency) => [
+          dependency,
+          lockfile.packages[`node_modules/${dependency}`].version,
+        ]),
+      ),
+    }),
+  );
+  const svelteImageRoute = join(svelteApp, "src", "routes", "[slug]", SOCIAL_CARD_FIXTURE.imagePath);
+  mkdirSync(join(svelteApp, "src", "lib"), { recursive: true });
+  mkdirSync(svelteImageRoute, { recursive: true });
+  writeFileSync(
+    join(svelteApp, "vite.config.js"),
+    `import adapter from "@sveltejs/adapter-node";
+import { sveltekit } from "@sveltejs/kit/vite";
+import { defineConfig } from "vite";
+export default defineConfig({ plugins: [sveltekit({ adapter: adapter() })] });
+`,
+  );
+  writeFileSync(
+    join(svelteApp, "tsconfig.json"),
+    JSON.stringify({
+      extends: "$app/tsconfig",
+      include: ["src"],
+      compilerOptions: { strict: true, types: ["$app/types", "node"] },
+    }),
+  );
+  writeFileSync(
+    join(svelteApp, "src", "app.html"),
+    `<!doctype html>
+<html lang="en"><head><meta charset="utf-8" />%sveltekit.head%</head>
+<body><div style="display: contents">%sveltekit.body%</div></body></html>
+`,
+  );
+  writeFileSync(
+    join(svelteApp, "src", "routes", "+page.svelte"),
+    `<script>
+  import { socialImageMetadata } from "metaplate";
+  const social = socialImageMetadata("/guide", "Guide card", {
+    origin: ${JSON.stringify(SOCIAL_CARD_FIXTURE.origin)},
+    imagePath: ${JSON.stringify(SOCIAL_CARD_FIXTURE.imagePath)},
+    type: ${JSON.stringify(SOCIAL_CARD_FIXTURE.contentType)},
+  });
+  const image = social.openGraph.images[0];
+</script>
+
+<svelte:head>
+  <meta property="og:image" content={image.url} />
+  <meta property="og:image:width" content={String(image.width)} />
+  <meta property="og:image:height" content={String(image.height)} />
+  <meta property="og:image:type" content={image.type} />
+  <meta property="og:image:alt" content={image.alt} />
+  <meta name="twitter:card" content={social.twitter.card} />
+  <meta name="twitter:image" content={social.twitter.images[0].url} />
+</svelte:head>
+
+<main>Metaplate SvelteKit fixture</main>
+`,
+  );
+  writeFileSync(
+    join(svelteApp, "src", "lib", "og.ts"),
+    `import { fontsourceFontLoader } from "metaplate/fonts";
+import { createNodeOg } from "metaplate/node";
+type Copy = { title: string; alt: string };
+export const og = createNodeOg({
+  alt: (copy: Copy) => copy.alt,
+  fonts: fontsourceFontLoader([${fontsourceFontSource}]),
+  headers: { "Cache-Control": "public, max-age=86400" },
+  component: (copy: Copy) => ({
+    type: "div",
+    props: {
+      style: { width: "100%", height: "100%", display: "flex", alignItems: "center", fontFamily: "Inter", fontSize: 64 },
+      children: copy.title,
+    },
+  }),
+});
+`,
+  );
+  // The route body is the README's SvelteKit example: `GET` is typed by the
+  // generated `RequestHandler`, which is what types `params.slug`.
+  writeFileSync(
+    join(svelteImageRoute, "+server.ts"),
+    `import type { RequestHandler } from "./$types";
+import { og } from "#lib/og.js";
+
+const titleFor = (slug: string) => slug.slice(0, 80);
+
+export const GET: RequestHandler = og.handlerFrom(({ params }) => ({
+  title: titleFor(params.slug),
+  alt: \`${"${params.slug}"} card\`,
+}));
+`,
+  );
+  const svelteNode = (label, args) => {
+    const result = spawnSync(process.execPath, args, { cwd: svelteApp, encoding: "utf8" });
+    if (result.status !== 0) {
+      process.stdout.write(result.stdout ?? "");
+      process.stderr.write(result.stderr ?? "");
+      throw new Error(`SvelteKit ${label} failed with status ${result.status}.`);
+    }
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    if (output.includes("tsconfig_invalid") || output.includes("tsconfig_extends_missing")) {
+      throw new Error(`SvelteKit ${label} rejected the fixture tsconfig:\n${output}`);
+    }
+  };
+  const kitRoot = join(svelteApp, "node_modules", "@sveltejs", "kit");
+  const kitManifest = JSON.parse(readFileSync(join(kitRoot, "package.json"), "utf8"));
+  svelteNode("sync", [join(kitRoot, kitManifest.bin["svelte-kit"]), "sync"]);
+  svelteNode("typecheck", [join(svelteApp, "node_modules", "typescript", "bin", "tsc"), "--noEmit"]);
+  svelteNode("build", [join(svelteApp, "node_modules", "vite", "bin", "vite.js"), "build"]);
+  runModule(
+    `
+      import { once } from "node:events";
+      import { writeFileSync } from "node:fs";
+      import { verifyImage } from "metaplate/image";
+      process.env.HOST = "127.0.0.1";
+      process.env.PORT = "0";
+      const routeEvidence = { schemaVersion: 1, commitSha: ${JSON.stringify(commitSha)}, routes: {} };
+      // adapter-node's entry listens on import and exports its http.Server.
+      const { server } = await import("./build/index.js");
+      if (!server.listening) await once(server, "listening");
+      try {
+        const address = server.address();
+        if (!address || typeof address === "string") throw new Error("SvelteKit did not bind TCP.");
+        const base = \`http://127.0.0.1:\${address.port}\`;
+        const page = await fetch(base);
+        const html = await page.text();
+        if (
+          !page.ok ||
+          !html.includes(${JSON.stringify(`content="${SOCIAL_CARD_FIXTURE.origin}/guide/${SOCIAL_CARD_FIXTURE.imagePath}"`)}) ||
+          !html.includes(${JSON.stringify(`content="${cardSize.width}"`)}) ||
+          !html.includes(${JSON.stringify(`content="${SOCIAL_CARD_FIXTURE.contentType}"`)})
+        ) {
+          throw new Error("SvelteKit page did not emit absolute social metadata.");
+        }
+        const response = await fetch(base + ${JSON.stringify(`/guide/${SOCIAL_CARD_FIXTURE.imagePath}`)});
+        const other = await fetch(base + ${JSON.stringify(`/other/${SOCIAL_CARD_FIXTURE.imagePath}`)});
+        if (!response.ok || !other.ok) {
+          throw new Error(\`SvelteKit +server route returned \${response.status}/\${other.status}.\`);
+        }
+        const contentType = response.headers.get("content-type");
+        const cacheControl = response.headers.get("cache-control");
+        if (contentType !== ${JSON.stringify(SOCIAL_CARD_FIXTURE.contentType)} || cacheControl !== "public, max-age=86400") {
+          throw new Error(\`SvelteKit +server route returned \${contentType} with cache policy \${cacheControl}.\`);
+        }
+        const imageBytes = new Uint8Array(await response.arrayBuffer());
+        const otherBytes = new Uint8Array(await other.arrayBuffer());
+        const image = verifyImage(imageBytes, ${cardSizeSource}, "png");
+        verifyImage(otherBytes, ${cardSizeSource}, "png");
+        if (Buffer.from(imageBytes).equals(Buffer.from(otherBytes))) {
+          throw new Error("SvelteKit rendered identical bytes for different slugs; params did not reach the resolver.");
+        }
+        routeEvidence.routes["sveltekit-node"] = {
+          packedArtifact: true,
+          productionBuild: true,
+          servedOutput: true,
+          imageVerification: { verified: true, format: image.format, width: image.width, height: image.height, byteLength: imageBytes.byteLength },
+          responseVerification: { verified: true, contentType, cacheControl, pageMetadata: true, distinctSlugByteLengths: [imageBytes.byteLength, otherBytes.byteLength] },
+        };
+      } finally {
+        server.closeAllConnections();
+        await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+      }
+      writeFileSync(${JSON.stringify(join(svelteApp, "sveltekit-route-evidence.json"))}, JSON.stringify(routeEvidence));
+    `,
+    svelteApp,
+  );
+  Object.assign(routeEvidence.routes, JSON.parse(readFileSync(join(svelteApp, "sveltekit-route-evidence.json"), "utf8")).routes);
 
   execFileSync(
     process.execPath,
