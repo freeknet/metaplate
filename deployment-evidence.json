@@ -690,7 +690,7 @@
       "api": "not supported by metaplate/node",
       "status": "not-supported",
       "evidence": "docs/deployment.md",
-      "reason": "The current renderer uses native @resvg/resvg-js; no edge/Wasm renderer is certified."
+      "reason": "metaplate/node renders through the native @resvg/resvg-js Node-API binding, which edge isolates cannot load. For edge runtimes use metaplate/edge: it is hosted-certified on Netlify Edge Functions (netlify-edge) and not supported on Cloudflare Workers or Vercel Edge (cloudflare-workers, vercel-edge)."
     }
   ]
 }
