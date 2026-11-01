@@ -5,6 +5,13 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ## [Unreleased]
 
+### Changed
+
+- The certified React Router resource-route fixture now runs on React Router 8
+  and Vite 8, so the support table claims React Router 8 framework mode on
+  Node 22.22 or newer. The fixture still fails if React Router emits Vite's
+  deprecated `envFile` warning.
+
 ### Documentation
 
 - Document that Satori lays a React fragment out as a box of its own, so

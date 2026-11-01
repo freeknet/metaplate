@@ -790,7 +790,11 @@ export const loader = og.handlerFrom(({ params }: Route.LoaderArgs) => ({
 }));
 `,
   );
-  const routerCli = join(routerApp, "node_modules", "@react-router", "dev", "bin.js");
+  // Resolve the CLI from the package manifest: React Router 7 shipped
+  // `bin.js` and React Router 8 ships `bin.cjs`.
+  const routerDevRoot = join(routerApp, "node_modules", "@react-router", "dev");
+  const routerDevManifest = JSON.parse(readFileSync(join(routerDevRoot, "package.json"), "utf8"));
+  const routerCli = join(routerDevRoot, routerDevManifest.bin["react-router"]);
   const runRouterCli = (command) => {
     const result = spawnSync(process.execPath, [routerCli, command], {
       cwd: routerApp,
