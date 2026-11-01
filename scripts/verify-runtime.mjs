@@ -1,27 +1,30 @@
-// Runtime certification smoke for the built package.
+// Runtime certification smoke for the packed package.
 //
-//   node scripts/verify-runtime.mjs [--expect-runtime=node]
-//   bun scripts/verify-runtime.mjs --expect-runtime=bun
-//   deno run --allow-all --no-lock scripts/verify-runtime.mjs --expect-runtime=deno
+//   npm run build
+//   node scripts/prepare-runtime-consumer.mjs <consumer-dir>
+//   cd <consumer-dir>
+//   node verify-runtime.mjs --expect-runtime=node --expect-version=<version>
+//   bun verify-runtime.mjs --expect-runtime=bun --expect-version=<version>
+//   deno run --allow-all --no-lock verify-runtime.mjs --expect-runtime=deno --expect-version=<version>
 //
-// Run `npm run build` first. The script imports the built `dist/` entries by
-// relative path rather than by the `metaplate` self-reference: Node and Bun
-// resolve a package's own name through its exports map, but Deno's handling
-// of a self-reference from outside node_modules is not something this script
-// should be certifying, so every runtime loads the same files the same way.
-// The peers (`satori`, `@resvg/resvg-js`) and the font package still resolve
-// as bare specifiers from node_modules, which is the part under test.
+// The script runs inside a consumer project that installed the packed
+// tarball, and imports metaplate by package name exactly as users do. The
+// `resolve-packed` step fails unless every entry resolves into that
+// consumer's node_modules/metaplate at the expected version, so a run can
+// never certify this checkout's dist/ by accident.
 //
 // Every step runs on every invocation. Nothing is skipped or feature-detected
 // away: a step that cannot run is a failed step, reported by name with a
 // non-zero exit, because a smoke that skips the native raster would certify a
 // runtime that cannot produce an image.
 import { Buffer } from "node:buffer";
-import { dirname, resolve } from "node:path";
+import { readFileSync } from "node:fs";
+import { dirname, join, sep } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const consumer = process.cwd();
+const ENTRIES = Object.freeze(["metaplate", "metaplate/render", "metaplate/node", "metaplate/fonts", "metaplate/image"]);
 const ROUTE = "/runtime-smoke";
 const COPY = Object.freeze({ title: "Metaplate runtime smoke" });
 
@@ -33,9 +36,9 @@ function detectRuntime() {
   return { name: "node", version: process.versions.node };
 }
 
-function expectedRuntime(argv) {
-  const flag = argv.find((argument) => argument.startsWith("--expect-runtime="));
-  return flag?.slice("--expect-runtime=".length);
+function flag(argv, name) {
+  const value = argv.find((argument) => argument.startsWith(`--${name}=`));
+  return value?.slice(`--${name}=`.length);
 }
 
 function assert(condition, message) {
@@ -107,7 +110,7 @@ async function main() {
 
   const steps = [
     ["runtime", async () => {
-      const expected = expectedRuntime(process.argv.slice(2));
+      const expected = flag(process.argv.slice(2), "expect-runtime");
       if (expected !== undefined) {
         assert(
           expected === runtime.name,
@@ -116,11 +119,28 @@ async function main() {
       }
       return { runtime: runtime.name, version: runtime.version };
     }],
+    ["resolve-packed", async () => {
+      // Every entry must come from the installed tarball in this consumer,
+      // never from a checkout's dist/ or a linked workspace copy.
+      const installed = join(consumer, "node_modules", "metaplate") + sep;
+      const resolved = {};
+      for (const entry of ENTRIES) {
+        const file = fileURLToPath(import.meta.resolve(entry));
+        assert(file.startsWith(installed), `${entry} resolved to ${file}, outside ${installed}`);
+        resolved[entry] = file.slice(installed.length);
+      }
+      const manifest = JSON.parse(readFileSync(join(installed, "package.json"), "utf8"));
+      const expectedVersion = flag(process.argv.slice(2), "expect-version");
+      if (expectedVersion !== undefined) {
+        assert(manifest.version === expectedVersion, `installed metaplate is ${manifest.version}, expected ${expectedVersion}`);
+      }
+      return { version: manifest.version, root: dirname(installed), resolved };
+    }],
     ["import-metadata", async () => {
       // `metaplate` is metadata only and must load, alone, before any entry
       // that can reach a renderer peer has been imported.
-      modules.index = await import("../dist/index.js");
-      assert(typeof modules.index.socialImageMetadata === "function", "dist/index.js does not export socialImageMetadata");
+      modules.index = await import("metaplate");
+      assert(typeof modules.index.socialImageMetadata === "function", "metaplate does not export socialImageMetadata");
       return { entries: ["metaplate"] };
     }],
     ["metadata", async () => {
@@ -130,22 +150,22 @@ async function main() {
       return { url: image.url };
     }],
     ["import-renderers", async () => {
-      modules.render = await import("../dist/render.js");
-      modules.node = await import("../dist/node.js");
-      modules.fonts = await import("../dist/fonts.js");
-      modules.image = await import("../dist/image.js");
+      modules.render = await import("metaplate/render");
+      modules.node = await import("metaplate/node");
+      modules.fonts = await import("metaplate/fonts");
+      modules.image = await import("metaplate/image");
       for (const [entry, name] of [
         ["render", "createSvgOg"],
         ["node", "createNodeOg"],
         ["fonts", "fontsourceFontLoader"],
         ["image", "verifyImage"],
       ]) {
-        assert(typeof modules[entry][name] === "function", `dist/${entry}.js does not export ${name}`);
+        assert(typeof modules[entry][name] === "function", `metaplate/${entry} does not export ${name}`);
       }
       return { entries: ["metaplate/render", "metaplate/node", "metaplate/fonts", "metaplate/image"] };
     }],
     ["font-load", async () => {
-      fonts = modules.fonts.fontsourceFontLoader([{ font: "inter", weight: 700 }], { cwd: root });
+      fonts = modules.fonts.fontsourceFontLoader([{ font: "inter", weight: 700 }], { cwd: consumer });
       const loaded = await fonts();
       assert(loaded.length === 1, `expected 1 font face, loaded ${loaded.length}`);
       const [face] = loaded;
@@ -183,7 +203,14 @@ async function main() {
         response.headers.get("content-length") === String(responseBytes.byteLength),
         `content-length ${response.headers.get("content-length")} does not match ${responseBytes.byteLength} body bytes`,
       );
-      return { bytes: responseBytes.byteLength };
+      return {
+        bytes: responseBytes.byteLength,
+        status: response.status,
+        headers: {
+          "content-type": response.headers.get("content-type"),
+          "content-length": response.headers.get("content-length"),
+        },
+      };
     }],
     ["verify", async () => {
       const fromArtifact = modules.image.verifyImage(artifact.bytes, nodePlate.size, "png");
