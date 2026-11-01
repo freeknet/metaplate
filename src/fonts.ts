@@ -12,7 +12,7 @@ import {
 } from "./font-core.js";
 
 export { fontLoader, loadFonts } from "./font-core.js";
-export type { DataFont, FontBytes, FontWeight, LoadedFont } from "./font-core.js";
+export type { DataFont, FontBytes, FontFace, FontWeight, LoadedFont } from "./font-core.js";
 
 export type FileFont = FontFace & {
   /** Absolute/relative project path or a co-located `file:` URL. */

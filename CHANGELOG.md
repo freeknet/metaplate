@@ -5,13 +5,21 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ## [Unreleased]
 
+### Added
+
+- `metaplate/fonts` and `metaplate/font-data` export the `FontFace` type, the
+  base shape shared by `DataFont`, `FileFont`, `PackageFont`, and
+  `FontsourceFont`. Consumers that emit declarations referring to a font
+  descriptor could previously hit TS2742 because the type had no public name.
+
 ### Changed
 
-- The build and type checks now run on TypeScript 6.0, with
-  `ignoreDeprecations: "6.0"` in `tsconfig.json` because tsup 8's declaration
-  build injects the deprecated `baseUrl` option (tsup 9 removes it but
-  requires Node 22). vitest moves to 4.1.12, which clears the `@vitest/mocker`
-  advisory.
+- The build and type checks now run on TypeScript 6.0, tsup 9, and vitest 5.
+  tsup 9 no longer injects the deprecated `baseUrl` option into its
+  declaration build, so TypeScript 6 needs no `ignoreDeprecations` escape
+  hatch, and vitest 5 clears the `@vitest/mocker` advisory. Both tools declare
+  Node 22 as their floor; the Node 20 compatibility job still runs them and
+  passes, so Node 20 stays in the matrix on that evidence.
 - The `satori` peer range widens from `>=0.33.3 <0.34` to `>=0.33.3 <1`, and
   the audited release moves from 0.33.5 to 0.63.2. Satori's automated releases
   bump a minor version per feature with no breaking changes recorded, so a
