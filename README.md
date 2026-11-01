@@ -250,8 +250,10 @@ export const loader = og.handlerFrom(({ params }: Route.LoaderArgs) => ({
 
 These routes require a Node-compatible deployment adapter because
 `metaplate/node` loads Resvg's native Node binding. A framework implementing
-Web `Response` does not by itself make its edge runtime compatible; use
-[`metaplate/edge`](#edge-runtimes-with-metaplateedge) there.
+Web `Response` does not by itself make its edge runtime compatible; on a
+Deno-based edge such as Netlify Edge Functions, use
+[`metaplate/edge`](#edge-runtimes-with-metaplateedge), which does not run on
+Cloudflare Workers.
 
 ### Express and build scripts
 
@@ -299,7 +301,7 @@ set actually exercised by the release gate.
 | SvelteKit `+server` routes | [`+server` routing](https://svelte.dev/docs/kit/routing#server) and [`adapter-node`](https://svelte.dev/docs/kit/adapter-node) | SvelteKit 3 with `adapter-node` 6 on Node 22.17+ | Exact packed artifact is synced, typechecked against the generated `RequestHandler`, built with `adapter-node`, served, and fetched through a dynamic `handlerFrom` `GET` route and a page emitting its social metadata. |
 | Express | [Express 5 response API](https://expressjs.com/en/5x/api/#res.send) | Express 5 on Node | Exact packed artifact is served over an ephemeral HTTP server and checked for headers, bytes, and dimensions. |
 | Bun and Deno (Node-compatible runtimes) | [Bun Node-API](https://bun.com/docs/runtime/node-api) and [Deno Node and npm compatibility](https://docs.deno.com/runtime/fundamentals/node/) | Required CI checks run the built-package render smoke on Bun and Deno; documented, not certified | `scripts/verify-runtime.mjs` runs on Bun (latest 1.x) and Deno 2.x against the built `dist/` entries and an npm-installed `node_modules`, failing by step name: `metaplate` imports alone and produces metadata; `metaplate/render`, `metaplate/node`, `metaplate/fonts`, and `metaplate/image` import; Inter 700 loads through `fontsourceFontLoader`; Satori emits a 1200x630 SVG with glyph paths; native Resvg rasterizes it through `createNodeOg(...).artifact`; `handlerFrom` returns a Web `Response` with matching `Content-Type` and `Content-Length`; and `verifyImage` confirms a 1200x630 PNG identical to the artifact. It does not exercise a packed tarball, a framework adapter, or a hosted Bun or Deno deployment. |
-| Workers and other edge isolates (Cloudflare Workers, Vercel Edge, Netlify Edge) | [Workers Fetch handler](https://developers.cloudflare.com/workers/runtime-apis/handlers/fetch/) and [Wasm modules](https://developers.cloudflare.com/workers/runtime-apis/webassembly/javascript/); consult other runtimes' documentation | `metaplate/edge` renders PNG through `@resvg/resvg-wasm`; `metaplate/node` remains unsupported there | Tested in Node against the Wasm renderer and from the packed tarball. Netlify Edge Functions are hosted-certified (row above). A Vercel Edge deployment on 2026-11-01 was rejected by the Hobby plan's 1 MB Edge size limit (the function is 2.13 MB after gzip; the Resvg Wasm alone is 0.95 MB). See [Edge runtimes with `metaplate/edge`](#edge-runtimes-with-metaplateedge). |
+| Edge isolates that forbid run-time Wasm compilation (Cloudflare Workers, Vercel Edge) | [Workers WebAssembly](https://developers.cloudflare.com/workers/runtime-apis/webassembly/) and [Vercel Edge runtime](https://vercel.com/docs/functions/runtimes/edge) | **Not supported**, by `metaplate/edge` or `metaplate/node`; use the provider's Node runtime or build-time images | Cloudflare Workers: a Worker built from the packed 0.8.0 tarball returned 500 for every render under `wrangler dev --local` (workerd) on 2026-11-01, because Satori's bundled HarfBuzz reads `self.location.href` and compiles its Wasm from bytes, both of which Workers forbid ([reproduction](https://github.com/lnorton89/metaplate/tree/main/examples/hosted/cloudflare)). Vercel Edge also forbids compiling Wasm from bytes, so it is expected to fail the same way; not observed, because its 2026-11-01 deployment was refused first by the Hobby plan's 1 MB Edge size limit (2.13 MB after gzip). Deno-based edges are supported: Netlify Edge Functions are hosted-certified (row above). See [Edge runtimes with `metaplate/edge`](#edge-runtimes-with-metaplateedge). |
 
 Public dynamic image routes are CPU- and memory-intensive. Bound copy length
 and component complexity, use stable path params rather than arbitrary query
@@ -313,8 +315,10 @@ used to reach private or link-local services.
 `metaplate/edge` renders the same plates to PNG through
 [`@resvg/resvg-wasm`](https://www.npmjs.com/package/@resvg/resvg-wasm), the
 WebAssembly build of the Resvg release behind `@resvg/resvg-js`. It imports no
-Node built-ins, so it can run where `metaplate/node` cannot: Cloudflare
-Workers, Deno, and other Fetch-shaped runtimes. `@resvg/resvg-wasm` is an
+Node built-ins, so it can run on Deno-based edges where `metaplate/node`
+cannot: [Netlify Edge Functions](https://docs.netlify.com/build/edge-functions/overview/),
+hosted-certified on 2026-11-01, and [Deno](https://docs.deno.com/runtime/),
+which allow WebAssembly to be compiled at run time. `@resvg/resvg-wasm` is an
 optional peer that `npm install metaplate` does not add; install it for this
 entry:
 
@@ -322,41 +326,59 @@ entry:
 npm install @resvg/resvg-wasm
 ```
 
+**Cloudflare Workers are not supported.** Satori shapes text with a HarfBuzz
+build bundled into `satori/standalone`, which compiles its WebAssembly from
+embedded bytes on first use and, in a worker-shaped isolate, reads
+`self.location.href`. Workers define no `location` and
+[accept only pre-compiled Wasm modules](https://developers.cloudflare.com/workers/runtime-apis/webassembly/),
+so under `wrangler dev` every render fails, first with
+`TypeError: Cannot read properties of undefined (reading 'href')` and, once
+`location` exists, with `Wasm code generation disallowed by embedder`. Satori
+takes no precompiled HarfBuzz module, and every Satori release that exports
+`satori/layout.wasm` (0.35.2 and later) bundles this build, so the caller
+cannot work around it; `metaplate/edge` reports either failure as an error
+naming this limitation. [Vercel's Edge runtime](https://vercel.com/docs/functions/runtimes/edge)
+also forbids compiling Wasm from bytes and is expected to fail the same way
+(not observed: its deployment was refused for size first). On those platforms,
+use `metaplate/node` on the provider's Node runtime or generate images at
+build time. The [Workers reproduction](https://github.com/lnorton89/metaplate/tree/main/examples/hosted/cloudflare)
+runs locally with `wrangler dev`.
+
 Every edge plate needs two WebAssembly modules: Resvg's,
 `@resvg/resvg-wasm/index_bg.wasm`, and Satori's Yoga layout engine,
 `satori/layout.wasm`. `metaplate/edge` lays out through `satori/standalone`
 only, never Satori's default build, which embeds its own Yoga copy and would
 otherwise ship in the same bundle. Edge runtimes cannot locate a package's
-`.wasm` files on their own, so the caller supplies both. In a Cloudflare
-Worker, Wrangler
-[bundles `.wasm` imports as `WebAssembly.Module` values](https://developers.cloudflare.com/workers/wrangler/bundling/)
-([Wasm in JavaScript](https://developers.cloudflare.com/workers/runtime-apis/webassembly/javascript/)),
-and `fetchableFrom` returns the `{ fetch }` object a Worker exports as its
-[Fetch handler](https://developers.cloudflare.com/workers/runtime-apis/handlers/fetch/):
+`.wasm` files on their own, so the caller supplies both. A
+[Netlify Edge Function](https://docs.netlify.com/build/edge-functions/api/)
+has no filesystem, so serve both modules and the font as static files of the
+same site and fetch them as bytes on the first render; `fetchableFrom` returns
+the `{ fetch }` object the function delegates to:
 
 ```ts
-// src/index.ts
-import resvgWasm from "@resvg/resvg-wasm/index_bg.wasm";
-import layoutWasm from "satori/layout.wasm";
+// netlify/edge-functions/og.ts
 import { createEdgeOg } from "metaplate/edge";
 import { fontLoader } from "metaplate/font-data";
 
-const titles: Record<string, string> = { "/": "Home", "/guide": "Guide" };
+type Context = { params: Record<string, string | undefined> };
+
+// public/wasm/resvg.wasm is copied from @resvg/resvg-wasm/index_bg.wasm,
+// public/wasm/layout.wasm from satori/layout.wasm, and the font from
+// @fontsource/inter, so all three are served by the same site.
+let origin = "";
+
+async function asset(path: string): Promise<ArrayBuffer> {
+  const response = await fetch(new URL(path, origin));
+  if (!response.ok) throw new Error(`${path} returned ${response.status}`);
+  return response.arrayBuffer();
+}
 
 const og = createEdgeOg({
   alt: (copy: { title: string }) => `${copy.title} social card`,
-  resvg: { wasm: resvgWasm },
-  layout: { wasm: layoutWasm },
+  resvg: { wasm: () => asset("/wasm/resvg.wasm") },
+  layout: { wasm: () => asset("/wasm/layout.wasm") },
   fonts: fontLoader([
-    {
-      name: "Inter",
-      weight: 700,
-      data: async () => {
-        const response = await fetch("https://example.com/fonts/inter-700.woff");
-        if (!response.ok) throw new Error(`Unable to load font: ${response.status}`);
-        return response.arrayBuffer();
-      },
-    },
+    { name: "Inter", weight: 700, data: () => asset("/fonts/inter-latin-700-normal.woff") },
   ]),
   headers: { "Cache-Control": "public, max-age=86400" },
   component: (copy: { title: string }) => ({
@@ -368,17 +390,20 @@ const og = createEdgeOg({
   }),
 });
 
-export default og.fetchableFrom((request: Request) => ({
-  title: titles[new URL(request.url).pathname] ?? "Metaplate",
-}));
+const route = og.fetchableFrom((request: Request, context: Context) => {
+  origin ||= new URL(request.url).origin;
+  return { title: (context.params.slug ?? "home").slice(0, 80) };
+});
+
+export default (request: Request, context: Context) => route.fetch(request, context);
+
+export const config = { path: "/og/:slug" };
 ```
 
-Importing the modules this way also suits Workers' rule that
-[`WebAssembly.instantiate()` only accepts pre-compiled modules](https://developers.cloudflare.com/workers/runtime-apis/webassembly/).
-The audited Satori 0.63.2 exports both `satori/standalone` and
-`satori/layout.wasm`. In Deno, or another runtime that can compile Wasm from
-bytes, copy the same two files next to the module and fetch them on the first
-render instead:
+npm packages in `node_modules` are imported by name and the Netlify CLI
+bundles them. The audited Satori 0.63.2 exports both `satori/standalone` and
+`satori/layout.wasm`. In Deno, copy the same two files next to the module and
+fetch them on the first render instead:
 
 ```ts
 // vendor/index_bg.wasm is copied from @resvg/resvg-wasm/index_bg.wasm,
@@ -408,14 +433,16 @@ The boundary is deliberately narrow:
   RGBA for a Wasm encoder of your own.
 - **The caller supplies both Wasm modules.** Nothing is fetched from
   `node_modules` or a CDN on your behalf.
+- **Runtimes that compile Wasm at run time.** Satori's bundled HarfBuzz needs
+  it, so Deno-based edges such as Netlify Edge Functions work and Cloudflare
+  Workers do not (above).
 - **About 1.6 MB gzip per edge function.** An esbuild bundle of a minimal
   consumer measures 414 KB gzip of JavaScript (1.13 MB minified, mostly
   `satori/standalone`) plus the two Wasm modules, `@resvg/resvg-wasm`'s
   959 KB gzip (2.48 MB raw) and `satori/layout.wasm`'s 213 KB gzip (521 KB
-  raw). The Resvg Wasm alone fills almost all of Vercel Hobby's 1 MB (gzip)
-  Edge Function limit, so `metaplate/edge` does not fit on Hobby; Vercel Pro's
-  2 MB limit fits. Check your platform's script-size limit before choosing
-  this entry, or generate images at build time instead.
+  raw). The certified Netlify Edge bundle was 1.10 MB gzip against a 20 MB
+  limit. Check your platform's script-size limit before choosing this entry,
+  or generate images at build time instead.
 - **Fonts arrive as bytes**, through `metaplate/font-data` loaders, never file
   paths; `resvg.font` is not available because Satori outlines text first.
 - **Fetch-shaped API.** `fetchable`, `fetchableFrom`, `handlerFrom`,
@@ -429,7 +456,8 @@ The boundary is deliberately narrow:
   Netlify Edge Functions deployment of 2026-11-01 is hosted-certified, with the
   Wasm modules and font fetched from the site's own static files
   ([fixture](https://github.com/lnorton89/metaplate/tree/main/examples/hosted/netlify/edge)).
-  No Workers or Deno Deploy deployment is certified yet.
+  Cloudflare Workers fail every render (above), and no Deno Deploy deployment
+  is certified yet.
 
 ### Authoring without a JSX toolchain
 
@@ -1217,8 +1245,9 @@ route evidence and certification status lives in
 in the repository. The short version is:
 use a real `.png`/`.jpg` file for static hosts, use the provider's Node runtime
 for `metaplate/node`, and never deploy the native renderer to an Edge/Workers
-runtime; use `metaplate/edge`, which is tested in Node against its Wasm renderer
-and hosted-certified on Netlify Edge Functions (2026-11-01).
+runtime. On Deno-based edges use `metaplate/edge`, which is tested in Node
+against its Wasm renderer and hosted-certified on Netlify Edge Functions
+(2026-11-01); it does not run on Cloudflare Workers.
 
 ## Verify generated files
 
@@ -1386,9 +1415,11 @@ ceiling and `resolve` to replace `dns.lookup` (its answers are still checked).
   automatically. Also the hardened remote fetcher behind `verify-url`
   (`fetchRemoteImage`, `verifyRemoteImage`).
 - `metaplate/edge` — PNG, raw pixels, and Fetch API responses through
-  `@resvg/resvg-wasm` for Workers, Deno, and other edge runtimes. No Node
-  built-ins. Needs `@resvg/resvg-wasm` and the caller-supplied
-  `@resvg/resvg-wasm/index_bg.wasm` and `satori/layout.wasm` modules.
+  `@resvg/resvg-wasm` for Deno-based edges such as Netlify Edge Functions,
+  and other runtimes that allow run-time Wasm compilation; not Cloudflare
+  Workers. No Node built-ins. Needs `@resvg/resvg-wasm` and the
+  caller-supplied `@resvg/resvg-wasm/index_bg.wasm` and `satori/layout.wasm`
+  modules.
 - `metaplate/next` — native Next.js `ImageResponse` adapter. Needs `next`.
 - `metaplate/font-data` — runtime-neutral normalization and memoization for
   application/framework-provided bytes. No peers or Node built-ins.
