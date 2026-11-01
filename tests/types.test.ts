@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
 import type { ResvgRenderOptions as UpstreamResvgRenderOptions } from "@resvg/resvg-js";
 import type { SatoriOptions as UpstreamSatoriOptions } from "satori";
-import type { ResvgRenderOptions } from "../src/node.js";
-import type { SatoriNode, SatoriOptions } from "../src/render.js";
+import type { ReactElement } from "react";
+import { createNextOg, type NextOgDefinition } from "../src/next.js";
+import { createNodeOg, type NodeOgDefinition, type ResvgRenderOptions } from "../src/node.js";
+import {
+  createSvgOg,
+  type PlateContext,
+  type SatoriNode,
+  type SatoriOptions,
+  type SvgOgDefinition,
+} from "../src/render.js";
 import {
   socialImageMetadata,
   type SocialCompatibilityImage,
@@ -54,6 +62,58 @@ const compatibilityInput: SocialCompatibilityImage = { width: 1200, height: 630,
 const verificationInput: SocialImageVerificationDescriptor = { type: "image/png" };
 void compatibilityInput;
 void verificationInput;
+
+// Size variants add a second `context` argument to every plate component.
+// Components written before variants take one argument and must still be
+// accepted everywhere a component is: inline, as a named function, through
+// each definition type, and with an explicit `Copy` type argument.
+type Copy = { title: string };
+const fonts = () => [{ name: "Inter", data: new ArrayBuffer(1), weight: 700 as const }];
+function legacyCard(copy: Copy): SatoriNode {
+  return { type: "div", props: { children: copy.title } };
+}
+const legacySvg: SvgOgDefinition<Copy> = { alt: (copy) => copy.title, fonts, component: legacyCard };
+const legacyNode: NodeOgDefinition<Copy> = { ...legacySvg, component: (copy) => legacyCard(copy) };
+const legacyNext: NextOgDefinition<Copy> = {
+  alt: (copy) => copy.title,
+  component: (copy) => copy.title as unknown as ReactElement,
+};
+createSvgOg(legacySvg);
+createSvgOg<Copy>({ alt: (copy) => copy.title, fonts, component: (copy) => copy.title });
+createNodeOg(legacyNode);
+createNextOg(legacyNext);
+createNextOg<Copy>({ alt: (copy) => copy.title, component: () => null as unknown as ReactElement });
+
+// Without explicit type arguments, variant names are inferred from the
+// declaration: the component's context and `plate.variant` both use them.
+const inferred = createSvgOg({
+  alt: (copy: Copy) => copy.title,
+  fonts,
+  variants: { square: { size: { width: 1080, height: 1080 } } },
+  component: (copy, context) => {
+    const variant: "square" | undefined = context.variant;
+    void variant;
+    return copy.title;
+  },
+});
+const inferredNames: readonly "square"[] = inferred.variants;
+void inferredNames;
+inferred.variant("square").variant("square");
+inferred.metadata("/", { title: "t" }, { twitter: { variant: "square" } });
+
+// An explicit `Copy` falls back to `string` names; the context stays typed.
+const explicitContext = (_copy: Copy, context: PlateContext): SatoriNode =>
+  `${context.variant ?? "default"} ${context.size.width}x${context.size.height}`;
+const explicit = createNodeOg<Copy>({ ...legacySvg, component: explicitContext });
+
+// Compile-only: these would throw at runtime for undeclared names.
+export function variantNamesAreChecked() {
+  // @ts-expect-error -- `story` is not a declared variant.
+  inferred.variant("story");
+  // @ts-expect-error -- the X Card variant must be declared too.
+  inferred.metadata("/", { title: "t" }, { twitter: { variant: "story" } });
+  explicit.variant("any-name");
+}
 
 describe("React-free type mirror", () => {
   it("is exercised by the type-level assertions above", () => {

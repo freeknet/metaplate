@@ -42,6 +42,28 @@ All notable changes to Metaplate are documented in this file. The project uses
 - The tslib `unstableOwnership` disposition's dependency path now names the
   first lockfile path through `@astrojs/node`, which reaches `astro` as a
   peer; the alert, package, version, and reasoning are unchanged.
+- Size variants: a plate definition can declare `variants`, such as
+  `{ square: { size: { width: 1080, height: 1080 } } }`, beside its default
+  `size`, and every renderer (`createSvgOg`, `createNodeOg`, `createNextOg`)
+  passes the component a second argument, `{ variant, size }`, so each size is
+  laid out rather than cropped. One-argument components are unaffected.
+- `plate.variant(name)` returns the same plate bound to one variant, with the
+  full plate surface (`render`, `renderSvg`, `renderPixels`, `response`,
+  `handler`, `handlerFrom`, `fetchable`, `fetchableFrom`, `artifact`, `image`,
+  `metadata`, `size`, `contentType`); `plate.variants` lists the declared names
+  and `plate.variantName` names the view. Variant names are inferred from the
+  definition when no type arguments are given.
+- A variant's `imagePath` defaults to the plate's with `-<name>` inserted
+  before the extension (`og-image.png` to `og-image-square.png`), exported as
+  `variantImagePath` from `metaplate`; per-variant `imagePath` and `alt`
+  override it. Colliding paths and invalid names or sizes fail at definition.
+- `socialImageMetadata` accepts `variants` and `twitter.variant`, and a
+  variant plate's `metadata` emits one `og:image` per size, default first.
+  `twitter:image` stays the default unless `twitter.variant` selects another.
+  Plates without variants produce byte-for-byte the same metadata as 0.8.0.
+- `PlateContext`, `PlateVariant`, `PlateVariants`, `PlateView`, and
+  `PlateMetadataOptions` types from `metaplate/render`, `metaplate/node`, and
+  `metaplate/next`, and `SocialImageVariantOptions` from `metaplate`.
 - Package verification now builds and serves a SvelteKit 3 app from the exact
   packed artifact. The fixture syncs route types, typechecks the README's
   `+server` route against the generated `RequestHandler`, builds it with
