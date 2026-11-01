@@ -46,3 +46,19 @@ export {
   type SocialMetaOptions,
   type SocialMetaTag,
 } from "./meta-tags.js";
+
+export {
+  ADAPTIVE_CARD_CONTENT_TYPE,
+  ADAPTIVE_CARD_SCHEMA,
+  ADAPTIVE_CARD_VERSION,
+  ADAPTIVE_CARD_VERSIONS,
+  TEAMS_ADAPTIVE_CARD_LIMITS,
+  socialImageAdaptiveCard,
+  type AdaptiveCardImage,
+  type AdaptiveCardOpenUrlAction,
+  type AdaptiveCardTextBlock,
+  type AdaptiveCardVersion,
+  type SocialImageAdaptiveCard,
+  type SocialImageAdaptiveCardInput,
+  type SocialImageAdaptiveCardOptions,
+} from "./adaptive-card.js";

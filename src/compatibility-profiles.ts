@@ -8,6 +8,7 @@ export const SOCIAL_TARGETS = [
   "mastodon",
   "discord",
   "instagram",
+  "teams",
 ] as const;
 
 export type SocialTarget = (typeof SOCIAL_TARGETS)[number];
@@ -33,6 +34,8 @@ const UNIVERSAL_RASTER_TYPES = ["image/png", "image/jpeg"] as const;
 const DOCUMENTED_RASTER_TYPES = [...UNIVERSAL_RASTER_TYPES, "image/gif"] as const;
 const UNIVERSAL_FORMAT_MESSAGE =
   "is not a documented universal raster social-preview format; use PNG or JPEG.";
+const TEAMS_FORMAT_MESSAGE =
+  "is not a Teams card image format; Teams documents PNG, JPEG, and GIF.";
 const SVG_WARNING =
   "SVG is structurally valid metadata but is not a safe cross-client social delivery format.";
 
@@ -92,5 +95,22 @@ export const SOCIAL_COMPATIBILITY_PROFILES = {
     crawlerReady: false,
     unknownContract:
       "Instagram does not publish a stable webpage image-tag compatibility contract.",
+  },
+  /**
+   * Teams unfurls an ordinary link into an Adaptive Card built from the
+   * page's og:title, og:description, and og:image, and creates no preview
+   * for a URL that requires authentication. Card images are PNG, JPEG, or
+   * GIF (SVG and animated GIF are unsupported).
+   * https://learn.microsoft.com/en-us/microsoftteams/platform/concepts/build-and-test/share-to-teams-from-web-apps#craft-your-website-preview
+   * https://learn.microsoft.com/en-us/microsoftteams/platform/messaging-extensions/how-to/micro-capabilities-for-website-links
+   * https://learn.microsoft.com/en-us/microsoftteams/platform/task-modules-and-cards/cards/cards-reference#inline-card-images
+   */
+  teams: {
+    crawlerReady: true,
+    format: {
+      accepted: DOCUMENTED_RASTER_TYPES,
+      missingSeverity: "warning",
+      invalidMessage: TEAMS_FORMAT_MESSAGE,
+    },
   },
 } as const satisfies Record<SocialTarget, SocialCompatibilityProfile>;
