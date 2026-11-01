@@ -1,10 +1,6 @@
 import { loadPeerPair } from "./optional-peer.js";
 import { createPlateHandlers, createPlateViews } from "./plate.js";
-import {
-  loadEdgeSatori,
-  loadResvgWasm,
-  loadSatoriStandalone,
-} from "./peers.js";
+import { loadResvgWasm, loadSatoriStandalone } from "./peers.js";
 import {
   createRasterPlate,
   type ResvgRenderOptions,
@@ -58,11 +54,12 @@ export type EdgeOgDefinition<Copy, Variant extends string = string> = SvgOgDefin
   /** Resvg rendering controls and the `@resvg/resvg-wasm` module. */
   resvg?: EdgeResvgOptions;
   /**
-   * Satori's Yoga layout engine (`satori/layout.wasm`). Required where the
-   * runtime forbids compiling WebAssembly from bytes, as Cloudflare Workers
-   * does; elsewhere Satori's default build compiles its embedded copy.
+   * Satori's Yoga layout engine, `satori/layout.wasm`. `metaplate/edge` lays
+   * out through `satori/standalone` only, so every edge bundle carries one
+   * Satori build, and that build needs this module from the caller here or
+   * through `initEdgeRenderer`.
    */
-  layout?: { wasm: EdgeWasmSource };
+  layout?: { wasm?: EdgeWasmSource };
   /** Headers added to Web Responses returned by `response` and `fetchable`. */
   headers?: HeadersInit;
   /** Adds a strong SHA-256 ETag, computed with Web Crypto, to responses. */
@@ -95,13 +92,18 @@ async function resolveWasm(source: EdgeWasmSource): Promise<EdgeWasmModule> {
   return typeof source === "function" ? source() : source;
 }
 
-/** Initialises a slot once; a failed attempt is discarded so a later render can retry. */
+/**
+ * Initialises a slot once; a failed attempt is discarded so a later render can
+ * retry. A slot with no source resolves, or rejects with `missing` when the
+ * entry cannot render without it.
+ */
 function initialise(
   slot: WasmSlot,
   init: (module: EdgeWasmModule) => Promise<void> | void,
+  missing?: () => Error,
 ): Promise<void> {
   const { source } = slot;
-  if (source === undefined) return Promise.resolve();
+  if (source === undefined) return missing ? Promise.reject(missing()) : Promise.resolve();
   slot.ready ??= resolveWasm(source)
     .then(init)
     .catch((error: unknown) => {
@@ -127,41 +129,54 @@ function initialiseResvg(resvg: ResvgWasm): Promise<void> {
 }
 
 function initialiseLayout(satori: SatoriStandalone): Promise<void> {
-  return initialise(layoutSlot, (module) =>
-    satori.init(module as Parameters<SatoriStandalone["init"]>[0]),
+  return initialise(
+    layoutSlot,
+    (module) => satori.init(module as Parameters<SatoriStandalone["init"]>[0]),
+    missingLayoutError,
   );
 }
 
-/** Satori's standalone build once a layout module is known, its default build otherwise. */
+/**
+ * Satori's standalone build with the caller's Yoga module. The entry never
+ * imports Satori's default build, which embeds its own copy of Yoga, so edge
+ * bundlers that follow dynamic imports ship one Satori build, not two.
+ */
 async function loadSatori(): Promise<SatoriRender> {
-  if (layoutSlot.source === undefined) return loadEdgeSatori();
   const satori = await loadSatoriStandalone();
   await initialiseLayout(satori);
   return satori.default as unknown as SatoriRender;
 }
 
+function missingLayoutError(): Error {
+  return new Error(
+    "metaplate/edge has no satori/layout.wasm module to lay out with. Pass it as " +
+      "layout.wasm to createEdgeOg or to initEdgeRenderer(wasm, { layout }); in Cloudflare " +
+      'Workers, import layoutWasm from "satori/layout.wasm".',
+  );
+}
+
 function missingWasmError(cause: unknown): Error {
   return new Error(
     "metaplate/edge has no @resvg/resvg-wasm module to render with. Pass it as " +
-      "resvg.wasm to createEdgeOg or call initEdgeRenderer(wasm) first; in Cloudflare " +
+      "resvg.wasm to createEdgeOg or to initEdgeRenderer(wasm, { layout }); in Cloudflare " +
       'Workers, import wasm from "@resvg/resvg-wasm/index_bg.wasm".',
     { cause },
   );
 }
 
 /**
- * Supplies the Wasm modules once for every edge plate, for example at the top
- * of a Worker module. Resolves when both renderers are ready.
+ * Supplies both Wasm modules once for every edge plate, for example at the top
+ * of a Worker module: `@resvg/resvg-wasm/index_bg.wasm` and Satori's
+ * `satori/layout.wasm`. Resolves when both renderers are ready.
  */
 export async function initEdgeRenderer(
   wasm: EdgeWasmSource,
-  options: { layout?: EdgeWasmSource } = {},
+  options: { layout: EdgeWasmSource },
 ): Promise<void> {
   provide(resvgSlot, wasm);
-  provide(layoutSlot, options.layout);
-  const resvg = await loadResvgWasm();
-  await initialiseResvg(resvg);
-  if (layoutSlot.source !== undefined) await initialiseLayout(await loadSatoriStandalone());
+  provide(layoutSlot, (options as { layout?: EdgeWasmSource } | undefined)?.layout);
+  const [satori, resvg] = await loadPeerPair(loadSatoriStandalone, loadResvgWasm, "metaplate/edge");
+  await Promise.all([initialiseResvg(resvg), initialiseLayout(satori)]);
 }
 
 /**
@@ -188,7 +203,9 @@ export function createEdgeOg<Copy, Variant extends string = string>(
     {
       satori: loadSatori,
       async rasterize(source, read) {
-        const [, resvg] = await loadPeerPair(loadSatori, loadResvgWasm, "metaplate/edge");
+        // Both peers resolve before either Wasm module is required, so a
+        // missing package is reported as an install command first.
+        const [, resvg] = await loadPeerPair(loadSatoriStandalone, loadResvgWasm, "metaplate/edge");
         await initialiseResvg(resvg);
         const svg = await source();
 
