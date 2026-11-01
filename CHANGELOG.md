@@ -3,6 +3,33 @@
 All notable changes to Metaplate are documented in this file. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Size variants: a plate definition can declare `variants`, such as
+  `{ square: { size: { width: 1080, height: 1080 } } }`, beside its default
+  `size`, and every renderer (`createSvgOg`, `createNodeOg`, `createNextOg`)
+  passes the component a second argument, `{ variant, size }`, so each size is
+  laid out rather than cropped. One-argument components are unaffected.
+- `plate.variant(name)` returns the same plate bound to one variant, with the
+  full plate surface (`render`, `renderSvg`, `renderPixels`, `response`,
+  `handler`, `handlerFrom`, `fetchable`, `fetchableFrom`, `artifact`, `image`,
+  `metadata`, `size`, `contentType`); `plate.variants` lists the declared names
+  and `plate.variantName` names the view. Variant names are inferred from the
+  definition when no type arguments are given.
+- A variant's `imagePath` defaults to the plate's with `-<name>` inserted
+  before the extension (`og-image.png` to `og-image-square.png`), exported as
+  `variantImagePath` from `metaplate`; per-variant `imagePath` and `alt`
+  override it. Colliding paths and invalid names or sizes fail at definition.
+- `socialImageMetadata` accepts `variants` and `twitter.variant`, and a
+  variant plate's `metadata` emits one `og:image` per size, default first.
+  `twitter:image` stays the default unless `twitter.variant` selects another.
+  Plates without variants produce byte-for-byte the same metadata as 0.8.0.
+- `PlateContext`, `PlateVariant`, `PlateVariants`, `PlateView`, and
+  `PlateMetadataOptions` types from `metaplate/render`, `metaplate/node`, and
+  `metaplate/next`, and `SocialImageVariantOptions` from `metaplate`.
+
 ## [0.8.0] - 2026-10-31
 
 ### Added
@@ -455,6 +482,7 @@ reflects that `render` may return any consumer-encoded format ([#54]).
 - Typed package exports for framework-neutral, rendering, Node.js, Next.js,
   font, and PNG entry points.
 
+[Unreleased]: https://github.com/lnorton89/metaplate/compare/v0.8.0...HEAD
 [0.8.0]: https://github.com/lnorton89/metaplate/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/lnorton89/metaplate/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/lnorton89/metaplate/compare/v0.5.0...v0.6.0
