@@ -105,6 +105,32 @@ All notable changes to Metaplate are documented in this file. The project uses
   `socialImageCompatibility` and `--target teams`. The README section "Teams,
   Slack, and Discord previews" documents what each client reads for an
   ordinary link, which metaplate options feed it, and when an app is needed.
+- Open Graph video and audio (`og:video`, `og:audio`, https://ogp.me/#structured).
+  `socialImageMetadata` and plate `metadata()` calls accept
+  `media: { videos, audio }` (`OpenGraphVideo`, `OpenGraphAudio`) and carry
+  them on `metadata.openGraph.videos` and `.audio` in Next's descriptor shape,
+  so `openGraph: social.openGraph` passes them to Next's `Metadata`.
+  `socialMetaTags` emits each video's `og:video`, `og:video:secure_url`,
+  `og:video:type`, `og:video:width`, `og:video:height`, then each audio item's
+  `og:audio`, `og:audio:secure_url`, `og:audio:type`, after the `og:image`
+  groups and before the `twitter:*` tags, resolving relative URLs against the
+  canonical `url` and dropping repeated URLs as it does for images. Absolute
+  URLs must be credential-free http(s), `secureUrl` must be absolute https,
+  `type` must be a media type, and video dimensions must be integers from 1 to
+  65535. `metaplate/next` rejects relative video and audio URLs because Next
+  emits them without resolving `metadataBase`. Metadata without `media` is
+  unchanged.
+- `socialImageJsonLd` and `socialImageJsonLdScript` describe a metadata
+  object's Open Graph images as schema.org `ImageObject` JSON-LD, following
+  schema.org's ImageObject definition and Google's image metadata guidance:
+  `contentUrl`, `url`, `caption` (alt text), `encodingFormat`, and `width` and
+  `height` as pixel `QuantitativeValue`s, plus optional `name`, `creditText`,
+  `creator`, `copyrightNotice`, `license`, `acquireLicensePage`, and
+  `representativeOfPage` from options. One image yields a single node and
+  several yield an `@graph`, with a fixed key order. Relative URLs resolve
+  against a canonical `url` validated exactly as for `socialMetaTags`. The
+  script form, and the exported `serializeJsonLd`, escape `<`, `>`, `&`,
+  U+2028, and U+2029 so the payload can never close its `<script>` element.
 
 ### Changed
 

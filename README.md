@@ -33,6 +33,8 @@ It works with plain Node, static build scripts, Next.js, and Node-compatible fra
   - [Social compatibility profiles](#social-compatibility-profiles)
   - [Emitting the meta tags yourself](#emitting-the-meta-tags-yourself)
   - [Teams, Slack, and Discord previews](#teams-slack-and-discord-previews)
+  - [Video and audio previews](#video-and-audio-previews)
+  - [Schema.org image metadata](#schemaorg-image-metadata)
   - [Next.js static export and `basePath`](#nextjs-static-export-and-basepath)
   - [JPEG or WebP cards in Next.js](#jpeg-or-webp-cards-in-nextjs)
 - [Fonts](#fonts)
@@ -1109,6 +1111,208 @@ which accepts the same `{ type: "message", attachments: [...] }` body. See
 [`examples/adaptive-card.ts`](examples/adaptive-card.ts). Metaplate makes no
 network calls: posting the card, and keeping the webhook URL secret, stay with
 the caller.
+### Video and audio previews
+
+The [Open Graph protocol](https://ogp.me/#structured) defines `og:video` and
+`og:audio` as optional properties with structured properties: a video has the
+same five as an image (`url`, `secure_url`, `type`, `width`, `height`), and
+audio has only `url`, `secure_url`, and `type`. Pass them as `media`; they are
+copied onto `metadata.openGraph.videos` and `metadata.openGraph.audio`, beside
+the images:
+
+```ts
+import { socialImageMetadata, socialMetaTags } from "metaplate";
+
+const social = socialImageMetadata("/launch", "Launch card", {
+  origin: "https://example.com",
+  media: {
+    videos: [
+      {
+        url: "https://cdn.example.com/trailer.mp4",
+        secureUrl: "https://cdn.example.com/trailer.mp4",
+        type: "video/mp4",
+        width: 1280,
+        height: 720,
+      },
+    ],
+    audio: [{ url: "https://cdn.example.com/theme.mp3", type: "audio/mpeg" }],
+  },
+});
+
+socialMetaTags(social, { url: "https://example.com/launch" });
+```
+
+`socialMetaTags` and `socialMetaHtml` emit them after every `og:image` group
+and before the `twitter:*` tags:
+
+1. For each video, in caller order: `og:video`, `og:video:secure_url`,
+   `og:video:type`, `og:video:width`, `og:video:height`.
+2. Then for each audio item: `og:audio`, `og:audio:secure_url`,
+   `og:audio:type`.
+
+```html
+<meta property="og:image" content="https://example.com/launch/og-image">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Launch card">
+<meta property="og:video" content="https://cdn.example.com/trailer.mp4">
+<meta property="og:video:secure_url" content="https://cdn.example.com/trailer.mp4">
+<meta property="og:video:type" content="video/mp4">
+<meta property="og:video:width" content="1280">
+<meta property="og:video:height" content="720">
+<meta property="og:audio" content="https://cdn.example.com/theme.mp3">
+<meta property="og:audio:type" content="audio/mpeg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://example.com/launch/og-image">
+<meta name="twitter:image:alt" content="Launch card">
+<meta property="og:url" content="https://example.com/launch">
+<meta property="og:type" content="website">
+```
+
+As with images, a missing field emits no tag, a relative `url` is resolved
+against the canonical page `url`, and a group whose resolved URL repeats an
+earlier one of the same kind is dropped. Metadata without `media` emits
+exactly the tags it did before. Validation runs in both `socialImageMetadata`
+and `socialMetaTags`:
+
+- `url` must be non-empty, and an absolute `url` must be a credential-free
+  http(s) URL.
+- `secureUrl` (`secure_url`) must be an absolute, credential-free https URL.
+- `type` must be a media type such as `video/mp4` or `audio/mpeg`.
+- Video `width` and `height` must be integers from 1 to 65535, the same range
+  as image dimensions. Audio has no dimensions.
+
+Plates accept the same option per call, for the default size and for a
+variant: `plate.metadata(route, copy, { media: { videos, audio } })`.
+
+**Next.js.** The descriptor fields match Next's
+[`openGraph.videos` and `openGraph.audio`](https://nextjs.org/docs/app/api-reference/functions/generate-metadata#opengraph)
+(`url`, `secureUrl`, `type`, `width`, `height`), so `openGraph: social.openGraph`
+passes them through unchanged, and Next renders the same tag order. Next
+resolves only images against `metadataBase` and documents video and audio URLs
+as "Must be an absolute URL", so `metaplate/next`'s `metadata()` rejects a
+relative video or audio URL instead of emitting one a crawler cannot follow.
+[`examples/og-media.ts`](examples/og-media.ts) shows both paths.
+
+**Where they render.** Open Graph defines the tags; it does not promise any
+client plays them. Meta's [sharing guide](https://developers.facebook.com/docs/sharing/webmasters)
+documents `og:video` and its structured properties, asks for secure URLs in
+both `og:video:url` and `og:video:secure_url`, and notes that a video "is not
+guaranteed to play in-line". That guide does not document `og:audio`. X Cards
+describe video with their own Player Card (`twitter:player`), which `media`
+does not emit. Metaplate makes no rendering claim for other platforms; check
+each one's debugger after deployment.
+### Schema.org image metadata
+
+`socialImageJsonLd` describes the same Open Graph images as a
+[schema.org `ImageObject`](https://schema.org/ImageObject) in JSON-LD, the
+form Google's
+[image metadata guidance](https://developers.google.com/search/docs/appearance/structured-data/image-license-metadata)
+reads for credit and licensing in Google Images. Google requires
+`contentUrl` and at least one of `creator`, `creditText`, `copyrightNotice`,
+or `license`; the image fields come from the metadata, so pass the licensing
+fields as options. `socialImageJsonLdScript` renders the result as a
+`<script type="application/ld+json">` element:
+
+```ts
+import { socialImageJsonLdScript, socialImageMetadata } from "metaplate";
+
+const social = socialImageMetadata("/blog/launch", "Launch card", { type: "image/png" });
+const imageLicense = {
+  url: "https://example.com/blog/launch",
+  creditText: "Example",
+  license: "/image-license",
+};
+
+// Plain HTML: put the element anywhere in <head> or <body>.
+const jsonLd = socialImageJsonLdScript(social, imageLicense);
+```
+
+The script's payload, formatted:
+
+```json
+{
+  "@context": "https://schema.org",
+  "@type": "ImageObject",
+  "contentUrl": "https://example.com/blog/launch/og-image",
+  "url": "https://example.com/blog/launch/og-image",
+  "caption": "Launch card",
+  "encodingFormat": "image/png",
+  "width": { "@type": "QuantitativeValue", "value": 1200, "unitCode": "E37" },
+  "height": { "@type": "QuantitativeValue", "value": 630, "unitCode": "E37" },
+  "creditText": "Example",
+  "license": "https://example.com/image-license"
+}
+```
+
+With one distinct image the result is that single node. With several, such
+as size variants, it is `{ "@context": "https://schema.org", "@graph": [...] }`
+with one `ImageObject` per image in metadata order; a later image whose
+resolved URL repeats an earlier one is dropped, as in `socialMetaTags`. Only
+`openGraph.images` is read. Each node's keys appear in a fixed order:
+`@type`, `contentUrl`, `url`, `name`, `caption`, `encodingFormat`, `width`,
+`height`, `representativeOfPage`, `creditText`, `creator`, `copyrightNotice`,
+`license`, `acquireLicensePage`. A field whose value is undefined or empty is
+left out.
+
+- `contentUrl` and `url` are both the image URL. Google prefers `contentUrl`
+  and also accepts `url`.
+- `caption` is the image's alt text and `encodingFormat` its media type.
+- `width` and `height` are `QuantitativeValue`s in pixels (UN/CEFACT unit
+  code `E37`). schema.org expects `Distance` or `QuantitativeValue` there,
+  and Google's guidance does not use either property, so there is no
+  Google-documented form; a bare number matches neither schema.org type, and
+  `QuantitativeValue` is the conforming form that names the unit.
+- `name`, `creditText`, `creator` (`{ "@type": "Person" | "Organization",
+  name, url? }`), `copyrightNotice`, `license`, `acquireLicensePage`, and
+  `representativeOfPage` come from the options and are copied onto every
+  node, because Google reads licensing per image.
+
+`url` is the canonical page URL, validated exactly as for `socialMetaTags`.
+When it is supplied, relative image URLs and the URL-valued options
+(`license`, `acquireLicensePage`, `creator.url`) resolve against it; absolute
+URLs are never rewritten. Without it, URLs are emitted as given. The page URL
+itself is not emitted.
+
+`socialImageJsonLdScript` serializes with `JSON.stringify` and then escapes
+`<`, `>`, `&`, U+2028, and U+2029 as `\u003c`, `\u003e`, `\u0026`, `\u2028`,
+and `\u2029`. JSON allows those characters only inside strings, where the
+escape decodes to the same character, so `JSON.parse` of the payload returns
+the original values. The payload contains no `<`, so no caption, credit, or
+URL can close the element, open another, or start an HTML comment: the only
+`</script` in the output is its own closing tag. `serializeJsonLd` applies
+the same escaping to any value.
+
+In Next.js, render the JSON-LD as a native `<script>` in `page.tsx` or
+`layout.tsx`, as
+[Next's JSON-LD guide](https://nextjs.org/docs/app/guides/json-ld)
+recommends. `serializeJsonLd` stands in for the guide's
+`JSON.stringify(jsonLd).replace(/</g, "\u003c")`:
+
+```tsx
+import { serializeJsonLd, socialImageJsonLd, socialImageMetadata } from "metaplate";
+
+const social = socialImageMetadata("/blog/launch", "Launch card", { type: "image/png" });
+
+export default function Page() {
+  const jsonLd = socialImageJsonLd(social, {
+    url: "https://example.com/blog/launch",
+    creditText: "Example",
+    license: "/image-license",
+  });
+  return (
+    <section>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
+      />
+      {/* ... */}
+    </section>
+  );
+}
+```
+
+[`examples/json-ld.ts`](examples/json-ld.ts) type-checks both forms.
 
 ### Next.js static export and `basePath`
 
