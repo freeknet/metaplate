@@ -132,6 +132,14 @@ plate when responses and artifacts should carry a deterministic strong ETag
 based on the final encoded bytes. While automatic ETags are on, a caller
 `ETag` header is rejected too; with `etag` off, a caller `ETag` passes through.
 
+Responses are buffered, not streamed: every response renders the whole image
+first, then sends it with `Content-Length` and, when enabled, a strong `ETag`
+computed from the final bytes. That is deliberate. Social cards are small
+(typically 15 to 30 KB), so streaming would save almost nothing, and it would
+give up the exact length and content hash that CDNs use for caching and that
+`verifyImage`, `verify`, and `verify-url` rely on to prove the bytes match the
+metadata.
+
 Rendering is safe to call concurrently. Satori is a pure call, each render
 builds its own Resvg instance, and the font loaders memoize one shared copy
 of the font bytes, so a pool over `render` is the expected way to build many
