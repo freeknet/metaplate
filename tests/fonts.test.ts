@@ -19,25 +19,64 @@ async function fixture() {
   const root = await mkdtemp(path.join(tmpdir(), "metaplate-"));
   const packageDirectory = path.join(root, "node_modules", "@fontsource", "example");
   await mkdir(path.join(packageDirectory, "files"), { recursive: true });
-  await writeFile(path.join(packageDirectory, "files", "example.woff"), Uint8Array.of(1, 2, 3));
+  await writeFile(path.join(packageDirectory, "files", "example.woff"), Uint8Array.of(0x77, 0x4f, 0x46, 0x46, 1, 2, 3));
   await writeFile(
     path.join(packageDirectory, "metadata.json"),
     JSON.stringify({ id: "example", family: "Example Sans", defSubset: "latin" }),
   );
   await writeFile(
     path.join(packageDirectory, "files", "example-latin-400-normal.woff"),
-    Uint8Array.of(4, 5, 6),
+    Uint8Array.of(0x77, 0x4f, 0x46, 0x46, 4, 5, 6),
   );
   return { root, packageDirectory, nested: path.join(root, "apps", "site") };
 }
 
 describe("font loading", () => {
+  it("accepts every font container Satori reads", async () => {
+    const signatures = {
+      truetype: [0x00, 0x01, 0x00, 0x00],
+      appleTrueType: [0x74, 0x72, 0x75, 0x65],
+      openType: [0x4f, 0x54, 0x54, 0x4f],
+      woff: [0x77, 0x4f, 0x46, 0x46],
+      woff2: [0x77, 0x4f, 0x46, 0x32],
+    };
+    for (const [name, signature] of Object.entries(signatures)) {
+      const [font] = await loadFonts([{ name, weight: 400, data: Uint8Array.of(...signature, 0) }]);
+      expect(font?.data.byteLength).toBe(5);
+    }
+  });
+
+  it("rejects bytes that are not a font instead of rendering blank text", async () => {
+    // A failed same-origin fetch on an edge runtime once returned non-font
+    // bytes; Satori then drew no glyphs and a CDN cached the blank card.
+    const html = new TextEncoder().encode("<!DOCTYPE html><html><body>Not found</body></html>");
+    await expect(loadFonts([{ name: "Inter", weight: 700, data: html }])).rejects.toThrow(
+      /Font "Inter" \(weight 700\) is not a TrueType, OpenType, WOFF, or WOFF2 file: received \d+ bytes starting 3c 21 44 4f \("<!DOCTYPE html><"\)/,
+    );
+    await expect(loadFonts([{ name: "Empty", weight: 400, data: new Uint8Array() }])).rejects.toThrow(
+      "received 0 bytes starting (empty)",
+    );
+    await expect(loadFonts([{ name: "Short", weight: 400, data: Uint8Array.of(0x77, 0x4f) }])).rejects.toThrow(TypeError);
+  });
+
+  it("does not memoize a font load that returned non-font bytes", async () => {
+    let attempt = 0;
+    const loader = fontLoader([{
+      name: "Flaky",
+      weight: 400,
+      data: () => (++attempt === 1 ? new TextEncoder().encode("<html>") : Uint8Array.of(0x77, 0x4f, 0x46, 0x46, 1)),
+    }]);
+    await expect(loader()).rejects.toThrow("is not a TrueType");
+    await expect(loader()).resolves.toHaveLength(1);
+    expect(attempt).toBe(2);
+  });
+
   it("normalizes existing application font bytes and memoizes lazy sources", async () => {
-    const backing = Uint8Array.of(9, 1, 2, 3, 8);
-    const load = vi.fn(() => backing.subarray(1, 4));
+    const backing = Uint8Array.of(9, 0x77, 0x4f, 0x46, 0x46, 1, 2, 3, 8);
+    const load = vi.fn(() => backing.subarray(1, 8));
     const fonts = [{ name: "Existing", data: load, weight: 400 }] as const;
 
-    expect(new Uint8Array((await loadFonts(fonts))[0]!.data)).toEqual(Uint8Array.of(1, 2, 3));
+    expect(new Uint8Array((await loadFonts(fonts))[0]!.data)).toEqual(Uint8Array.of(0x77, 0x4f, 0x46, 0x46, 1, 2, 3));
     const memoized = fontLoader(fonts);
     expect(await memoized()).toBe(await memoized());
     expect(load).toHaveBeenCalledTimes(2);
@@ -46,14 +85,14 @@ describe("font loading", () => {
   it("loads relative and co-located project font files", async () => {
     const { root } = await fixture();
     const projectFile = path.join(root, "project.woff");
-    await writeFile(projectFile, Uint8Array.of(7, 8, 9));
+    await writeFile(projectFile, Uint8Array.of(0x77, 0x4f, 0x46, 0x46, 7, 8, 9));
     const relative = [{ name: "Project", file: "project.woff", weight: 700 }] as const;
     const coLocated = [
       { name: "Project", file: pathToFileURL(projectFile), weight: 700 },
     ] as const;
 
     expect(new Uint8Array((await loadFileFonts(relative, { cwd: root }))[0]!.data)).toEqual(
-      Uint8Array.of(7, 8, 9),
+      Uint8Array.of(0x77, 0x4f, 0x46, 0x46, 7, 8, 9),
     );
     const memoized = fileFontLoader(coLocated);
     expect(await memoized()).toBe(await memoized());
@@ -69,7 +108,7 @@ describe("font loading", () => {
     const { root } = await fixture();
     const [font] = await loadFontsourceFonts([{ font: "example" }], { cwd: root });
     expect(font).toMatchObject({ name: "Example Sans", weight: 400, style: "normal" });
-    expect(new Uint8Array(font!.data)).toEqual(Uint8Array.of(4, 5, 6));
+    expect(new Uint8Array(font!.data)).toEqual(Uint8Array.of(0x77, 0x4f, 0x46, 0x46, 4, 5, 6));
 
     const memoized = fontsourceFontLoader([{ font: "@fontsource/example" }], { cwd: root });
     expect(await memoized()).toBe(await memoized());
@@ -92,7 +131,7 @@ describe("font loading", () => {
       { cwd: root },
     );
     expect(font?.name).toBe("Example");
-    expect(new Uint8Array(font!.data)).toEqual(Uint8Array.of(1, 2, 3));
+    expect(new Uint8Array(font!.data)).toEqual(Uint8Array.of(0x77, 0x4f, 0x46, 0x46, 1, 2, 3));
   });
 
   it("preserves a declared language tag for Satori font selection", async () => {
@@ -196,7 +235,7 @@ describe("font loading", () => {
     const { root } = await fixture();
     const elsewhere = path.join(root, "elsewhere");
     await mkdir(elsewhere, { recursive: true });
-    await writeFile(path.join(elsewhere, "custom.woff"), Uint8Array.of(9, 8, 7));
+    await writeFile(path.join(elsewhere, "custom.woff"), Uint8Array.of(0x77, 0x4f, 0x46, 0x46, 9, 8, 7));
 
     const [font] = await loadPackageFonts(
       [{
@@ -212,7 +251,7 @@ describe("font loading", () => {
     );
 
     expect(font!.name).toBe("Example");
-    expect(new Uint8Array(font!.data)).toEqual(Uint8Array.of(9, 8, 7));
+    expect(new Uint8Array(font!.data)).toEqual(Uint8Array.of(0x77, 0x4f, 0x46, 0x46, 9, 8, 7));
   });
 
   it("rejects font paths that escape an injected package directory", async () => {
@@ -269,7 +308,7 @@ describe("font loading", () => {
 
     // Repair the fixture: the same loader must now succeed without being
     // recreated, exactly the long-lived development-server recovery case.
-    await writeFile(file, Uint8Array.of(1, 2, 3));
+    await writeFile(file, Uint8Array.of(0x77, 0x4f, 0x46, 0x46, 1, 2, 3));
     await expect(loader()).resolves.toHaveLength(1);
     await expect(loader()).resolves.toHaveLength(1);
   });

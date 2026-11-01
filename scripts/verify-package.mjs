@@ -532,11 +532,11 @@ try {
       const fonts = fontLoader([{
         name: "Portable",
         weight: 400,
-        data: () => { calls += 1; return Uint8Array.of(1, 2, 3); },
+        data: () => { calls += 1; return Uint8Array.of(0x77, 0x4f, 0x46, 0x46, 1, 2, 3); },
       }]);
       const first = await fonts();
       const second = await fonts();
-      if (first !== second || calls !== 1 || first[0].data.byteLength !== 3) {
+      if (first !== second || calls !== 1 || first[0].data.byteLength !== 7) {
         throw new Error("The portable font loader did not normalize and memoize bytes.");
       }
     `,
