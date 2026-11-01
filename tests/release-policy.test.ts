@@ -9,7 +9,7 @@ import { lifecycleScriptErrors, workflowPinErrors } from "../scripts/workflow-po
 
 const baseDeployment = {
   schemaVersion: 1,
-  release: "0.7.0",
+  release: "0.8.0",
   status: "in-progress",
   policy: {
     certifiedRequires: [

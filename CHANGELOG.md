@@ -3,7 +3,7 @@
 All notable changes to Metaplate are documented in this file. The project uses
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.8.0] - 2026-10-31
 
 ### Added
 
@@ -449,6 +449,7 @@ reflects that `render` may return any consumer-encoded format ([#54]).
 - Typed package exports for framework-neutral, rendering, Node.js, Next.js,
   font, and PNG entry points.
 
+[0.8.0]: https://github.com/lnorton89/metaplate/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/lnorton89/metaplate/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/lnorton89/metaplate/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/lnorton89/metaplate/compare/v0.4.1...v0.5.0
