@@ -259,8 +259,8 @@ function normalize(report, inputSha256) {
   }
   const { version } = identity;
 
-  if (version !== "0.6.0") {
-    throw new Error("This baseline importer only accepts metaplate@0.6.0 reports");
+  if (version !== "0.7.0") {
+    throw new Error("This baseline importer only accepts metaplate@0.7.0 reports");
   }
 
   if (identity.pkg !== "metaplate") {

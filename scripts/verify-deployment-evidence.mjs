@@ -59,7 +59,7 @@ export function validateDeploymentManifest(manifest) {
       errors.push("policy.certifiedRequires contains duplicate requirements");
     }
   }
-  if (manifest.release !== "0.7.0") errors.push("release must be 0.7.0");
+  if (manifest.release !== "0.8.0") errors.push("release must be 0.8.0");
   if (!allowedManifestStatuses.has(manifest.status)) {
     errors.push("status must be in-progress or complete");
   }
