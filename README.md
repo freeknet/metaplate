@@ -29,6 +29,7 @@ It works with plain Node, static build scripts, Next.js, and Node-compatible fra
 - [Metadata without a renderer](#metadata-without-a-renderer)
   - [Channel-specific images and X Cards](#channel-specific-images-and-x-cards)
   - [Social compatibility profiles](#social-compatibility-profiles)
+  - [Emitting the meta tags yourself](#emitting-the-meta-tags-yourself)
   - [Next.js static export and `basePath`](#nextjs-static-export-and-basepath)
   - [JPEG or WebP cards in Next.js](#jpeg-or-webp-cards-in-nextjs)
 - [Fonts](#fonts)
@@ -603,6 +604,78 @@ robots/WAF behavior, or crawler caches. Those require checking the deployed
 page and image; use Meta Sharing Debugger, LinkedIn Post Inspector, and the
 relevant client debugger after deployment.
 
+### Emitting the meta tags yourself
+
+Frameworks with a metadata API should keep receiving the metadata object:
+pass `openGraph` and `twitter` to Next's `metadata`, as `metaplate/next`
+does, so Next can merge them with layout metadata. When a page writes its own
+`<head>`, as React Router `meta`, Astro and SvelteKit templates, or a static
+HTML build do, `socialMetaTags` turns the same metadata into the tags
+themselves:
+
+```ts
+import { socialImageMetadata, socialMetaHtml, socialMetaTags } from "metaplate";
+
+const social = socialImageMetadata("/blog/launch", "Launch card", { type: "image/png" });
+const page = {
+  title: "Launch notes",
+  description: "What shipped this week.",
+  url: "https://example.com/blog/launch",
+  siteName: "Example",
+};
+
+// React Router: the objects are valid `meta` descriptors as-is.
+export const meta = () => [{ title: page.title }, ...socialMetaTags(social, page)];
+
+// Plain HTML: escaped `<meta>` elements, one per line.
+const head = socialMetaHtml(social, { ...page, indent: "    " });
+```
+
+In an Astro or Svelte template, loop over the array and bind the attributes;
+the framework escapes them:
+
+```astro
+{socialMetaTags(social, page).map((tag) => <meta {...tag} />)}
+```
+
+`socialMetaTags` returns `{ property, content }` for Open Graph tags and
+`{ name, content }` for X Card tags, in this fixed order:
+
+1. Each Open Graph image, in caller order: `og:image`, `og:image:width`,
+   `og:image:height`, `og:image:type`, `og:image:alt`. Repeating the group is
+   how Open Graph expresses several images; a group whose URL repeats an
+   earlier one is dropped.
+2. `twitter:card`, `twitter:image`, `twitter:image:alt`, `twitter:site`,
+   `twitter:site:id`, `twitter:creator`, `twitter:creator:id`. X reads one
+   image, so only the first X Card image is used.
+3. Page-level fields from the options: `og:title`, `og:description`,
+   `og:url`, `og:site_name`, `og:type`.
+
+A tag whose value is undefined or empty is left out, so metadata alone never
+gains page-level tags. `og:type` defaults to `website` only when `title` or
+`url` is supplied. Dimensions are emitted as integer strings.
+
+`url` is the canonical page URL and must be an absolute http(s) URL. When it
+is supplied, relative image URLs are resolved against it with standard URL
+resolution, as a crawler on that page would; absolute image URLs are never
+rewritten. Without `url`, image URLs are emitted exactly as the metadata holds
+them.
+
+`socialMetaHtml` renders the same tags in the same order and guarantees that
+its output contains only `<meta>` elements: each has exactly a `property` or
+`name` attribute followed by `content`, the key must match a strict
+`og:`/`twitter:` pattern, and the content is escaped for a double-quoted
+attribute (`&`, `<`, `>`, `"`, and `'`, plus line breaks so each element stays
+on one line). `indent` accepts only spaces and tabs. It does not emit
+`<title>` or `<link rel="canonical">`; those belong to the page, which must
+escape its own title text.
+
+Next.js `generateMetadata` can carry the tags through `other`, as
+[`examples/social-meta-tags.ts`](examples/social-meta-tags.ts) shows, but Next
+renders every `other` entry with a `name` attribute and groups repeated keys.
+That is faithful for a single Open Graph image only; with several images, use
+Next's `openGraph` and `twitter` fields.
+
 ### Next.js static export and `basePath`
 
 Next's special `app/opengraph-image.tsx` file suits a root-deployed app: set
@@ -1044,8 +1117,9 @@ ceiling and `resolve` to replace `dns.lookup` (its answers are still checked).
 
 ## Entry points
 
-- `metaplate` — framework-free paths, dimensions, metadata, social
-  compatibility, and byte-level social image verification.
+- `metaplate` — framework-free paths, dimensions, metadata, `<meta>` tag
+  serialization, social compatibility, and byte-level social image
+  verification.
 - `metaplate/render` — Satori-based SVG generation. Satori is installed
   automatically.
 - `metaplate/node` — SVG, PNG, raw pixels, and any format a supplied encoder

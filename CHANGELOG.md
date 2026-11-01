@@ -22,6 +22,17 @@ All notable changes to Metaplate are documented in this file. The project uses
 - `metaplate/node` exports the fetcher as `fetchRemoteImage` and
   `verifyRemoteImage`, with `RemoteImageError` carrying a stable `code` for
   each refusal.
+- The root entry exports `socialMetaTags(metadata, options?)` and
+  `socialMetaHtml(metadata, options?)`, a framework-neutral serializer for
+  `SocialImageMetadata`. `socialMetaTags` returns an ordered, deduplicated
+  array of `{ property | name, content }` objects that React Router `meta`,
+  Next.js `other`, and Astro or Svelte templates consume without string
+  handling; `socialMetaHtml` renders the same tags as escaped `<meta>`
+  elements, one per line. Optional `title`, `description`, `url`, `siteName`,
+  and `type` add page-level Open Graph tags, and a canonical `url` resolves
+  relative image URLs. The tag order, escaping, and the guarantee that the
+  HTML contains only `<meta>` elements are documented and tested. This closes
+  the page-level serializer deferred in 0.7.0.
 - `scripts/verify-runtime.mjs`, a runtime-neutral smoke of the built package.
   It imports `metaplate` alone and produces metadata, then imports
   `metaplate/render`, `metaplate/node`, `metaplate/fonts`, and
