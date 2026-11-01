@@ -98,6 +98,12 @@ export function validateDeploymentManifest(manifest) {
     if (route.runtimeBoundary !== undefined && (typeof route.runtimeBoundary !== "string" || route.runtimeBoundary.trim() === "")) {
       errors.push(`${route.id}: runtimeBoundary must be a non-empty string`);
     }
+    if (
+      route.relatedDocs !== undefined &&
+      (!Array.isArray(route.relatedDocs) || !route.relatedDocs.every((url) => /^https:\/\//.test(url)))
+    ) {
+      errors.push(`${route.id}: relatedDocs must be an array of HTTPS URLs`);
+    }
     if (route.status === "certified") {
       if (!route.certification || typeof route.certification !== "object") {
         errors.push(`${route.id}: certified routes require a certification object`);
