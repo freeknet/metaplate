@@ -7,6 +7,11 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Changed
 
+- The `satori` peer range widens from `>=0.33.3 <0.34` to `>=0.33.3 <1`, and
+  the audited release moves from 0.33.5 to 0.63.2. Satori's automated releases
+  bump a minor version per feature with no breaking changes recorded, so a
+  one-minor range forced a peer bump every few days. Satori 0.63 bundles its
+  layout engine, so `yoga-layout` leaves the dependency tree.
 - The certified React Router resource-route fixture now runs on React Router 8
   and Vite 8, so the support table claims React Router 8 framework mode on
   Node 22.22 or newer. The fixture still fails if React Router emits Vite's
@@ -14,9 +19,10 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Documentation
 
-- Document that Satori lays a React fragment out as a box of its own, so
-  absolutely positioned children of a fragment anchor to that box instead of
-  the positioned parent, and pin the behavior with a test.
+- Document that Satori releases before 0.38.2 lay a React fragment out as a
+  box of its own, so absolutely positioned children of a fragment anchor to
+  that box instead of the positioned parent, while 0.38.2 and newer flatten
+  fragments like the DOM. A test pins the current behavior.
 - Document using `metaplate/node` inside a Next.js 16 app for JPEG or WebP
   cards: Turbopack cannot bundle Resvg's native binary or Satori's HarfBuzz
   wasm, so both must be listed in `serverExternalPackages`, and a route folder
