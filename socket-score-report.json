@@ -94,12 +94,11 @@
         "example": "npm/yoga-layout@3.2.1",
         "dependencyEvidence": {
           "source": "package-lock.json",
-          "paths": [
-            "metaplate > satori > yoga-layout"
-          ],
-          "reachability": "runtime-peer"
-        },
-        "dependencyPath": "metaplate > satori > yoga-layout"
+          "paths": [],
+          "reachability": "unknown",
+          "unresolved": true,
+          "reason": "yoga-layout@3.2.1 not found in the current dependency inventory"
+        }
       },
       {
         "name": "potentialVulnerability",

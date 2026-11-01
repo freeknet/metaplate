@@ -521,11 +521,13 @@ it("advertises the output content type in metadata", async () => {
   expect(plate.image("/docs", { title: "Docs" }).url).toBe("/docs/og-image.jpg");
 });
 
-// README "Plate constraints" documents that Satori lays a fragment out as a
-// box, so absolute children anchor to it rather than to the positioned
-// parent. This pins that behavior: if Satori starts flattening fragments the
-// way the DOM does, this test fails and the README bullet can be retired.
-it("anchors absolute children of a fragment to the fragment's own box", async () => {
+// README "Plate constraints" documents that Satori releases before 0.38.2 lay
+// a fragment out as a box, so absolute children anchor to it rather than to
+// the positioned parent, while 0.38.2 and newer flatten fragments like the
+// DOM. This pins the current behavior of the audited Satori release; if it
+// regresses to the boxed layout, the README bullet needs its version
+// qualifier removed.
+it("anchors absolute children of a fragment to the positioned parent", async () => {
   const panel = (children: ReactNode) =>
     createElement(
       "div",
@@ -562,6 +564,7 @@ it("anchors absolute children of a fragment to the fragment's own box", async ()
     ...definition,
     component: () => panel(createElement(Fragment, null, marker())),
   }).renderSvg({ title: "Fragment" });
-  // The fragment's zero-sized box is centered in the 520x630 panel.
-  expect(fragment.match(markerRect)?.slice(1, 3)).toEqual(["940", "315"]);
+  // On Satori before 0.38.2 this was ["940", "315"]: the fragment's
+  // zero-sized box centered in the 520x630 panel.
+  expect(fragment.match(markerRect)?.slice(1, 3)).toEqual(["680", "0"]);
 });
