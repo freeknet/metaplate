@@ -6,6 +6,7 @@ export default defineConfig({
     next: "src/next.tsx",
     render: "src/render.ts",
     node: "src/node.ts",
+    edge: "src/edge.ts",
     fonts: "src/fonts.ts",
     "font-data": "src/font-data.ts",
     png: "src/png.ts",
@@ -19,9 +20,11 @@ export default defineConfig({
   splitting: false,
   external: [
     "@resvg/resvg-js",
+    "@resvg/resvg-wasm",
     "next",
     "react",
     "react/jsx-runtime",
     "satori",
+    "satori/standalone",
   ],
 });
