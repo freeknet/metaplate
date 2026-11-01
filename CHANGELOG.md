@@ -50,6 +50,11 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Changed
 
+- `Runtime smoke / bun` and `Runtime smoke / deno` are now blocking, required
+  checks on `main` after passing every run since they were added. Bun and Deno
+  stay `documented` rather than certified: the smoke runs the built checkout,
+  not the packed tarball or a hosted deployment.
+
 - The packed-package verifier copies a dependency's installed optional
   dependencies with its lockfile-verified closure, so Next's SWC binaries and
   its optional sharp encoder (with sharp's platform binaries) arrive through
@@ -154,14 +159,6 @@ All notable changes to Metaplate are documented in this file. The project uses
   because SvelteKit 3 removed `$lib` in favor of `package.json` subpath
   imports, and notes that SvelteKit 3 configures its adapter in
   `vite.config.js`. The deployment guide's matrix lists the route.
-
-### Known gaps
-
-- TODO: the `runtimes` jobs run with `continue-on-error: true` and are not
-  required status checks, because they have not yet passed on main. Once
-  `Runtime smoke / bun` and `Runtime smoke / deno` have passed consistently on
-  main, remove `continue-on-error`, add both to the required checks, and only
-  then consider a certified status for Bun and Deno.
 
 ## [0.8.0] - 2026-10-31
 
