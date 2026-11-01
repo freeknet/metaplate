@@ -7,6 +7,11 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Changed
 
+- The build and type checks now run on TypeScript 6.0, with
+  `ignoreDeprecations: "6.0"` in `tsconfig.json` because tsup 8's declaration
+  build injects the deprecated `baseUrl` option (tsup 9 removes it but
+  requires Node 22). vitest moves to 4.1.12, which clears the `@vitest/mocker`
+  advisory.
 - The `satori` peer range widens from `>=0.33.3 <0.34` to `>=0.33.3 <1`, and
   the audited release moves from 0.33.5 to 0.63.2. Satori's automated releases
   bump a minor version per feature with no breaking changes recorded, so a
