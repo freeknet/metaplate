@@ -94,6 +94,21 @@ All notable changes to Metaplate are documented in this file. The project uses
 - `verify-deployment-evidence.mjs` now allows a `certified` edge route only
   when its `api` names `metaplate/edge`. The native renderer still cannot be
   certified on an edge runtime.
+- Open Graph video and audio (`og:video`, `og:audio`, https://ogp.me/#structured).
+  `socialImageMetadata` and plate `metadata()` calls accept
+  `media: { videos, audio }` (`OpenGraphVideo`, `OpenGraphAudio`) and carry
+  them on `metadata.openGraph.videos` and `.audio` in Next's descriptor shape,
+  so `openGraph: social.openGraph` passes them to Next's `Metadata`.
+  `socialMetaTags` emits each video's `og:video`, `og:video:secure_url`,
+  `og:video:type`, `og:video:width`, `og:video:height`, then each audio item's
+  `og:audio`, `og:audio:secure_url`, `og:audio:type`, after the `og:image`
+  groups and before the `twitter:*` tags, resolving relative URLs against the
+  canonical `url` and dropping repeated URLs as it does for images. Absolute
+  URLs must be credential-free http(s), `secureUrl` must be absolute https,
+  `type` must be a media type, and video dimensions must be integers from 1 to
+  65535. `metaplate/next` rejects relative video and audio URLs because Next
+  emits them without resolving `metadataBase`. Metadata without `media` is
+  unchanged.
 
 ### Changed
 

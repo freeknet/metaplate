@@ -1,4 +1,5 @@
 import { MAX_IMAGE_DIMENSION, type XCard } from "./core.js";
+import { openGraphMediaTags, type SocialMetaMediaInput } from "./og-media.js";
 
 /**
  * One `<meta>` tag as a plain object. Open Graph tags carry `property`, X Card
@@ -28,7 +29,9 @@ export type SocialMetaImageInput = {
  * metadata, and an omitted channel emits no tags.
  */
 export type SocialMetaInput = {
-  openGraph?: { images?: readonly SocialMetaImageInput[] | undefined } | undefined;
+  openGraph?:
+    | ({ images?: readonly SocialMetaImageInput[] | undefined } & SocialMetaMediaInput)
+    | undefined;
   twitter?:
     | {
         card?: XCard | undefined;
@@ -192,6 +195,10 @@ function pageTags(options: SocialMetaOptions): SocialMetaTag[] {
  *    `og:image:height`, `og:image:type`, `og:image:alt`. Repeating the group
  *    is how Open Graph expresses multiple images; a group whose URL repeats an
  *    earlier one is dropped.
+ *    Then each Open Graph video (`og:video`, `og:video:secure_url`,
+ *    `og:video:type`, `og:video:width`, `og:video:height`) and each audio
+ *    item (`og:audio`, `og:audio:secure_url`, `og:audio:type`), resolved and
+ *    deduplicated by URL like images; see `openGraphMediaTags`.
  * 2. `twitter:card`, `twitter:image`, `twitter:image:alt`, `twitter:site`,
  *    `twitter:site:id`, `twitter:creator`, `twitter:creator:id`.
  * 3. Page-level fields from `options`: `og:title`, `og:description`,
@@ -203,8 +210,8 @@ function pageTags(options: SocialMetaOptions): SocialMetaTag[] {
  * are emitted unchanged.
  *
  * @throws When `options.url` is not an absolute, credential-free http(s) URL,
- *   when an image URL is empty, or when a dimension is not an integer from 1
- *   to 65535.
+ *   when an image URL is empty, when a dimension is not an integer from 1
+ *   to 65535, or when a video or audio item fails the `openGraphMedia` checks.
  */
 export function socialMetaTags(
   metadata: SocialMetaInput,
@@ -213,6 +220,8 @@ export function socialMetaTags(
   const base = present(options.url) ? canonicalBase(options.url) : undefined;
   return [
     ...openGraphImageTags(metadata.openGraph?.images ?? [], base),
+    // Open Graph video and audio groups (src/og-media.ts).
+    ...openGraphMediaTags(metadata.openGraph, base),
     ...(metadata.twitter ? twitterTags(metadata.twitter, base) : []),
     ...pageTags(options),
   ];
