@@ -103,7 +103,7 @@ function isAbsoluteUrl(value: string): boolean {
 }
 
 /** Parses the canonical URL, accepting only credential-free http(s) URLs. */
-function canonicalBase(url: string): URL {
+export function canonicalBase(url: string): URL {
   let parsed: URL | undefined;
   try {
     parsed = new URL(url);
@@ -119,7 +119,7 @@ function canonicalBase(url: string): URL {
   return parsed;
 }
 
-function imageUrl(image: SocialMetaImageInput, base: URL | undefined, label: string): string {
+export function imageUrl(image: SocialMetaImageInput, base: URL | undefined, label: string): string {
   if (!image.url) throw new Error(`${label} image URL must not be empty`);
   if (!base || isAbsoluteUrl(image.url)) return image.url;
   return new URL(image.url, base).href;
