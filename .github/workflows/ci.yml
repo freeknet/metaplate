@@ -96,12 +96,8 @@ jobs:
     name: Runtime smoke / ${{ matrix.runtime }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Evidence in progress, not yet a merge gate. These jobs are new and have
-    # not passed on main, so a failure is reported without failing the run,
-    # and they are deliberately absent from the branch-protection required
-    # checks. Drop continue-on-error and require "Runtime smoke / bun" and
-    # "Runtime smoke / deno" once they have passed consistently on main.
-    continue-on-error: true
+    # Required checks: "Runtime smoke / bun" and "Runtime smoke / deno" gate
+    # merges to main, so a change that breaks either runtime cannot land.
     strategy:
       fail-fast: false
       matrix:
