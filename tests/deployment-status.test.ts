@@ -45,4 +45,29 @@ describe("deployment certification boundaries", () => {
     });
     expect(errors).toEqual([]);
   });
+
+  it("requires HTTPS upstream references and a stated runtime boundary when present", () => {
+    const route = {
+      id: "next-server",
+      provider: "Next.js self-hosted server (next start)",
+      runtime: "long-lived Node.js",
+      status: "certified-local-contract",
+      evidence: "packed local server fixture",
+    };
+    expect(validateDeploymentManifest({
+      ...base,
+      routes: [{
+        ...route,
+        runtimeBoundary: "Next.js 16.3.2-16.x on Node.js 24",
+        officialReferences: ["https://nextjs.org/docs/app/api-reference/cli/next"],
+      }],
+    })).toEqual([]);
+    expect(validateDeploymentManifest({
+      ...base,
+      routes: [{ ...route, runtimeBoundary: " ", officialReferences: ["http://example.com"] }],
+    })).toEqual([
+      "next-server: officialReferences must be a non-empty array of HTTPS URLs",
+      "next-server: runtimeBoundary must be a non-empty string",
+    ]);
+  });
 });

@@ -30,7 +30,8 @@ into an image or asset element; allowlist remote assets or keep them local.
 | Vercel Function | `handler()` / `handlerFrom()` or `response()` | Vercel Node.js runtime | `/api/og` or framework route | Locally certified provider-shaped contract; hosted provider certification is separate |
 | Netlify Function | `handler()` / `handlerFrom()` or `response()` | Netlify Node.js Function | Function path or custom path | Locally certified provider-shaped contract; generated framework functions use project settings |
 | Railway/Render service | `response()` or `render()` + `Buffer.from()` | Long-lived Node.js service | Application route | Locally certified generic Node contract; provider deployment remains a recipe |
-| Next.js native route | `metaplate/next` | Next build/Node runtime | Metadata file or route handler | Supported by the Next integration contract |
+| Next.js native route | `metaplate/next`, or `metaplate/node` in a route handler | Next build/Node runtime | Metadata file or route handler | Static export and `next start` server output locally certified from the packed artifact; hosted Next deployment is separate |
+| Astro on-demand endpoint | `handlerFrom()` as the endpoint `GET` | `@astrojs/node` standalone server | `src/pages/[slug]/og-image.png.ts` | Locally certified from the packed artifact through the built `entry.mjs`; hosted Astro adapters are separate |
 | Cloudflare Workers / Vercel Edge / Netlify Edge | Not `metaplate/node` | Edge/Wasm renderer required | Provider route | Not supported by the current native renderer |
 
 ## Static generation
