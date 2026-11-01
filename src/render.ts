@@ -1,4 +1,5 @@
 import type { ImageSize } from "./core.js";
+import type { PlateContext, PlateVariants } from "./plate.js";
 import { loadSatori } from "./peers.js";
 import { createSvgPlate } from "./svg-plate.js";
 
@@ -87,14 +88,31 @@ export type SatoriNode =
   | undefined
   | readonly SatoriNode[];
 
-export type SvgOgDefinition<Copy> = {
-  /** Satori-compatible JSX or a plain `{ type, props }` object tree. */
-  component: (copy: Copy) => SatoriNode;
+export type {
+  PlateContext,
+  PlateMetadataOptions,
+  PlateVariant,
+  PlateVariants,
+  PlateView,
+} from "./plate.js";
+
+export type SvgOgDefinition<Copy, Variant extends string = string> = {
+  /**
+   * Satori-compatible JSX or a plain `{ type, props }` object tree. The
+   * second argument names the variant and size being rendered so the layout
+   * can reflow; a single-argument component ignores it.
+   */
+  component: (copy: Copy, context: PlateContext<Variant>) => SatoriNode;
   alt: (copy: Copy) => string;
   /** Satori does not bundle a default font, so at least one face is required. */
   fonts: StandaloneFontLoader;
-  /** One plate renders one size; `plate.size` is the size every render uses. */
+  /**
+   * The default size. Each view of a plate renders one size: `plate.size`
+   * for the default, `plate.variant(name).size` for a declared variant.
+   */
   size?: ImageSize;
+  /** Additional named sizes rendered from the same copy and component. */
+  variants?: PlateVariants<Copy, Variant>;
   imagePath?: string;
   basePath?: string;
   /** Scheme for absolute image URLs, such as `https://example.com`. */
@@ -103,6 +121,8 @@ export type SvgOgDefinition<Copy> = {
 };
 
 /** Defines a framework-neutral social image renderer that emits SVG text. */
-export function createSvgOg<Copy>(definition: SvgOgDefinition<Copy>) {
+export function createSvgOg<Copy, Variant extends string = string>(
+  definition: SvgOgDefinition<Copy, Variant>,
+) {
   return createSvgPlate(definition, loadSatori);
 }

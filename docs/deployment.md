@@ -32,6 +32,7 @@ into an image or asset element; allowlist remote assets or keep them local.
 | Netlify Function | `handler()` / `handlerFrom()` or `response()` | Netlify Node.js Function | Function path or custom path | Locally certified provider-shaped contract; generated framework functions use project settings |
 | Railway/Render service | `response()` or `render()` + `Buffer.from()` | Long-lived Node.js service | Application route | Locally certified generic Node contract; provider deployment remains a recipe |
 | Next.js native route | `metaplate/next` | Next build/Node runtime | Metadata file or route handler | Supported by the Next integration contract |
+| SvelteKit `+server` route | `handlerFrom()` as the `GET` `RequestHandler` | `adapter-node` on Node.js | `src/routes/[slug]/og-image.png/+server.ts` | Locally certified framework contract; hosted deployment of the Node server remains a recipe |
 | Cloudflare Workers / Vercel Edge / Netlify Edge | `metaplate/edge` (`fetchable()` / `fetchableFrom()`), not `metaplate/node` | `@resvg/resvg-wasm` with caller-supplied Wasm | Provider route | Tested in Node against the Wasm renderer; not certified on a hosted edge platform |
 
 ## Static generation
