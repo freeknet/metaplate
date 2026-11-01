@@ -9,9 +9,9 @@ import { validateSocketReport } from "../scripts/verify-socket-dispositions.mjs"
 function cliEnvelope(overrides?: { self?: Record<string, unknown>; transitively?: Record<string, unknown>; purl?: string }) {
   return {
     data: {
-      purl: overrides?.purl ?? "pkg:npm/metaplate@0.6.0",
+      purl: overrides?.purl ?? "pkg:npm/metaplate@0.7.0",
       self: {
-        purl: "npm/metaplate@0.6.0",
+        purl: "npm/metaplate@0.7.0",
         score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 },
         ...overrides?.self,
       },
@@ -52,12 +52,12 @@ async function runImporter(input: unknown, encoding: "utf8" | "utf16le" = "utf8"
 describe("Socket report importer", () => {
   // --- Official envelope acceptance ---
 
-  it("normalizes an official 0.6.0 report without altering scores", async () => {
+  it("normalizes an official 0.7.0 report without altering scores", async () => {
     const result = await runImporter({
       data: {
-        purl: "pkg:npm/metaplate@0.6.0",
+        purl: "pkg:npm/metaplate@0.7.0",
         self: {
-          purl: "npm/metaplate@0.6.0",
+          purl: "npm/metaplate@0.7.0",
           score: { overall: 96, supplyChain: 95, maintenance: 94, quality: 93, vulnerability: 100, license: 99 },
         },
         transitively: {
@@ -80,16 +80,16 @@ describe("Socket report importer", () => {
     const result = await runImporter(cliEnvelope());
     expect(result.code).toBe(0);
     const report = JSON.parse(result.output!);
-    expect(report.source).toBe("https://socket.dev/npm/package/metaplate@0.6.0");
+    expect(report.source).toBe("https://socket.dev/npm/package/metaplate@0.7.0");
     expect(report.deep.score).toEqual({ overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 });
   });
 
   it("preserves scoped shallow/deep alerts and passes directly into disposition verification", async () => {
     const result = await runImporter({
       data: {
-        purl: "pkg:npm/metaplate@0.6.0",
+        purl: "pkg:npm/metaplate@0.7.0",
         self: {
-          purl: "npm/metaplate@0.6.0",
+          purl: "npm/metaplate@0.7.0",
           score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 },
           alerts: [{ name: "recentlyPublished", severity: "middle" }],
         },
@@ -109,8 +109,8 @@ describe("Socket report importer", () => {
     const disposition = {
       schemaVersion: 2,
       package: "metaplate",
-      version: "0.6.0",
-      source: "https://socket.dev/npm/package/metaplate/alerts/0.6.0",
+      version: "0.7.0",
+      source: "https://socket.dev/npm/package/metaplate/alerts/0.7.0",
       status: "complete",
       export: { artifact: result.outputPath, generatedAt: "2026-08-25", sha256: digest },
       releasePolicy: {
@@ -138,9 +138,9 @@ describe("Socket report importer", () => {
   it("normalizes middle severity to medium", async () => {
     const result = await runImporter({
       data: {
-        purl: "pkg:npm/metaplate@0.6.0",
+        purl: "pkg:npm/metaplate@0.7.0",
         self: {
-          purl: "npm/metaplate@0.6.0",
+          purl: "npm/metaplate@0.7.0",
           score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 },
           alerts: [{ name: "someAlert", severity: "middle" }],
         },
@@ -155,12 +155,12 @@ describe("Socket report importer", () => {
   // --- Schema rejection: only official CLI envelope accepted ---
 
   it("rejects non-envelope inputs (raw score JSON, missing data.self)", async () => {
-    await expect(runImporter({ version: "0.6.0" })).resolves.toMatchObject({ code: 1 });
-    await expect(runImporter({ source: "https://example.com/report", version: "0.6.0" })).resolves.toMatchObject({ code: 1 });
-    await expect(runImporter({ source: "https://socket.dev/npm/package/other-package/alerts/0.6.0", version: "0.6.0" })).resolves.toMatchObject({ code: 1 });
+    await expect(runImporter({ version: "0.7.0" })).resolves.toMatchObject({ code: 1 });
+    await expect(runImporter({ source: "https://example.com/report", version: "0.7.0" })).resolves.toMatchObject({ code: 1 });
+    await expect(runImporter({ source: "https://socket.dev/npm/package/other-package/alerts/0.7.0", version: "0.7.0" })).resolves.toMatchObject({ code: 1 });
     await expect(runImporter({
-      source: "https://socket.dev/npm/package/metaplate/alerts/0.6.0",
-      version: "0.6.0",
+      source: "https://socket.dev/npm/package/metaplate/alerts/0.7.0",
+      version: "0.7.0",
       shallow: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 },
       deep: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 },
     })).resolves.toMatchObject({ code: 1 });
@@ -170,8 +170,8 @@ describe("Socket report importer", () => {
     await expect(runImporter({
       schemaVersion: 2,
       package: "metaplate",
-      version: "0.6.0",
-      source: "https://socket.dev/npm/package/metaplate/alerts/0.6.0",
+      version: "0.7.0",
+      source: "https://socket.dev/npm/package/metaplate/alerts/0.7.0",
       shallow: { score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 }, alerts: [] },
       deep: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 }, alerts: [] },
     })).resolves.toMatchObject({ code: 1 });
@@ -180,8 +180,8 @@ describe("Socket report importer", () => {
   it("rejects an unresolved high alert instead of producing unverifiable evidence", async () => {
     await expect(runImporter({
       data: {
-        purl: "pkg:npm/metaplate@0.6.0",
-        self: { purl: "npm/metaplate@0.6.0", score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 } },
+        purl: "pkg:npm/metaplate@0.7.0",
+        self: { purl: "npm/metaplate@0.7.0", score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 } },
         transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 }, alerts: [{ name: "newHigh", severity: "high", example: "npm/not-in-lock@1.0.0" }] },
       },
     })).resolves.toMatchObject({ code: 1 });
@@ -190,8 +190,8 @@ describe("Socket report importer", () => {
   it("rejects malformed score objects", async () => {
     await expect(runImporter({
       data: {
-        purl: "pkg:npm/metaplate@0.6.0",
-        self: { purl: "npm/metaplate@0.6.0", score: { overall: 96 } },
+        purl: "pkg:npm/metaplate@0.7.0",
+        self: { purl: "npm/metaplate@0.7.0", score: { overall: 96 } },
         transitively: { score: { overall: 82 } },
       },
     })).resolves.toMatchObject({ code: 1 });
@@ -211,8 +211,8 @@ describe("Socket report importer", () => {
   it("rejects data.alerts on official envelope", async () => {
     const result = await runImporter({
       data: {
-        purl: "pkg:npm/metaplate@0.6.0",
-        self: { purl: "npm/metaplate@0.6.0", score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 } },
+        purl: "pkg:npm/metaplate@0.7.0",
+        self: { purl: "npm/metaplate@0.7.0", score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 } },
         transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } },
         alerts: [{ name: "criticalAlert", severity: "critical", example: "npm/string.prototype.codepointat@0.2.1" }],
       },
@@ -240,16 +240,16 @@ describe("Socket report importer", () => {
   // --- URL hardening ---
 
   it("rejects invalid source URL paths", async () => {
-    await expect(runImporter({ source: "https://socket.dev/report", version: "0.6.0" })).resolves.toMatchObject({ code: 1 });
-    await expect(runImporter({ source: "https://socket.dev/foo", version: "0.6.0" })).resolves.toMatchObject({ code: 1 });
-    await expect(runImporter({ source: "http://socket.dev/npm/package/metaplate@0.6.0", version: "0.6.0" })).resolves.toMatchObject({ code: 1 });
-    await expect(runImporter({ source: "https://evil.dev/npm/package/metaplate@0.6.0", version: "0.6.0" })).resolves.toMatchObject({ code: 1 });
+    await expect(runImporter({ source: "https://socket.dev/report", version: "0.7.0" })).resolves.toMatchObject({ code: 1 });
+    await expect(runImporter({ source: "https://socket.dev/foo", version: "0.7.0" })).resolves.toMatchObject({ code: 1 });
+    await expect(runImporter({ source: "http://socket.dev/npm/package/metaplate@0.7.0", version: "0.7.0" })).resolves.toMatchObject({ code: 1 });
+    await expect(runImporter({ source: "https://evil.dev/npm/package/metaplate@0.7.0", version: "0.7.0" })).resolves.toMatchObject({ code: 1 });
   });
 
   it("rejects URL suffix garbage on valid envelope", async () => {
     const result = await runImporter({
       ...cliEnvelope(),
-      source: "https://socket.dev/npm/package/metaplate@0.6.0/garbage",
+      source: "https://socket.dev/npm/package/metaplate@0.7.0/garbage",
     });
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("source URL");
@@ -267,7 +267,7 @@ describe("Socket report importer", () => {
   it("rejects URL with credentials", async () => {
     const result = await runImporter({
       ...cliEnvelope(),
-      source: "https://user:pass@socket.dev/npm/package/metaplate@0.6.0",
+      source: "https://user:pass@socket.dev/npm/package/metaplate@0.7.0",
     });
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("source URL");
@@ -278,15 +278,15 @@ describe("Socket report importer", () => {
   it("rejects alerts with missing or unknown severity", async () => {
     await expect(runImporter({
       data: {
-        purl: "pkg:npm/metaplate@0.6.0",
-        self: { purl: "npm/metaplate@0.6.0", score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 }, alerts: [{ name: "someAlert" }] },
+        purl: "pkg:npm/metaplate@0.7.0",
+        self: { purl: "npm/metaplate@0.7.0", score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 }, alerts: [{ name: "someAlert" }] },
         transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } },
       },
     })).resolves.toMatchObject({ code: 1 });
     await expect(runImporter({
       data: {
-        purl: "pkg:npm/metaplate@0.6.0",
-        self: { purl: "npm/metaplate@0.6.0", score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 }, alerts: [{ name: "someAlert", severity: "urgent" }] },
+        purl: "pkg:npm/metaplate@0.7.0",
+        self: { purl: "npm/metaplate@0.7.0", score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 }, alerts: [{ name: "someAlert", severity: "urgent" }] },
         transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } },
       },
     })).resolves.toMatchObject({ code: 1 });
@@ -315,8 +315,8 @@ describe("Socket report importer", () => {
   it("rejects name/type conflict", async () => {
     await expect(runImporter({
       data: {
-        purl: "pkg:npm/metaplate@0.6.0",
-        self: { purl: "npm/metaplate@0.6.0", score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 }, alerts: [{ name: "alertA", type: "alertB", severity: "low" }] },
+        purl: "pkg:npm/metaplate@0.7.0",
+        self: { purl: "npm/metaplate@0.7.0", score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 }, alerts: [{ name: "alertA", type: "alertB", severity: "low" }] },
         transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } },
       },
     })).resolves.toMatchObject({ code: 1 });
@@ -325,8 +325,8 @@ describe("Socket report importer", () => {
   it("rejects missing alert name/type", async () => {
     await expect(runImporter({
       data: {
-        purl: "pkg:npm/metaplate@0.6.0",
-        self: { purl: "npm/metaplate@0.6.0", score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 }, alerts: [{ severity: "low" }] },
+        purl: "pkg:npm/metaplate@0.7.0",
+        self: { purl: "npm/metaplate@0.7.0", score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 }, alerts: [{ severity: "low" }] },
         transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } },
       },
     })).resolves.toMatchObject({ code: 1 });
@@ -335,8 +335,8 @@ describe("Socket report importer", () => {
   it("rejects non-string and empty package/version", async () => {
     await expect(runImporter({
       data: {
-        purl: "pkg:npm/metaplate@0.6.0",
-        self: { purl: "npm/metaplate@0.6.0", score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 }, alerts: [{ name: "someAlert", severity: "low", package: "", version: "" }] },
+        purl: "pkg:npm/metaplate@0.7.0",
+        self: { purl: "npm/metaplate@0.7.0", score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 }, alerts: [{ name: "someAlert", severity: "low", package: "", version: "" }] },
         transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } },
       },
     })).resolves.toMatchObject({ code: 1 });
@@ -348,8 +348,8 @@ describe("Socket report importer", () => {
     await expect(runImporter({
       self: { score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 } },
       transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } },
-      source: "https://socket.dev/npm/package/metaplate@0.6.0",
-      version: "0.6.0",
+      source: "https://socket.dev/npm/package/metaplate@0.7.0",
+      version: "0.7.0",
     })).resolves.toMatchObject({ code: 1 });
   });
 
@@ -359,8 +359,8 @@ describe("Socket report importer", () => {
         self: { score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 } },
         transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } },
       },
-      source: "https://socket.dev/npm/package/metaplate@0.6.0",
-      version: "0.6.0",
+      source: "https://socket.dev/npm/package/metaplate@0.7.0",
+      version: "0.7.0",
     })).resolves.toMatchObject({ code: 1 });
   });
 
@@ -370,7 +370,7 @@ describe("Socket report importer", () => {
   function minimalEnvelope(overrides?: Record<string, unknown>) {
     return {
       data: {
-        purl: "pkg:npm/metaplate@0.6.0",
+        purl: "pkg:npm/metaplate@0.7.0",
         self: { score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 } },
         transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } },
       },
@@ -391,16 +391,16 @@ describe("Socket report importer", () => {
   it("rejects conflicting package claims between data.purl and data.self.purl", async () => {
     await expect(runImporter({
       data: {
-        purl: "pkg:npm/metaplate@0.6.0",
-        self: { purl: "npm/metaplate@0.6.1", score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 } },
+        purl: "pkg:npm/metaplate@0.7.0",
+        self: { purl: "npm/metaplate@0.7.1", score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 } },
         transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } },
       },
     })).resolves.toMatchObject({ code: 1 });
 
     await expect(runImporter({
       data: {
-        purl: "pkg:npm/metaplate@0.6.0",
-        self: { purl: "npm/other-package@0.6.0", score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 } },
+        purl: "pkg:npm/metaplate@0.7.0",
+        self: { purl: "npm/other-package@0.7.0", score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 } },
         transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } },
       },
     })).resolves.toMatchObject({ code: 1 });
@@ -409,10 +409,10 @@ describe("Socket report importer", () => {
   it("rejects conflicting version claims between report.version and data.version", async () => {
     await expect(runImporter({
       data: {
-        purl: "pkg:npm/metaplate@0.6.0",
+        purl: "pkg:npm/metaplate@0.7.0",
         self: { score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 } },
         transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } },
-        version: "0.7.0",
+        version: "0.7.1",
       },
     })).resolves.toMatchObject({ code: 1 });
   });
@@ -435,7 +435,7 @@ describe("Socket report importer", () => {
     await expect(runImporter(envelopeWithScore({ ...VALID_SHALLOW, overall: "76" }))).resolves.toMatchObject({ code: 1 });
     await expect(runImporter(envelopeWithScore({ overall: 76, supplyChain: 76, quality: 99, vulnerability: 100, license: 100 }))).resolves.toMatchObject({ code: 1 });
     await expect(runImporter(envelopeWithScore({ ...VALID_SHALLOW, license: null }))).resolves.toMatchObject({ code: 1 });
-    await expect(runImporter({ data: { purl: "pkg:npm/metaplate@0.6.0", self: { score: VALID_SHALLOW }, transitively: { score: null } } })).resolves.toMatchObject({ code: 1 });
+    await expect(runImporter({ data: { purl: "pkg:npm/metaplate@0.7.0", self: { score: VALID_SHALLOW }, transitively: { score: null } } })).resolves.toMatchObject({ code: 1 });
   });
 
   // --- Double-version URL ---
@@ -443,20 +443,20 @@ describe("Socket report importer", () => {
   it("rejects double-version URL patterns", async () => {
     await expect(runImporter({
       data: {
-        purl: "pkg:npm/metaplate@0.6.0",
+        purl: "pkg:npm/metaplate@0.7.0",
         self: { score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 } },
         transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } },
       },
-      source: "https://socket.dev/npm/package/metaplate@0.6.0@0.6.0",
+      source: "https://socket.dev/npm/package/metaplate@0.7.0@0.7.0",
     })).resolves.toMatchObject({ code: 1 });
 
     await expect(runImporter({
       data: {
-        purl: "pkg:npm/metaplate@0.6.0",
+        purl: "pkg:npm/metaplate@0.7.0",
         self: { score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 } },
         transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } },
       },
-      source: "https://socket.dev/npm/package/metaplate@0.6.0@9.9.9",
+      source: "https://socket.dev/npm/package/metaplate@0.7.0@9.9.9",
     })).resolves.toMatchObject({ code: 1 });
   });
 
@@ -465,8 +465,8 @@ describe("Socket report importer", () => {
   it("does not preserve malicious derived fields from raw CLI alerts", async () => {
     const result = await runImporter({
       data: {
-        purl: "pkg:npm/metaplate@0.6.0",
-        self: { purl: "npm/metaplate@0.6.0", score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 } },
+        purl: "pkg:npm/metaplate@0.7.0",
+        self: { purl: "npm/metaplate@0.7.0", score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 } },
         transitively: {
           score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 },
           alerts: [{
@@ -508,8 +508,8 @@ describe("Socket report importer", () => {
   it("rejects data.alerts even when non-array (object)", async () => {
     const result = await runImporter({
       data: {
-        purl: "pkg:npm/metaplate@0.6.0",
-        self: { purl: "npm/metaplate@0.6.0", score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 } },
+        purl: "pkg:npm/metaplate@0.7.0",
+        self: { purl: "npm/metaplate@0.7.0", score: { overall: 76, supplyChain: 76, maintenance: 92, quality: 99, vulnerability: 100, license: 100 } },
         transitively: { score: { overall: 38, supplyChain: 60, maintenance: 54, quality: 38, vulnerability: 100, license: 70 } },
         alerts: { severity: "critical" },
       },
