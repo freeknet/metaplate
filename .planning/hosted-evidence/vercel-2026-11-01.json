@@ -1,0 +1,604 @@
+{
+  "schemaVersion": 1,
+  "provider": "Vercel",
+  "recordedAt": "2026-11-01",
+  "commit": "4135f779b12b775b1711cb5eb5b4f25d2f9fb235",
+  "packageVersion": "0.8.0",
+  "packedArtifact": {
+    "file": "metaplate-0.8.0.tgz",
+    "command": "npm run build && npm pack",
+    "sha256": "2d0be9e41b010bd27f1301106d1b24b9d220b015cd451f242c480255be3c5005",
+    "consumption": "copied into each fixture directory and installed as \"metaplate\": \"file:./metaplate-0.8.0.tgz\"; uploaded with the source so Vercel's npm install resolves the exact tarball"
+  },
+  "tooling": {
+    "localNode": "v24.22.2",
+    "localNpm": "11",
+    "deployCli": "Vercel CLI 65.9.0 (npx --yes vercel@latest)",
+    "buildImageCli": "Vercel CLI 65.4.0 (from the build logs)"
+  },
+  "scope": "lnorton89s-projects (personal account); every project below was created by this run and is named metaplate-cert-*",
+  "verifyUrl": "node dist/cli.js verify-url --json --size 1200x630 --format <png|jpeg> <url>, run from the worktree at the recorded commit; each URL was then fetched again with a plain HTTPS GET to record status, headers, byte length, and SHA-256",
+  "routes": {
+    "vercel-node": {
+      "project": "metaplate-cert-fn-20261101",
+      "fixture": "examples/hosted/vercel/function",
+      "deployCommand": "npx --yes vercel@latest deploy --prod --yes",
+      "deployCliOutput": [
+        "No framework detected. Default Project Settings:",
+        "✓ Created         lnorton89s-projects/metaplate-cert-fn-20261101",
+        "Production      https://metaplate-cert-fn-20261101-d3v55jset-lnorton89s-projects.vercel.app",
+        "▲ Aliased         https://metaplate-cert-fn-20261101.vercel.app"
+      ],
+      "deployment": {
+        "id": "dpl_7dc2MCfT8m4XpQzUD8A2dmCJB9i9",
+        "url": "https://metaplate-cert-fn-20261101-d3v55jset-lnorton89s-projects.vercel.app",
+        "productionUrl": "https://metaplate-cert-fn-20261101.vercel.app",
+        "inspectorUrl": "https://vercel.com/lnorton89s-projects/metaplate-cert-fn-20261101/7dc2MCfT8m4XpQzUD8A2dmCJB9i9",
+        "readyState": "READY",
+        "target": "production",
+        "deploymentApiUrl": "https://api.vercel.com/v13/deployments/dpl_7dc2MCfT8m4XpQzUD8A2dmCJB9i9",
+        "buildMachine": {
+          "cores": 2,
+          "memory": 8192,
+          "machine": "basic",
+          "selectionType": "fixed",
+          "selectionSource": "plan-default"
+        },
+        "deploymentProtection": [
+          "vercel_authentication"
+        ]
+      },
+      "buildLog": [
+        "2026-11-01T20:06:38.049Z  Running build in Washington, D.C., USA (East) – iad1",
+        "2026-11-01T20:06:38.049Z  Build machine configuration: 2 cores, 8 GB",
+        "2026-11-01T20:06:38.059Z  Retrieving list of deployment files...",
+        "2026-11-01T20:06:38.145Z  Previous build caches not available.",
+        "2026-11-01T20:06:38.363Z  Downloading 6 deployment files...",
+        "2026-11-01T20:06:38.783Z  Running \"vercel build\"",
+        "2026-11-01T20:06:38.790Z  Vercel CLI 65.4.0",
+        "2026-11-01T20:06:39.299Z  Installing dependencies...",
+        "2026-11-01T20:06:39.706Z  npm warn Unknown env config \"cache-dir\". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.",
+        "2026-11-01T20:06:40.333Z",
+        "2026-11-01T20:06:40.333Z  added 27 packages in 932ms",
+        "2026-11-01T20:06:40.333Z",
+        "2026-11-01T20:06:40.333Z  3 packages are looking for funding",
+        "2026-11-01T20:06:40.334Z  run `npm fund` for details",
+        "2026-11-01T20:06:41.375Z  Build Completed in /vercel/output [2s]",
+        "2026-11-01T20:06:41.400Z  Deploying outputs...",
+        "2026-11-01T20:06:45.965Z  Deployment completed",
+        "2026-11-01T20:06:45.968Z  Creating build cache...",
+        "2026-11-01T20:06:46.998Z  Created build cache: 1s",
+        "2026-11-01T20:06:46.999Z  Uploading build cache [16.99 MB]",
+        "2026-11-01T20:06:47.378Z  Build cache uploaded: 379.000ms"
+      ],
+      "functionOutput": "λ api/og/[slug] (2.84MB) [iad1] (vercel inspect): a Node.js Vercel Function, sized by the traced native @resvg/resvg-js Linux binary",
+      "runtime": "Vercel Functions, Node.js runtime, Node 24.x via package.json engines; named GET export over Web Request/Response (createNodeOg(...).handlerFrom)",
+      "nativeAddon": "@resvg/resvg-js 2.6.2 resolves its platform package (@resvg/resvg-js-linux-x64-gnu) during Vercel's npm install from the uploaded package-lock.json; Vercel's file tracing copied the .node binary into the function with no includeFiles entry. The deployed function returned PNG bytes identical (same SHA-256 ETag) to a local render of the same fixture, which only the native binding produces in metaplate/node.",
+      "includeFiles": "vercel.json functions[\"api/og/*.mjs\"].includeFiles adds node_modules/@fontsource/inter/{package.json,metadata.json,files/inter-latin-700-normal.woff}: fontsourceFontLoader resolves the font at run time, which tracing cannot see",
+      "firstRequestCurl": {
+        "note": "plain curl -D - immediately after the deploy; X-Vercel-Cache MISS shows these bytes came from the function before the CDN cached them",
+        "hello-world": {
+          "status": 200,
+          "content-type": "image/png",
+          "cache-control": "public, max-age=300",
+          "content-length": "17342",
+          "etag": "\"1551449b6c9486fa1f7ea11e0fd362e2318e02ac4d3ce42ba56fed2e5b28d1b9\"",
+          "x-vercel-cache": "MISS"
+        },
+        "other": {
+          "status": 200,
+          "content-type": "image/png",
+          "cache-control": "public, max-age=300",
+          "content-length": "14859",
+          "etag": "\"fcb6c340c8e05182775cf0007e07a279e3ca22d66ee0e6f137bc36217d6bfb22\"",
+          "x-vercel-cache": "MISS"
+        }
+      },
+      "cacheControlNote": "The function sends \"public, max-age=300, s-maxage=86400\"; Vercel's CDN consumes s-maxage and forwards \"public, max-age=300\" to clients.",
+      "images": {
+        "format": "png",
+        "summary": {
+          "allVerifyUrlPassed": true,
+          "allStatus200": true,
+          "distinctBytesPerSlug": true
+        },
+        "results": [
+          {
+            "url": "https://metaplate-cert-fn-20261101.vercel.app/api/og/hello-world",
+            "verifyUrlCommand": "node dist/cli.js verify-url --json --size 1200x630 --format png https://metaplate-cert-fn-20261101.vercel.app/api/og/hello-world",
+            "verifyUrlExitCode": 0,
+            "verifyUrl": {
+              "schemaVersion": 1,
+              "urls": [
+                {
+                  "url": "https://metaplate-cert-fn-20261101.vercel.app/api/og/hello-world",
+                  "finalUrl": "https://metaplate-cert-fn-20261101.vercel.app/api/og/hello-world",
+                  "redirects": [],
+                  "contentType": "image/png",
+                  "bytes": 17342,
+                  "valid": true,
+                  "image": {
+                    "format": "png",
+                    "width": 1200,
+                    "height": 630,
+                    "bytes": 17342
+                  },
+                  "globalIssues": [],
+                  "targets": {}
+                }
+              ]
+            },
+            "httpGet": {
+              "fetchedAt": "2026-11-01T20:07:17.521Z",
+              "status": 200,
+              "headers": {
+                "content-type": "image/png",
+                "cache-control": "public, max-age=300",
+                "content-length": "17342",
+                "etag": "\"1551449b6c9486fa1f7ea11e0fd362e2318e02ac4d3ce42ba56fed2e5b28d1b9\"",
+                "x-vercel-cache": "HIT",
+                "x-vercel-id": "pdx1::iad1::bkb59-1793563636327-f0bee7b92d78",
+                "server": "Vercel"
+              },
+              "byteLength": 17342,
+              "sha256": "1551449b6c9486fa1f7ea11e0fd362e2318e02ac4d3ce42ba56fed2e5b28d1b9"
+            }
+          },
+          {
+            "url": "https://metaplate-cert-fn-20261101.vercel.app/api/og/other",
+            "verifyUrlCommand": "node dist/cli.js verify-url --json --size 1200x630 --format png https://metaplate-cert-fn-20261101.vercel.app/api/og/other",
+            "verifyUrlExitCode": 0,
+            "verifyUrl": {
+              "schemaVersion": 1,
+              "urls": [
+                {
+                  "url": "https://metaplate-cert-fn-20261101.vercel.app/api/og/other",
+                  "finalUrl": "https://metaplate-cert-fn-20261101.vercel.app/api/og/other",
+                  "redirects": [],
+                  "contentType": "image/png",
+                  "bytes": 14859,
+                  "valid": true,
+                  "image": {
+                    "format": "png",
+                    "width": 1200,
+                    "height": 630,
+                    "bytes": 14859
+                  },
+                  "globalIssues": [],
+                  "targets": {}
+                }
+              ]
+            },
+            "httpGet": {
+              "fetchedAt": "2026-11-01T20:07:18.086Z",
+              "status": 200,
+              "headers": {
+                "content-type": "image/png",
+                "cache-control": "public, max-age=300",
+                "content-length": "14859",
+                "etag": "\"fcb6c340c8e05182775cf0007e07a279e3ca22d66ee0e6f137bc36217d6bfb22\"",
+                "x-vercel-cache": "HIT",
+                "x-vercel-id": "pdx1::iad1::kbl2k-1793563636988-514df90541c6",
+                "server": "Vercel"
+              },
+              "byteLength": 14859,
+              "sha256": "fcb6c340c8e05182775cf0007e07a279e3ca22d66ee0e6f137bc36217d6bfb22"
+            }
+          }
+        ]
+      }
+    },
+    "vercel-next": {
+      "project": "metaplate-cert-next-20261101",
+      "fixture": "examples/hosted/vercel/next",
+      "deployCommand": "npx --yes vercel@latest deploy --prod --yes",
+      "deployCliOutput": [
+        "Detected Next.js (Build Command: next build, Output Directory: Next.js default)",
+        "✓ Created         lnorton89s-projects/metaplate-cert-next-20261101",
+        "Production      https://metaplate-cert-next-20261101-le5l376eg-lnorton89s-projects.vercel.app",
+        "▲ Aliased         https://metaplate-cert-next-20261101.vercel.app"
+      ],
+      "deployment": {
+        "id": "dpl_DgTGkc8xmizQAws8gvR8TsPtHU2M",
+        "url": "https://metaplate-cert-next-20261101-le5l376eg-lnorton89s-projects.vercel.app",
+        "productionUrl": "https://metaplate-cert-next-20261101.vercel.app",
+        "inspectorUrl": "https://vercel.com/lnorton89s-projects/metaplate-cert-next-20261101/DgTGkc8xmizQAws8gvR8TsPtHU2M",
+        "readyState": "READY",
+        "target": "production",
+        "deploymentApiUrl": "https://api.vercel.com/v13/deployments/dpl_DgTGkc8xmizQAws8gvR8TsPtHU2M",
+        "buildMachine": {
+          "cores": 2,
+          "memory": 8192,
+          "machine": "basic",
+          "selectionType": "fixed",
+          "selectionSource": "plan-default"
+        },
+        "deploymentProtection": [
+          "vercel_authentication"
+        ]
+      },
+      "buildLog": [
+        "2026-11-01T20:09:30.410Z  Running build in Washington, D.C., USA (East) – iad1",
+        "2026-11-01T20:09:30.410Z  Build machine configuration: 2 cores, 8 GB",
+        "2026-11-01T20:09:30.422Z  Retrieving list of deployment files...",
+        "2026-11-01T20:09:30.542Z  Previous build caches not available.",
+        "2026-11-01T20:09:30.762Z  Downloading 13 deployment files...",
+        "2026-11-01T20:09:31.395Z  Running \"vercel build\"",
+        "2026-11-01T20:09:31.405Z  Vercel CLI 65.4.0",
+        "2026-11-01T20:09:31.691Z  Installing dependencies...",
+        "2026-11-01T20:09:32.242Z  npm warn Unknown env config \"cache-dir\". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.",
+        "2026-11-01T20:09:37.425Z",
+        "2026-11-01T20:09:37.426Z  added 53 packages in 6s",
+        "2026-11-01T20:09:37.426Z",
+        "2026-11-01T20:09:37.426Z  9 packages are looking for funding",
+        "2026-11-01T20:09:37.426Z  run `npm fund` for details",
+        "2026-11-01T20:09:37.457Z  Detected Next.js version: 16.4.3",
+        "2026-11-01T20:09:37.463Z  Running \"npm run build\"",
+        "2026-11-01T20:09:37.542Z  npm warn Unknown env config \"cache-dir\". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.",
+        "2026-11-01T20:09:37.555Z",
+        "2026-11-01T20:09:37.555Z  > build",
+        "2026-11-01T20:09:37.555Z  > next build",
+        "2026-11-01T20:09:37.555Z",
+        "2026-11-01T20:09:37.889Z  ▲ Next.js 16.4.3 (Turbopack)",
+        "2026-11-01T20:09:37.956Z  Applying modifyConfig from Vercel",
+        "2026-11-01T20:09:37.960Z  ✓ Running next.config.ts took 70ms",
+        "2026-11-01T20:09:37.990Z  Attention: Next.js now collects completely anonymous telemetry regarding usage.",
+        "2026-11-01T20:09:37.991Z  This information is used to shape Next.js' roadmap and prioritize features.",
+        "2026-11-01T20:09:37.991Z  You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:",
+        "2026-11-01T20:09:37.991Z  https://nextjs.org/telemetry",
+        "2026-11-01T20:09:37.991Z",
+        "2026-11-01T20:09:38.010Z",
+        "2026-11-01T20:09:38.037Z  Creating an optimized production build ...",
+        "2026-11-01T20:09:41.417Z  ✓ Compiled successfully in 3.4s",
+        "2026-11-01T20:09:41.432Z  Running TypeScript ...",
+        "2026-11-01T20:09:43.252Z  Finished TypeScript in 1823ms ...",
+        "2026-11-01T20:09:43.255Z  Collecting page data using 1 worker ...",
+        "2026-11-01T20:09:43.682Z  Generating static pages using 1 worker (0/2) ...",
+        "2026-11-01T20:09:43.793Z  ✓ Generating static pages using 1 worker (2/2) in 111ms",
+        "2026-11-01T20:09:43.895Z  Finalizing page optimization ...",
+        "2026-11-01T20:09:43.919Z  Running onBuildComplete from Vercel",
+        "2026-11-01T20:09:44.113Z",
+        "2026-11-01T20:09:44.115Z  Route (app)",
+        "2026-11-01T20:09:44.115Z  ┌ ○ /_not-found",
+        "2026-11-01T20:09:44.116Z  ├ ƒ /[slug]",
+        "2026-11-01T20:09:44.116Z  ├ ƒ /[slug]/og-image.jpg",
+        "2026-11-01T20:09:44.116Z  └ ƒ /[slug]/opengraph-image",
+        "2026-11-01T20:09:44.116Z",
+        "2026-11-01T20:09:44.116Z",
+        "2026-11-01T20:09:44.116Z  ○  (Static)   prerendered as static content",
+        "2026-11-01T20:09:44.116Z  ƒ  (Dynamic)  server-rendered on demand",
+        "2026-11-01T20:09:44.117Z",
+        "2026-11-01T20:09:44.475Z  Build Completed in /vercel/output [13s]",
+        "2026-11-01T20:09:44.570Z  Deploying outputs...",
+        "2026-11-01T20:09:52.710Z  Deployment completed",
+        "2026-11-01T20:09:52.712Z  Creating build cache...",
+        "2026-11-01T20:09:59.252Z  Created build cache: 7s",
+        "2026-11-01T20:09:59.252Z  Uploading build cache [127.21 MB]",
+        "2026-11-01T20:10:02.868Z  Build cache uploaded: 3.615s"
+      ],
+      "functionOutput": "vercel inspect lists λ [slug], λ [slug]/og-image.jpg, and the metadata image route as Node.js Vercel Functions",
+      "runtime": "Next.js 16.4.3 (Turbopack) on Vercel; routes deploy as Node.js Vercel Functions, Node 24.x via package.json engines",
+      "nativeAddon": "serverExternalPackages [\"@resvg/resvg-js\", \"satori\"] keeps both out of the Turbopack bundle; Next's output file tracing copies the Linux resvg binding and sharp's libvips binding into the route function",
+      "outputFileTracingIncludes": "next.config.ts outputFileTracingIncludes[\"/*/og-image.jpg\"] adds the Inter 700 face, package.json, and metadata.json. A literal \"/[slug]/og-image.jpg\" key traced nothing in a local next build (keys are picomatch globs, so brackets form a character class); the glob key did.",
+      "pages": {
+        "https://metaplate-cert-next-20261101.vercel.app/packed": [
+          {
+            "og:title": "packed"
+          },
+          {
+            "og:image": "https://metaplate-cert-next-20261101.vercel.app/packed/opengraph-image?f8b98634a3b64ff0"
+          },
+          {
+            "og:image:type": "image/png"
+          },
+          {
+            "og:image:width": "1200"
+          },
+          {
+            "og:image:height": "630"
+          },
+          {
+            "twitter:card": "summary_large_image"
+          },
+          {
+            "twitter:title": "packed"
+          },
+          {
+            "twitter:image": "https://metaplate-cert-next-20261101.vercel.app/packed/og-image.jpg"
+          },
+          {
+            "twitter:image:alt": "packed social card"
+          },
+          {
+            "twitter:image:type": "image/jpeg"
+          },
+          {
+            "twitter:image:width": "1200"
+          },
+          {
+            "twitter:image:height": "630"
+          }
+        ],
+        "https://metaplate-cert-next-20261101.vercel.app/other": [
+          {
+            "og:title": "other"
+          },
+          {
+            "og:image": "https://metaplate-cert-next-20261101.vercel.app/other/opengraph-image?f8b98634a3b64ff0"
+          },
+          {
+            "og:image:type": "image/png"
+          },
+          {
+            "og:image:width": "1200"
+          },
+          {
+            "og:image:height": "630"
+          },
+          {
+            "twitter:card": "summary_large_image"
+          },
+          {
+            "twitter:title": "other"
+          },
+          {
+            "twitter:image": "https://metaplate-cert-next-20261101.vercel.app/other/og-image.jpg"
+          },
+          {
+            "twitter:image:alt": "other social card"
+          },
+          {
+            "twitter:image:type": "image/jpeg"
+          },
+          {
+            "twitter:image:width": "1200"
+          },
+          {
+            "twitter:image:height": "630"
+          }
+        ]
+      },
+      "metadataFileImages": {
+        "format": "png",
+        "summary": {
+          "allVerifyUrlPassed": true,
+          "allStatus200": true,
+          "distinctBytesPerSlug": true
+        },
+        "results": [
+          {
+            "url": "https://metaplate-cert-next-20261101.vercel.app/packed/opengraph-image?f8b98634a3b64ff0",
+            "verifyUrlCommand": "node dist/cli.js verify-url --json --size 1200x630 --format png https://metaplate-cert-next-20261101.vercel.app/packed/opengraph-image?f8b98634a3b64ff0",
+            "verifyUrlExitCode": 0,
+            "verifyUrl": {
+              "schemaVersion": 1,
+              "urls": [
+                {
+                  "url": "https://metaplate-cert-next-20261101.vercel.app/packed/opengraph-image?f8b98634a3b64ff0",
+                  "finalUrl": "https://metaplate-cert-next-20261101.vercel.app/packed/opengraph-image?f8b98634a3b64ff0",
+                  "redirects": [],
+                  "contentType": "image/png",
+                  "bytes": 32237,
+                  "valid": true,
+                  "image": {
+                    "format": "png",
+                    "width": 1200,
+                    "height": 630,
+                    "bytes": 32237
+                  },
+                  "globalIssues": [],
+                  "targets": {}
+                }
+              ]
+            },
+            "httpGet": {
+              "fetchedAt": "2026-11-01T20:10:07.262Z",
+              "status": 200,
+              "headers": {
+                "content-type": "image/png",
+                "cache-control": "public, max-age=0, must-revalidate",
+                "content-length": null,
+                "etag": null,
+                "x-vercel-cache": "MISS",
+                "x-vercel-id": "pdx1::iad1::xbzkj-1793563806009-c197666beb0b",
+                "server": "Vercel"
+              },
+              "byteLength": 32237,
+              "sha256": "e6cab5d48faf6d97607e64130c41a22463d8e9cf3ad1d8c9ec6648ac7de39355"
+            }
+          },
+          {
+            "url": "https://metaplate-cert-next-20261101.vercel.app/other/opengraph-image?f8b98634a3b64ff0",
+            "verifyUrlCommand": "node dist/cli.js verify-url --json --size 1200x630 --format png https://metaplate-cert-next-20261101.vercel.app/other/opengraph-image?f8b98634a3b64ff0",
+            "verifyUrlExitCode": 0,
+            "verifyUrl": {
+              "schemaVersion": 1,
+              "urls": [
+                {
+                  "url": "https://metaplate-cert-next-20261101.vercel.app/other/opengraph-image?f8b98634a3b64ff0",
+                  "finalUrl": "https://metaplate-cert-next-20261101.vercel.app/other/opengraph-image?f8b98634a3b64ff0",
+                  "redirects": [],
+                  "contentType": "image/png",
+                  "bytes": 30961,
+                  "valid": true,
+                  "image": {
+                    "format": "png",
+                    "width": 1200,
+                    "height": 630,
+                    "bytes": 30961
+                  },
+                  "globalIssues": [],
+                  "targets": {}
+                }
+              ]
+            },
+            "httpGet": {
+              "fetchedAt": "2026-11-01T20:10:07.962Z",
+              "status": 200,
+              "headers": {
+                "content-type": "image/png",
+                "cache-control": "public, max-age=0, must-revalidate",
+                "content-length": null,
+                "etag": null,
+                "x-vercel-cache": "MISS",
+                "x-vercel-id": "pdx1::iad1::jfwkn-1793563806801-b84aaab42081",
+                "server": "Vercel"
+              },
+              "byteLength": 30961,
+              "sha256": "25653d87d2a89155f544391a66a0ecea6e5f25e421bf4417361c3e352977ac9e"
+            }
+          }
+        ]
+      },
+      "routeHandlerImages": {
+        "format": "jpeg",
+        "summary": {
+          "allVerifyUrlPassed": true,
+          "allStatus200": true,
+          "distinctBytesPerSlug": true
+        },
+        "results": [
+          {
+            "url": "https://metaplate-cert-next-20261101.vercel.app/packed/og-image.jpg",
+            "verifyUrlCommand": "node dist/cli.js verify-url --json --size 1200x630 --format jpeg https://metaplate-cert-next-20261101.vercel.app/packed/og-image.jpg",
+            "verifyUrlExitCode": 0,
+            "verifyUrl": {
+              "schemaVersion": 1,
+              "urls": [
+                {
+                  "url": "https://metaplate-cert-next-20261101.vercel.app/packed/og-image.jpg",
+                  "finalUrl": "https://metaplate-cert-next-20261101.vercel.app/packed/og-image.jpg",
+                  "redirects": [],
+                  "contentType": "image/jpeg",
+                  "bytes": 30798,
+                  "valid": true,
+                  "image": {
+                    "format": "jpeg",
+                    "width": 1200,
+                    "height": 630,
+                    "bytes": 30798
+                  },
+                  "globalIssues": [],
+                  "targets": {}
+                }
+              ]
+            },
+            "httpGet": {
+              "fetchedAt": "2026-11-01T20:10:09.038Z",
+              "status": 200,
+              "headers": {
+                "content-type": "image/jpeg",
+                "cache-control": "public, max-age=86400",
+                "content-length": "30798",
+                "etag": "\"512316c4e338d4b7f847bdf15c5c81599a6c1910ddb69ea6efc5abb2bb1e77ee\"",
+                "x-vercel-cache": "HIT",
+                "x-vercel-id": "pdx1::iad1::gg82l-1793563808040-928a42e11c24",
+                "server": "Vercel"
+              },
+              "byteLength": 30798,
+              "sha256": "512316c4e338d4b7f847bdf15c5c81599a6c1910ddb69ea6efc5abb2bb1e77ee"
+            }
+          },
+          {
+            "url": "https://metaplate-cert-next-20261101.vercel.app/other/og-image.jpg",
+            "verifyUrlCommand": "node dist/cli.js verify-url --json --size 1200x630 --format jpeg https://metaplate-cert-next-20261101.vercel.app/other/og-image.jpg",
+            "verifyUrlExitCode": 0,
+            "verifyUrl": {
+              "schemaVersion": 1,
+              "urls": [
+                {
+                  "url": "https://metaplate-cert-next-20261101.vercel.app/other/og-image.jpg",
+                  "finalUrl": "https://metaplate-cert-next-20261101.vercel.app/other/og-image.jpg",
+                  "redirects": [],
+                  "contentType": "image/jpeg",
+                  "bytes": 29626,
+                  "valid": true,
+                  "image": {
+                    "format": "jpeg",
+                    "width": 1200,
+                    "height": 630,
+                    "bytes": 29626
+                  },
+                  "globalIssues": [],
+                  "targets": {}
+                }
+              ]
+            },
+            "httpGet": {
+              "fetchedAt": "2026-11-01T20:10:09.554Z",
+              "status": 200,
+              "headers": {
+                "content-type": "image/jpeg",
+                "cache-control": "public, max-age=86400",
+                "content-length": "29626",
+                "etag": "\"7f67029748cfca166a5872d400712e31b4e111521df02bc7dfb2edf1889a007e\"",
+                "x-vercel-cache": "HIT",
+                "x-vercel-id": "pdx1::iad1::s424g-1793563808561-1a64944cee36",
+                "server": "Vercel"
+              },
+              "byteLength": 29626,
+              "sha256": "7f67029748cfca166a5872d400712e31b4e111521df02bc7dfb2edf1889a007e"
+            }
+          }
+        ]
+      },
+      "headerNotes": "The metadata file route streams (no Content-Length) with Next's dynamic \"public, max-age=0, must-revalidate\"; the metaplate/node JPEG route keeps its owned Cache-Control, Content-Length, and SHA-256 ETag."
+    },
+    "vercel-edge": {
+      "project": "metaplate-cert-edge-20261101",
+      "fixture": "examples/hosted/vercel/edge",
+      "deployCommand": "npx --yes vercel@latest deploy --prod --yes",
+      "deployCliOutput": [
+        "No framework detected. Default Project Settings:",
+        "✓ Created         lnorton89s-projects/metaplate-cert-edge-20261101",
+        "Production      https://metaplate-cert-edge-20261101-6hwu8q6gg-lnorton89s-projects.vercel.app"
+      ],
+      "result": {
+        "status": "error",
+        "reason": "deploy_failed",
+        "message": "The Edge Function \"api/og/[slug]\" size is 2.13 MB and your plan size limit is 1 MB.",
+        "next": [
+          {
+            "command": "vercel deploy",
+            "when": "retry deploy"
+          }
+        ]
+      },
+      "deploymentId": "dpl_DcfBQeSYac7GCVUXz2tNbnf99PqA",
+      "deploymentStatus": "Error",
+      "buildLog": [
+        "2026-11-01T20:10:59.452Z  Running build in Washington, D.C., USA (East) – iad1",
+        "2026-11-01T20:10:59.453Z  Build machine configuration: 2 cores, 8 GB",
+        "2026-11-01T20:10:59.463Z  Retrieving list of deployment files...",
+        "2026-11-01T20:10:59.541Z  Previous build caches not available.",
+        "2026-11-01T20:10:59.777Z  Downloading 6 deployment files...",
+        "2026-11-01T20:11:00.207Z  Running \"vercel build\"",
+        "2026-11-01T20:11:00.214Z  Vercel CLI 65.4.0",
+        "2026-11-01T20:11:00.832Z  Installing dependencies...",
+        "2026-11-01T20:11:01.435Z  npm warn Unknown env config \"cache-dir\". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.",
+        "2026-11-01T20:11:02.103Z",
+        "2026-11-01T20:11:02.103Z  added 27 packages in 1s",
+        "2026-11-01T20:11:02.103Z",
+        "2026-11-01T20:11:02.103Z  2 packages are looking for funding",
+        "2026-11-01T20:11:02.103Z  run `npm fund` for details",
+        "2026-11-01T20:11:03.572Z  Build Completed in /vercel/output [3s]",
+        "2026-11-01T20:11:03.596Z  Deploying outputs...",
+        "2026-11-01T20:11:05.820Z  The Edge Function \"api/og/[slug]\" size is 2.13 MB and your plan size limit is 1 MB."
+      ],
+      "runtime": "Vercel Edge runtime (export const config = { runtime: \"edge\" }); .vc-config.json from a local `vercel build`: runtime edge, deploymentTarget v8-worker",
+      "wasm": "Both modules imported with the documented ?module suffix: @resvg/resvg-wasm/index_bg.wasm?module as resvg.wasm and satori/layout.wasm?module as layout.wasm (Edge forbids compiling Wasm from bytes). The build accepted both imports; the deploy failed only at the plan's size gate.",
+      "failure": "The Edge Function \"api/og/[slug]\" size is 2.13 MB and your plan size limit is 1 MB.",
+      "sizeBreakdownGzip": {
+        "source": "local `npx vercel build --prod --yes` of the same fixture, gzip -9 per file, bytes",
+        "@resvg/resvg-wasm/index_bg.wasm": 948750,
+        "satori/dist/index.js": 630646,
+        "satori/dist/standalone.js": 349665,
+        "satori/layout.wasm": 210495,
+        "@shuding/opentype.js/dist/opentype.module.js": 68347,
+        "totalAllFiles": 2288126
+      },
+      "analysis": "The Hobby Edge limit is 1 MB after gzip (Pro 2 MB, Enterprise 4 MB; https://vercel.com/docs/functions/runtimes/edge#code-size-limit). The resvg Wasm alone is 0.95 MB gzip, so no metaplate/edge function fits a Hobby plan. The bundle also carries Satori's default build (0.63 MB gzip) next to satori/standalone because metaplate/edge's loader dynamically imports both and the bundler includes every reachable dynamic import; without it the function would be about 1.6 MB, inside the Pro limit but still over Hobby.",
+      "certified": false
+    }
+  }
+}
