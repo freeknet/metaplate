@@ -47,6 +47,15 @@ export {
   type SocialMetaTag,
 } from "./meta-tags.js";
 
+export type {
+  OpenGraphAudio,
+  OpenGraphMedia,
+  OpenGraphMediaOptions,
+  OpenGraphVideo,
+  SocialMetaAudioInput,
+  SocialMetaMediaInput,
+  SocialMetaVideoInput,
+} from "./og-media.js";
 export {
   serializeJsonLd,
   socialImageJsonLd,
