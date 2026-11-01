@@ -9,6 +9,9 @@ export const REQUIRED_RENDERER_PEERS = Object.freeze([
 export const FRAMEWORK_DEPENDENCIES = Object.freeze({
   next: Object.freeze(["next", "react-dom"]),
   astro: Object.freeze(["astro", "@fontsource/inter"]),
+  astroServer: Object.freeze(["astro", "@astrojs/node", "@fontsource/inter"]),
+  // Linked beside the copied Next closure for the TypeScript server fixture.
+  nextServer: Object.freeze(["typescript", "@types/node", "@types/react", "@fontsource/inter"]),
   express: Object.freeze(["express", "@fontsource/inter"]),
   standalone: Object.freeze(["@fontsource/inter", "typescript", "@types/node"]),
   bare: Object.freeze(["typescript"]),
@@ -36,6 +39,13 @@ export const SOCIAL_CARD_FIXTURE = Object.freeze({
   imagePath: "og-image.png",
   contentType: "image/png",
   origin: "https://example.com",
+});
+
+/** Production-server fixtures fetch every dynamic route for two slugs. */
+export const SERVER_FIXTURE = Object.freeze({
+  slugs: Object.freeze(["packed", "other"]),
+  jpegImagePath: "og-image.jpg",
+  cacheControl: "public, max-age=86400",
 });
 
 export const PACKAGE_FONT_FIXTURE = Object.freeze({

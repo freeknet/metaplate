@@ -3,6 +3,46 @@
 All notable changes to Metaplate are documented in this file. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `npm run check:package` now serves two production-server fixtures from the
+  packed tarball, alongside the existing Next static export and Astro static
+  build. A default-output `next build` started with `next start` on
+  127.0.0.1 exposes a per-request `app/[slug]/opengraph-image.tsx` through
+  `createNextOg` and an `app/[slug]/og-image.jpg/route.ts` route handler
+  through `createNodeOg(...).handlerFrom`, encoded as JPEG with sharp and
+  configured with `serverExternalPackages: ["@resvg/resvg-js", "satori"]` as
+  the README documents. An Astro `output: "server"` build with
+  `@astrojs/node` in standalone mode serves a `src/pages/[slug]/og-image.png.ts`
+  endpoint whose `GET` is `handlerFrom` and a page emitting
+  `socialImageMetadata` tags from the built `dist/server/entry.mjs`. Each
+  server is started on a free loopback port, its page and image routes are
+  fetched for two slugs and checked for status, media type, cache policy,
+  length, format, and dimensions with the packed `verifyImage`, different
+  slugs must produce different bytes, and the server's whole process tree is
+  stopped on Windows and POSIX even when verification fails.
+- `deployment-evidence.json` records the `next-server` and `astro-server`
+  routes as `certified-local-contract`, with their runtime boundary (Next.js
+  16.3.2–16.x and Astro 7 with `@astrojs/node` 11, on Node.js 24) and
+  official upstream references. This is local packed-contract evidence from
+  `next start` and the standalone Astro entry; hosted Next and Astro
+  deployments are not certified. `verify-deployment-evidence.mjs` validates
+  the new optional `officialReferences` and `runtimeBoundary` fields.
+- `@astrojs/node` 11.1.9 is a pinned development dependency for the Astro
+  server fixture. It is not a dependency or peer of the published package.
+
+### Changed
+
+- The packed-package verifier copies a dependency's installed optional
+  dependencies with its lockfile-verified closure, so Next's SWC binaries and
+  its optional sharp encoder (with sharp's platform binaries) arrive through
+  one rule instead of an SWC-specific copy step.
+- The tslib `unstableOwnership` disposition's dependency path now names the
+  first lockfile path through `@astrojs/node`, which reaches `astro` as a
+  peer; the alert, package, version, and reasoning are unchanged.
+
 ## [0.8.0] - 2026-10-31
 
 ### Added
