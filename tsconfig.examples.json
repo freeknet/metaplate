@@ -16,5 +16,8 @@
       "metaplate/image": ["./src/image.ts"]
     }
   },
-  "include": ["examples"]
+  "include": ["examples"],
+  // Hosted provider fixtures are standalone apps that install the packed
+  // tarball; they resolve metaplate from node_modules, not from src/.
+  "exclude": ["examples/hosted"]
 }
