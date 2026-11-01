@@ -3,6 +3,22 @@
 All notable changes to Metaplate are documented in this file. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- The root entry exports `socialMetaTags(metadata, options?)` and
+  `socialMetaHtml(metadata, options?)`, a framework-neutral serializer for
+  `SocialImageMetadata`. `socialMetaTags` returns an ordered, deduplicated
+  array of `{ property | name, content }` objects that React Router `meta`,
+  Next.js `other`, and Astro or Svelte templates consume without string
+  handling; `socialMetaHtml` renders the same tags as escaped `<meta>`
+  elements, one per line. Optional `title`, `description`, `url`, `siteName`,
+  and `type` add page-level Open Graph tags, and a canonical `url` resolves
+  relative image URLs. The tag order, escaping, and the guarantee that the
+  HTML contains only `<meta>` elements are documented and tested. This closes
+  the page-level serializer deferred in 0.7.0.
+
 ## [0.8.0] - 2026-10-31
 
 ### Added
