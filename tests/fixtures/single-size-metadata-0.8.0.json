@@ -1,0 +1,138 @@
+{
+  "core": {
+    "openGraph": {
+      "images": [
+        {
+          "url": "https://example.com/project/docs/og-image.jpg",
+          "width": 1200,
+          "height": 630,
+          "alt": "Docs card",
+          "type": "image/jpeg"
+        }
+      ]
+    },
+    "twitter": {
+      "card": "summary_large_image",
+      "images": [
+        {
+          "url": "https://example.com/project/docs/og-image.jpg",
+          "width": 1200,
+          "height": 630,
+          "alt": "Docs card",
+          "type": "image/jpeg"
+        }
+      ]
+    }
+  },
+  "coreDefault": {
+    "openGraph": {
+      "images": [
+        {
+          "url": "/og-image",
+          "width": 1200,
+          "height": 630,
+          "alt": "card"
+        }
+      ]
+    },
+    "twitter": {
+      "card": "summary_large_image",
+      "images": [
+        {
+          "url": "/og-image",
+          "width": 1200,
+          "height": 630,
+          "alt": "card"
+        }
+      ]
+    }
+  },
+  "coreChannels": {
+    "openGraph": {
+      "images": [
+        {
+          "url": "/a.png",
+          "width": 1200,
+          "height": 630,
+          "alt": "A"
+        },
+        {
+          "url": "/b.png",
+          "width": 1080,
+          "height": 1080,
+          "alt": "B"
+        }
+      ]
+    },
+    "twitter": {
+      "card": "summary",
+      "images": [
+        {
+          "url": "/x.png",
+          "width": 800,
+          "height": 800,
+          "alt": "X"
+        }
+      ],
+      "site": "@example",
+      "creator": "@author"
+    }
+  },
+  "svg": {
+    "openGraph": {
+      "images": [
+        {
+          "url": "https://example.com/p/blog/post/social/card",
+          "width": 1200,
+          "height": 630,
+          "alt": "Post card",
+          "type": "image/svg+xml"
+        }
+      ]
+    },
+    "twitter": {
+      "card": "summary_large_image",
+      "images": [
+        {
+          "url": "https://example.com/p/blog/post/social/card",
+          "width": 1200,
+          "height": 630,
+          "alt": "Post card",
+          "type": "image/svg+xml"
+        }
+      ]
+    }
+  },
+  "node": {
+    "openGraph": {
+      "images": [
+        {
+          "url": "/og-image.png",
+          "width": 1080,
+          "height": 1080,
+          "alt": "Home card",
+          "type": "image/png"
+        }
+      ]
+    },
+    "twitter": {
+      "card": "summary_large_image",
+      "images": [
+        {
+          "url": "/og-image.png",
+          "width": 1080,
+          "height": 1080,
+          "alt": "Home card",
+          "type": "image/png"
+        }
+      ]
+    }
+  },
+  "nodeImage": {
+    "url": "/x/og-image",
+    "width": 1200,
+    "height": 630,
+    "alt": "X card",
+    "type": "image/png"
+  }
+}
