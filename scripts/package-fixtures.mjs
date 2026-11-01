@@ -28,6 +28,16 @@ export const FRAMEWORK_DEPENDENCIES = Object.freeze({
     "@fontsource/inter",
     "isbot",
   ]),
+  sveltekit: Object.freeze([
+    "@sveltejs/kit",
+    "@sveltejs/adapter-node",
+    "@sveltejs/vite-plugin-svelte",
+    "svelte",
+    "vite",
+    "typescript",
+    "@types/node",
+    "@fontsource/inter",
+  ]),
 });
 
 export const SOCIAL_CARD_FIXTURE = Object.freeze({
