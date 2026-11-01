@@ -70,6 +70,24 @@
       ]
     },
     {
+      "id": "bun",
+      "provider": "Bun",
+      "runtime": "Bun 1.x Node compatibility",
+      "api": "metaplate/node artifact and handlerFrom",
+      "status": "documented",
+      "evidence": "scripts/verify-runtime.mjs in the non-blocking CI runtimes matrix; evidence in progress, not certified until it passes consistently on main",
+      "officialDocs": "https://bun.com/docs/runtime/node-api"
+    },
+    {
+      "id": "deno",
+      "provider": "Deno",
+      "runtime": "Deno 2.x Node and npm compatibility",
+      "api": "metaplate/node artifact and handlerFrom",
+      "status": "documented",
+      "evidence": "scripts/verify-runtime.mjs in the non-blocking CI runtimes matrix; evidence in progress, not certified until it passes consistently on main",
+      "officialDocs": "https://docs.deno.com/runtime/fundamentals/node/"
+    },
+    {
       "id": "edge",
       "provider": "Cloudflare Workers/Vercel Edge/Netlify Edge",
       "runtime": "edge",
