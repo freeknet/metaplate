@@ -34,3 +34,13 @@ export {
   type SocialImageVerificationOptions,
   type SocialImageVerificationReport,
 } from "./social-verification.js";
+
+export {
+  socialMetaHtml,
+  socialMetaTags,
+  type SocialMetaHtmlOptions,
+  type SocialMetaImageInput,
+  type SocialMetaInput,
+  type SocialMetaOptions,
+  type SocialMetaTag,
+} from "./meta-tags.js";
