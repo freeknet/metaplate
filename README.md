@@ -217,11 +217,14 @@ For dynamic copy, `handlerFrom` forwards every framework argument to a sync or
 async resolver. For example, a SvelteKit
 [`+server` route](https://svelte.dev/docs/kit/routing#server) deployed with the
 official [Node adapter](https://svelte.dev/docs/kit/adapter-node) can use its
-typed params without a wrapper around every plate:
+typed params without a wrapper around every plate. SvelteKit 3 configures the
+adapter through `sveltekit({ adapter: adapter() })` in `vite.config.js` and
+resolves [`#lib`](https://svelte.dev/docs/kit/$lib) through the `imports`
+field of `package.json` (`"#lib/*": "./src/lib/*"`):
 
 ```ts
 import type { RequestHandler } from "./$types";
-import { og } from "$lib/og";
+import { og } from "#lib/og.js";
 
 export const GET: RequestHandler = og.handlerFrom(({ params }) => ({
   title: titleFor(params.slug),
@@ -285,7 +288,7 @@ set actually exercised by the release gate.
 | `metaplate/next` | [Metadata and OG images](https://nextjs.org/docs/app/getting-started/metadata-and-og-images), [metadata files](https://nextjs.org/docs/app/api-reference/file-conventions/metadata/opengraph-image), and [static exports](https://nextjs.org/docs/app/guides/static-exports) | Next.js 16.3.2–16.x Node/build pipeline | Exact packed artifact is built through a real Next static export in the release gate. Next 15 is not claimed because its remaining dependency advisories fail this project's release audit. |
 | Astro static endpoints | [Static and server endpoints](https://docs.astro.build/en/guides/endpoints/) | Astro 7 build on Node 24 | Exact packed artifact produces the endpoint, PNG bytes, dimensions, and separately tested page metadata. |
 | React Router resource routes | [Resource routes](https://reactrouter.com/how-to/resource-routes) | React Router 8 framework mode on Node 22.22+ | Exact packed artifact is type-generated, typechecked, built, served, and fetched through a dynamic `loader(args)` route. |
-| SvelteKit | [`+server` routing](https://svelte.dev/docs/kit/routing#server) and [`adapter-node`](https://svelte.dev/docs/kit/adapter-node) | Node-compatible adapters | `handlerFrom` follows its `RequestHandler` contract, but certification is deferred while the latest stable Kit line retains an upstream Cookie advisory. |
+| SvelteKit `+server` routes | [`+server` routing](https://svelte.dev/docs/kit/routing#server) and [`adapter-node`](https://svelte.dev/docs/kit/adapter-node) | SvelteKit 3 with `adapter-node` 6 on Node 22.17+ | Exact packed artifact is synced, typechecked against the generated `RequestHandler`, built with `adapter-node`, served, and fetched through a dynamic `handlerFrom` `GET` route and a page emitting its social metadata. |
 | Express | [Express 5 response API](https://expressjs.com/en/5x/api/#res.send) | Express 5 on Node | Exact packed artifact is served over an ephemeral HTTP server and checked for headers, bytes, and dimensions. |
 | Bun and Deno (Node-compatible runtimes) | [Bun Node-API](https://bun.com/docs/runtime/node-api) and [Deno Node and npm compatibility](https://docs.deno.com/runtime/fundamentals/node/) | Evidence in progress: CI runtime matrix runs the built-package render smoke on Bun and Deno; not certified until it passes consistently | `scripts/verify-runtime.mjs` runs on Bun (latest 1.x) and Deno 2.x against the built `dist/` entries and an npm-installed `node_modules`, failing by step name: `metaplate` imports alone and produces metadata; `metaplate/render`, `metaplate/node`, `metaplate/fonts`, and `metaplate/image` import; Inter 700 loads through `fontsourceFontLoader`; Satori emits a 1200x630 SVG with glyph paths; native Resvg rasterizes it through `createNodeOg(...).artifact`; `handlerFrom` returns a Web `Response` with matching `Content-Type` and `Content-Length`; and `verifyImage` confirms a 1200x630 PNG identical to the artifact. It does not exercise a packed tarball, a framework adapter, or a hosted Bun or Deno deployment. |
 | Workers and other edge isolates (Cloudflare Workers, Vercel Edge, Netlify Edge) | Consult the framework's adapter/runtime documentation | Not supported by `metaplate/node` | These isolates cannot load the native Resvg Node-API binding, and Web `Response` support does not imply they can. Use a compatible renderer instead. |
