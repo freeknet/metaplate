@@ -112,27 +112,37 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run build
+      # Certify what users install: pack the tarball and install it, with the
+      # lockfile's peer versions, into a clean consumer outside the checkout.
+      # The smoke imports metaplate by package name and fails unless every
+      # entry resolves into that consumer's node_modules.
+      - name: Prepare a consumer from the packed tarball
+        run: node scripts/prepare-runtime-consumer.mjs "$RUNNER_TEMP/runtime-consumer"
       # Control: the same smoke under Node separates a broken script from a
       # runtime that cannot run the package.
-      - name: Smoke the built package under Node
-        run: node scripts/verify-runtime.mjs --expect-runtime=node
+      - name: Smoke the packed package under Node
+        working-directory: ${{ runner.temp }}/runtime-consumer
+        run: node verify-runtime.mjs --expect-runtime=node --expect-version="$(node -p 'require("./runtime-consumer.json").version')"
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         if: matrix.runtime == 'bun'
         with:
           bun-version: latest
-      - name: Smoke the built package under Bun
+      - name: Smoke the packed package under Bun
         if: matrix.runtime == 'bun'
-        run: bun scripts/verify-runtime.mjs --expect-runtime=bun
+        working-directory: ${{ runner.temp }}/runtime-consumer
+        run: bun verify-runtime.mjs --expect-runtime=bun --expect-version="$(node -p 'require("./runtime-consumer.json").version')"
       - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         if: matrix.runtime == 'deno'
         with:
           deno-version: 2.x
-      # Deno 2 resolves bare specifiers from the npm-installed node_modules
-      # because package.json is present; --no-lock keeps it from writing a
-      # deno.lock, and --allow-all covers the file reads and Resvg's N-API load.
-      - name: Smoke the built package under Deno
+      # Deno 2 resolves bare specifiers from the consumer's npm-installed
+      # node_modules because its package.json is present; --no-lock keeps it
+      # from writing a deno.lock, and --allow-all covers the file reads and
+      # Resvg's N-API load.
+      - name: Smoke the packed package under Deno
         if: matrix.runtime == 'deno'
-        run: deno run --allow-all --no-lock scripts/verify-runtime.mjs --expect-runtime=deno
+        working-directory: ${{ runner.temp }}/runtime-consumer
+        run: deno run --allow-all --no-lock verify-runtime.mjs --expect-runtime=deno --expect-version="$(node -p 'require("./runtime-consumer.json").version')"
 
   dependency-review:
     name: Dependency review
