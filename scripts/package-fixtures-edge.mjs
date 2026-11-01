@@ -32,9 +32,10 @@ function edgeEntrySource(directory, manifest) {
 /**
  * Proves the packed `metaplate/edge` entry: the optional Wasm peer is absent
  * from the one-command install and named in its guidance, the built entry is
- * free of Node built-ins and CommonJS, and a consumer holding the
- * lockfile-verified `@resvg/resvg-wasm` renders a verified PNG from Wasm bytes
- * it supplies, through both Satori builds.
+ * free of Node built-ins, CommonJS, and Satori's default build, and a consumer
+ * holding the lockfile-verified `@resvg/resvg-wasm` renders a verified PNG
+ * through `satori/standalone` from the two Wasm modules it supplies, after a
+ * render without `satori/layout.wasm` fails with guidance naming it.
  */
 export function verifyEdgeFixture({
   archive,
@@ -57,6 +58,14 @@ export function verifyEdgeFixture({
   const source = edgeEntrySource(consumer, manifest);
   if (/\bnode:/.test(source) || /\brequire\(/.test(source)) {
     throw new Error("metaplate/edge unexpectedly imports a Node built-in or uses require().");
+  }
+  // Edge bundlers follow every dynamic import, so a reference to Satori's
+  // default build would ship it beside satori/standalone.
+  if (
+    !source.includes('import("satori/standalone")') ||
+    /\b(?:import\s*\(\s*|from\s*|import\s*)(["'`])satori\1/.test(source)
+  ) {
+    throw new Error("metaplate/edge must import satori/standalone and never Satori's default build.");
   }
 
   runModule(
@@ -128,11 +137,26 @@ export function verifyEdgeFixture({
         }),
       };
 
-      // Satori's default build first, then satori/standalone with a supplied
-      // Yoga module, as a Cloudflare Worker would run it.
+      // Without satori/layout.wasm there is nothing to lay out with: the
+      // render fails with guidance naming the module and where to pass it.
+      const unsupplied = createEdgeOg({ ...definition, resvg: { wasm: resvgWasm } });
+      try {
+        await unsupplied.render({ title: "No layout" });
+        throw new Error("metaplate/edge rendered without satori/layout.wasm.");
+      } catch (error) {
+        if (
+          !error.message.includes("satori/layout.wasm") ||
+          !error.message.includes("layout.wasm to createEdgeOg or to initEdgeRenderer")
+        ) {
+          throw error;
+        }
+      }
+
+      // Both Wasm modules supplied, as a Cloudflare Worker imports them; the
+      // plate that failed renders too once the layout module exists.
       const plates = [
-        createEdgeOg({ ...definition, resvg: { wasm: resvgWasm }, etag: true }),
-        createEdgeOg({ ...definition, layout: { wasm: layoutWasm } }),
+        createEdgeOg({ ...definition, resvg: { wasm: resvgWasm }, layout: { wasm: layoutWasm }, etag: true }),
+        unsupplied,
       ];
       for (const [index, plate] of plates.entries()) {
         const response = await plate.fetchable({ title: "Metaplate edge smoke " + index }).fetch();
