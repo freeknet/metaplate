@@ -29,12 +29,12 @@ into an image or asset element; allowlist remote assets or keep them local.
 | --- | --- | --- | --- | --- |
 | Static site/CDN | `render()` or `renderSvg()` in a build script | Node at build time only | `public/og-image.png` or `.jpg` | Supported |
 | Vercel Function | `handler()` / `handlerFrom()` or `response()` | Vercel Node.js runtime | `/api/og` or framework route | Hosted-certified on a dated Vercel production deployment (2026-11-01, Node.js runtime); Next.js 16.4.3 on Vercel likewise |
-| Netlify Function | `handler()` / `handlerFrom()` or `response()` | Netlify Node.js Function | Function path or custom path | Locally certified provider-shaped contract; generated framework functions use project settings |
+| Netlify Function | `handler()` / `handlerFrom()` or `response()` | Netlify Node.js Function | Function path or custom path | Hosted-certified on a dated Netlify production deployment (2026-11-01, Functions Node.js runtime `nodejs24.x`); generated framework functions use project settings |
 | Railway/Render service | `response()` or `render()` + `Buffer.from()` | Long-lived Node.js service | Application route | Locally certified generic Node contract; provider deployment remains a recipe |
 | Next.js native route | `metaplate/next`, or `metaplate/node` in a route handler | Next build/Node runtime | Metadata file or route handler | Static export and `next start` server output locally certified from the packed artifact; hosted Next deployment is separate |
 | Astro on-demand endpoint | `handlerFrom()` as the endpoint `GET` | `@astrojs/node` standalone server | `src/pages/[slug]/og-image.png.ts` | Locally certified from the packed artifact through the built `entry.mjs`; hosted Astro adapters are separate |
 | SvelteKit `+server` route | `handlerFrom()` as the `GET` `RequestHandler` | `adapter-node` on Node.js | `src/routes/[slug]/og-image.png/+server.ts` | Locally certified framework contract; hosted deployment of the Node server remains a recipe |
-| Cloudflare Workers / Vercel Edge / Netlify Edge | `metaplate/edge` (`fetchable()` / `fetchableFrom()`), not `metaplate/node` | `@resvg/resvg-wasm` with caller-supplied Wasm | Provider route | Tested in Node against the Wasm renderer; not certified on a hosted edge platform |
+| Cloudflare Workers / Vercel Edge / Netlify Edge | `metaplate/edge` (`fetchable()` / `fetchableFrom()`), not `metaplate/node` | `@resvg/resvg-wasm` with caller-supplied Wasm | Provider route | Tested in Node against the Wasm renderer; hosted-certified on Netlify Edge Functions (2026-11-01); Vercel Edge was rejected by the Hobby size limit; Workers not certified |
 
 ## Static generation
 
@@ -241,6 +241,50 @@ guarantees; use static generation or cache aggressively when rendering is not
 request-specific. For framework-generated functions, configure the project-level
 runtime/region because the generated file cannot be edited safely.
 
+### Hosted Netlify evidence
+
+The `netlify-node` and `netlify-edge` routes in `deployment-evidence.json` are
+certified from production deployments made on 2026-11-01 from the packed 0.8.0
+tarball, each to a new Netlify site, with the Netlify CLI
+(`netlify deploy --prod --no-build`). The deployed sources are in
+[`examples/hosted/netlify`](https://github.com/lnorton89/metaplate/tree/main/examples/hosted/netlify)
+and the raw `verify-url` output, response headers, content checks, and
+deployment IDs are in `.planning/hosted-evidence/netlify-2026-11-01.json`.
+
+- **Netlify Functions, Node.js runtime.** `netlify/functions/og.mjs`
+  default-exports `og.handlerFrom((_request, context) => ...)` with
+  `config.path = "/og/:slug"`. The CLI bundles locally, so the install must
+  target Netlify's Linux x64 runtime (`npm install --os=linux --cpu=x64
+  --libc=glibc`) to get `@resvg/resvg-js-linux-x64-gnu`. `netlify.toml` sets
+  `node_bundler = "esbuild"`, lists both Resvg packages in
+  `external_node_modules` (Netlify's documented setting for native add-ons),
+  and adds Fontsource's `package.json`, `metadata.json`, and the font file
+  through `included_files`; without `metadata.json` the function returned 502.
+  The function ran on `nodejs24.x` and streamed its response, so no
+  `Content-Length` arrives.
+- **Netlify Edge Functions, `metaplate/edge`.** `netlify/edge-functions/og.ts`
+  returns `createEdgeOg(...).fetchableFrom(...)` at `/og-edge/:slug`. npm
+  packages installed in `node_modules` are imported by name, as Netlify
+  documents, and the CLI bundles them. Edge functions have no filesystem, so
+  `@resvg/resvg-wasm/index_bg.wasm`, `satori/layout.wasm`, and the font are
+  static files in the publish directory, fetched as bytes from the request
+  origin on first render and passed as `resvg.wasm`, `layout.wasm`, and font
+  data. The bundle is 1.10 MB gzip (limit 20 MB), and the documented 50 ms CPU limit did
+  not stop any observed render (CPU time was not measured).
+- **Caveat.** The edge site's first deploy served two uniform, text-free cards
+  with valid format, size, and headers; later cold renders were correct, and
+  the cause, most likely a first-deploy propagation race on the same-origin
+  font fetch, was not reproduced. The evidence therefore also decodes each
+  image and requires it not to be uniform.
+
+Each certification covers that dated deployment, its runtime, and the packed
+version; it is not a guarantee for later Netlify releases.
+
+- [Netlify Functions get started](https://docs.netlify.com/build/functions/get-started/)
+- [Netlify Functions API](https://docs.netlify.com/build/functions/api/)
+- [Netlify file-based configuration](https://docs.netlify.com/build/configure-builds/file-based-configuration/)
+- [Netlify Edge Functions API](https://docs.netlify.com/build/edge-functions/api/)
+- [Netlify Edge Functions limits](https://docs.netlify.com/build/edge-functions/limits/)
 - [Netlify Functions overview](https://docs.netlify.com/build/functions/overview/)
 - [Netlify Functions configuration](https://docs.netlify.com/build/functions/configuration/)
 - [Netlify Express deployment](https://docs.netlify.com/build/frameworks/framework-setup-guides/express/)
@@ -296,8 +340,10 @@ methods may throw. `metaplate/edge` is the Wasm-compatible path: it renders
 PNG through `@resvg/resvg-wasm`, takes the Wasm module and fonts as bytes from
 the caller, and imports no Node built-ins. See the README section
 [Edge runtimes with `metaplate/edge`](../README.md#edge-runtimes-with-metaplateedge).
-It is tested in Node against the Wasm renderer and from the packed tarball, but
-no hosted edge deployment is certified yet.
+It is tested in Node against the Wasm renderer and from the packed tarball, and
+hosted-certified on Netlify Edge Functions (see
+[Hosted Netlify evidence](#hosted-netlify-evidence)); other edge platforms are
+not certified.
 
 Where that is not enough, or where JPEG or WebP output is required:
 

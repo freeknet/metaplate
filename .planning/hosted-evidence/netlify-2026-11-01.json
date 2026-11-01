@@ -1,0 +1,393 @@
+{
+  "schemaVersion": 1,
+  "provider": "Netlify",
+  "recordedAt": "2026-11-01",
+  "commit": "4b04f90f075f101d029b614c5510a7b0c9bb50a7",
+  "commitNote": "The tarball was packed from 4b04f90; main's merge commit 09182a6 has an identical tree.",
+  "packageVersion": "0.8.0",
+  "packedArtifact": {
+    "file": "metaplate-0.8.0.tgz",
+    "command": "npm run build && npm pack",
+    "sha256": "4ff95d579afae4ede7f2d21628172a3674aa9a8f4341ceb5c8cce68f31dcd278",
+    "consumption": "copied into each fixture directory and installed as \"metaplate\": \"file:./metaplate-0.8.0.tgz\"; the Netlify CLI bundled the installed node_modules locally and uploaded the bundles"
+  },
+  "tooling": {
+    "localNode": "v24.22.2",
+    "localNpm": "11",
+    "deployCli": "Netlify CLI 27.1.1 (netlify-cli/27.1.1 win32-x64 node-v22.19.0)"
+  },
+  "scope": "Netlify team lnorton89 (Free plan). Both sites were created for this certification on 2026-11-01 with Netlify-generated names; no other site was read, linked, or changed.",
+  "verifyUrl": "node dist/cli.js verify-url --json --size 1200x630 --format png <url>, run from the worktree; each URL was then fetched again with a plain HTTPS GET to record status, headers, byte length, SHA-256, and a decoded-content check (sharp stats(): uniform image and entropy)",
+  "routes": {
+    "netlify-node": {
+      "site": {
+        "id": "818d31da-2427-4c4d-ae79-89b99a92355a",
+        "name": "teal-elf-920c7c",
+        "url": "https://teal-elf-920c7c.netlify.app"
+      },
+      "fixture": "examples/hosted/netlify/functions",
+      "install": "npm install --os=linux --cpu=x64 --libc=glibc (selects @resvg/resvg-js-linux-x64-gnu, the binding for Netlify's Linux x64 Functions runtime, on a Windows deploy host)",
+      "deployCommand": "netlify deploy --prod --no-build --site 818d31da-2427-4c4d-ae79-89b99a92355a --dir public --functions netlify/functions",
+      "deployHistory": [
+        {
+          "deploymentId": "6ae79fb149e2c876363bf867",
+          "result": "502: fontsourceFontLoader reads node_modules/@fontsource/inter/metadata.json, which included_files lacked"
+        },
+        {
+          "deploymentId": "6ae79fef0394fb3bf983c6c3",
+          "result": "ready; certified below"
+        }
+      ],
+      "deployment": {
+        "deploymentId": "6ae79fef0394fb3bf983c6c3",
+        "state": "ready",
+        "context": "production",
+        "createdAt": "2026-11-01T20:24:15.244Z",
+        "publishedAt": "2026-11-01T20:24:27.308Z",
+        "deployUrl": "https://6ae79fef0394fb3bf983c6c3--teal-elf-920c7c.netlify.app",
+        "function": {
+          "name": "og",
+          "runtime": "nodejs24.x",
+          "region": "us-east-2",
+          "memoryMb": 1024,
+          "invocationMode": "stream",
+          "bundleBytes": 3448035,
+          "runtimeAPIVersion": 2,
+          "routes": [
+            {
+              "path": "/og/:slug",
+              "methods": [
+                "GET"
+              ]
+            }
+          ]
+        }
+      },
+      "nativeAddon": "external_node_modules = [\"@resvg/resvg-js\", \"@resvg/resvg-js-linux-x64-gnu\"] with node_bundler = \"esbuild\"; metaplate/node rasterizes only through @resvg/resvg-js, so the 200 PNG responses show the Linux binding loaded",
+      "capturedAt": "2026-11-01T20:31:50.981Z",
+      "verifyUrlOutput": {
+        "schemaVersion": 1,
+        "urls": [
+          {
+            "url": "https://teal-elf-920c7c.netlify.app/og/hosted",
+            "finalUrl": "https://teal-elf-920c7c.netlify.app/og/hosted",
+            "redirects": [],
+            "contentType": "image/png",
+            "bytes": 15536,
+            "valid": true,
+            "image": {
+              "format": "png",
+              "width": 1200,
+              "height": 630,
+              "bytes": 15536
+            },
+            "globalIssues": [],
+            "targets": {}
+          },
+          {
+            "url": "https://teal-elf-920c7c.netlify.app/og/netlify",
+            "finalUrl": "https://teal-elf-920c7c.netlify.app/og/netlify",
+            "redirects": [],
+            "contentType": "image/png",
+            "bytes": 15407,
+            "valid": true,
+            "image": {
+              "format": "png",
+              "width": 1200,
+              "height": 630,
+              "bytes": 15407
+            },
+            "globalIssues": [],
+            "targets": {}
+          }
+        ]
+      },
+      "responses": [
+        {
+          "url": "https://teal-elf-920c7c.netlify.app/og/hosted",
+          "status": 200,
+          "elapsedMs": 1522,
+          "contentType": "image/png",
+          "cacheControl": "public,max-age=86400",
+          "contentLength": "15536",
+          "etag": "\"9cac74498fce619d617599e55c1b58631e4db5a976e6a5de377f5d96b534f60d\"",
+          "headers": {
+            "age": "392",
+            "cache-control": "public,max-age=86400",
+            "cache-status": "\"Netlify Edge\"; hit; ttl=86008",
+            "content-length": "15536",
+            "content-type": "image/png",
+            "date": "Sun, 01 Nov 2026 20:31:53 GMT",
+            "etag": "\"9cac74498fce619d617599e55c1b58631e4db5a976e6a5de377f5d96b534f60d\"",
+            "netlify-vary": "query",
+            "server": "Netlify",
+            "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+            "x-content-type-options": "nosniff",
+            "x-nf-request-id": "01M6CCZFEXGRCJKN8R34SSTH5V"
+          },
+          "byteLength": 15536,
+          "sha256": "9cac74498fce619d617599e55c1b58631e4db5a976e6a5de377f5d96b534f60d",
+          "content": {
+            "tool": "sharp stats()",
+            "entropy": 0.184,
+            "uniform": false,
+            "channelRanges": [
+              [
+                17,
+                255
+              ],
+              [
+                24,
+                255
+              ],
+              [
+                39,
+                255
+              ],
+              [
+                255,
+                255
+              ]
+            ],
+            "nonUniform": true
+          }
+        },
+        {
+          "url": "https://teal-elf-920c7c.netlify.app/og/netlify",
+          "status": 200,
+          "elapsedMs": 308,
+          "contentType": "image/png",
+          "cacheControl": "public,max-age=86400",
+          "contentLength": null,
+          "etag": "\"4b548bcad1f3918c7aa7b0a1038a168d009f6cb18604e605591b39c9176416a7\"",
+          "headers": {
+            "age": "0",
+            "cache-control": "public,max-age=86400",
+            "cache-status": "\"Netlify Durable\"; fwd=bypass, \"Netlify Edge\"; fwd=miss; fwd-status=200; stored",
+            "content-type": "image/png",
+            "date": "Sun, 01 Nov 2026 20:31:54 GMT",
+            "etag": "\"4b548bcad1f3918c7aa7b0a1038a168d009f6cb18604e605591b39c9176416a7\"",
+            "netlify-vary": "query",
+            "server": "Netlify",
+            "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+            "transfer-encoding": "chunked",
+            "x-content-type-options": "nosniff",
+            "x-nf-request-id": "01M6CCZFMJDVRGTMA583VG14DY"
+          },
+          "byteLength": 15407,
+          "sha256": "4b548bcad1f3918c7aa7b0a1038a168d009f6cb18604e605591b39c9176416a7",
+          "content": {
+            "tool": "sharp stats()",
+            "entropy": 0.181,
+            "uniform": false,
+            "channelRanges": [
+              [
+                17,
+                255
+              ],
+              [
+                24,
+                255
+              ],
+              [
+                39,
+                255
+              ],
+              [
+                255,
+                255
+              ]
+            ],
+            "nonUniform": true
+          }
+        }
+      ],
+      "distinctBytesPerSlug": true
+    },
+    "netlify-edge": {
+      "site": {
+        "id": "515b4a5c-38d0-43aa-b7b8-c9f357003dc5",
+        "name": "stellular-arithmetic-22095e",
+        "url": "https://stellular-arithmetic-22095e.netlify.app"
+      },
+      "fixture": "examples/hosted/netlify/edge",
+      "install": "npm install, then npm run assets (copies @resvg/resvg-wasm/index_bg.wasm, satori/layout.wasm, and the Inter 700 WOFF into public/)",
+      "deployCommand": "netlify deploy --prod --no-build --site 515b4a5c-38d0-43aa-b7b8-c9f357003dc5 --dir public",
+      "packaging": "npm packages installed in node_modules and imported by name (Netlify's documented npm support for Edge Functions; no import map, no npm: specifiers), bundled by the CLI's edge-functions bundling step during the --no-build deploy. The two Wasm modules and the font are static files in the publish directory, fetched as bytes from the request origin on first render and passed to createEdgeOg as resvg.wasm and layout.wasm, so neither Wasm module is inside the edge bundle.",
+      "deployHistory": [
+        {
+          "deploymentId": "6ae7a0b5dd9e780c65a1acf3",
+          "result": "200 image/png, but /og-edge/hosted and /og-edge/edge were blank cards; see caveat"
+        },
+        {
+          "deploymentId": "6ae7a13742402c1143a1acf1",
+          "result": "diagnostic build with asset-fetch logging; rendered text"
+        },
+        {
+          "deploymentId": "6ae7a1815a2fc0ea74f6bc1b",
+          "result": "fixture exactly as committed; certified below"
+        }
+      ],
+      "deployment": {
+        "deploymentId": "6ae7a1815a2fc0ea74f6bc1b",
+        "state": "ready",
+        "context": "production",
+        "createdAt": "2026-11-01T20:30:57.494Z",
+        "publishedAt": "2026-11-01T20:30:59.994Z",
+        "deployUrl": "https://6ae7a1815a2fc0ea74f6bc1b--stellular-arithmetic-22095e.netlify.app",
+        "edgeFunctionsPresent": true
+      },
+      "bundle": {
+        "bundlerVersion": "@netlify/edge-bundler 16.0.3 (from .netlify/edge-functions-dist/manifest.json)",
+        "format": "eszip2",
+        "eszipBytes": 3292842,
+        "gzipBytes": 1103580,
+        "limit": "20 MB after compression (https://docs.netlify.com/build/edge-functions/limits/)",
+        "note": "Measured from the local bundle the CLI produced for the final deploy. It vendors Satori's default build beside satori/standalone; the Wasm modules are not inside it."
+      },
+      "runtimeObservation": "X-Metaplate-Runtime is \"deno:\": the Deno global exists in Netlify's edge runtime, but Deno.version.deno is an empty string there",
+      "cpuLimit": "Netlify documents 50 ms of CPU per request (https://docs.netlify.com/build/edge-functions/limits/); every observed render, including the first requests after each deploy, returned 200, so the limit did not block them. CPU time per request was not measured",
+      "caveat": {
+        "observed": "2026-11-01, deploy 6ae7a0b5dd9e780c65a1acf3 (the edge site's first deploy, same fixture sources)",
+        "symptom": "/og-edge/hosted and /og-edge/edge returned 200 image/png 1200x630, but both were the same solid #064e3b card with no text: identical ETag (062b3cea...c478) and image entropy 0.000. verify-url's format, dimension, and content-type checks alone would have accepted them. The CDN cached both for 24h under Cache-Control: public, max-age=86400, so those slugs are not used as evidence.",
+        "diagnosis": "Diagnostic deploy 6ae7a13742402c1143a1acf1 logged every asset fetch: two fresh cold-start slugs rendered text (entropy 0.215 and 0.213), and /wasm/layout.wasm (200 application/wasm, 520763 bytes, head 0061736d), /wasm/resvg.wasm (200 application/wasm, 2478606 bytes, head 0061736d), and /fonts/inter-latin-700-normal.woff (200 application/font-woff, 31320 bytes, head 774f4646) all returned the right bytes. A local Node reproduction of createEdgeOg with the same files renders text on the first call, sequential and concurrent. Most likely a first-deploy propagation race: the same-origin font fetch received non-font bytes while the brand-new site propagated, and Satori drew no glyphs without raising an error. Not reproduced on demand.",
+        "followUp": "A library change that rejects non-font bytes with an error is being made separately. This evidence therefore adds a decoded-content check (sharp stats(): not uniform, entropy > 0) for every certified URL."
+      },
+      "capturedAt": "2026-11-01T20:31:49.265Z",
+      "verifyUrlOutput": {
+        "schemaVersion": 1,
+        "urls": [
+          {
+            "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/cert-990d8a",
+            "finalUrl": "https://stellular-arithmetic-22095e.netlify.app/og-edge/cert-990d8a",
+            "redirects": [],
+            "contentType": "image/png",
+            "bytes": 19767,
+            "valid": true,
+            "image": {
+              "format": "png",
+              "width": 1200,
+              "height": 630,
+              "bytes": 19767
+            },
+            "globalIssues": [],
+            "targets": {}
+          },
+          {
+            "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/cert-d16553",
+            "finalUrl": "https://stellular-arithmetic-22095e.netlify.app/og-edge/cert-d16553",
+            "redirects": [],
+            "contentType": "image/png",
+            "bytes": 19452,
+            "valid": true,
+            "image": {
+              "format": "png",
+              "width": 1200,
+              "height": 630,
+              "bytes": 19452
+            },
+            "globalIssues": [],
+            "targets": {}
+          }
+        ]
+      },
+      "responses": [
+        {
+          "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/cert-990d8a",
+          "status": 200,
+          "elapsedMs": 302,
+          "contentType": "image/png",
+          "cacheControl": "public, max-age=86400",
+          "contentLength": null,
+          "etag": "\"025e84897312f43748f462f4b990abc3b60a4ea514a693ed22e071cf20da6350\"",
+          "headers": {
+            "cache-control": "public, max-age=86400",
+            "content-type": "image/png",
+            "date": "Sun, 01 Nov 2026 20:31:49 GMT",
+            "etag": "\"025e84897312f43748f462f4b990abc3b60a4ea514a693ed22e071cf20da6350\"",
+            "server": "Netlify",
+            "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+            "transfer-encoding": "chunked",
+            "vary": "Accept-Encoding",
+            "x-metaplate-runtime": "deno:",
+            "x-nf-request-id": "01M6CCZAXXCNCNJ1R1HAHWEE3T"
+          },
+          "byteLength": 19767,
+          "sha256": "025e84897312f43748f462f4b990abc3b60a4ea514a693ed22e071cf20da6350",
+          "content": {
+            "tool": "sharp stats()",
+            "entropy": 0.245,
+            "uniform": false,
+            "channelRanges": [
+              [
+                6,
+                236
+              ],
+              [
+                78,
+                253
+              ],
+              [
+                59,
+                245
+              ],
+              [
+                255,
+                255
+              ]
+            ],
+            "nonUniform": true
+          }
+        },
+        {
+          "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/cert-d16553",
+          "status": 200,
+          "elapsedMs": 99,
+          "contentType": "image/png",
+          "cacheControl": "public, max-age=86400",
+          "contentLength": null,
+          "etag": "\"95d7a5250e4eb134dec9f1c8fa89062faf0352d950b7adff4607d07ed758cd8f\"",
+          "headers": {
+            "cache-control": "public, max-age=86400",
+            "content-type": "image/png",
+            "date": "Sun, 01 Nov 2026 20:31:49 GMT",
+            "etag": "\"95d7a5250e4eb134dec9f1c8fa89062faf0352d950b7adff4607d07ed758cd8f\"",
+            "server": "Netlify",
+            "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+            "transfer-encoding": "chunked",
+            "vary": "Accept-Encoding",
+            "x-metaplate-runtime": "deno:",
+            "x-nf-request-id": "01M6CCZB4APENKN5WTAT69JBJC"
+          },
+          "byteLength": 19452,
+          "sha256": "95d7a5250e4eb134dec9f1c8fa89062faf0352d950b7adff4607d07ed758cd8f",
+          "content": {
+            "tool": "sharp stats()",
+            "entropy": 0.243,
+            "uniform": false,
+            "channelRanges": [
+              [
+                6,
+                236
+              ],
+              [
+                78,
+                253
+              ],
+              [
+                59,
+                245
+              ],
+              [
+                255,
+                255
+              ]
+            ],
+            "nonUniform": true
+          }
+        }
+      ],
+      "distinctBytesPerSlug": true
+    }
+  }
+}

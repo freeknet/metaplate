@@ -352,10 +352,239 @@
       "id": "netlify-node",
       "provider": "Netlify",
       "runtime": "Node.js Functions",
-      "api": "Function/Response",
-      "status": "certified-local-contract",
-      "evidence": "scripts/verify-package.mjs packed-artifact deployment fixture",
-      "officialDocs": "https://docs.netlify.com/build/functions/configuration/"
+      "api": "metaplate/node handlerFrom as the default export over Web Request/Response with context.params",
+      "status": "certified",
+      "evidence": ".planning/hosted-evidence/netlify-2026-11-01.json; fixture examples/hosted/netlify/functions",
+      "localContractEvidence": "scripts/verify-package.mjs packed-artifact deployment fixture",
+      "runtimeBoundary": "Hosted Netlify Function on nodejs24.x (us-east-2), production deploy of 2026-11-01 from the packed 0.8.0 tarball, deployed with the Netlify CLI from a Linux-targeted local install; Netlify Edge Functions are the separate netlify-edge route",
+      "officialDocs": "https://docs.netlify.com/build/functions/get-started/",
+      "officialReferences": [
+        "https://docs.netlify.com/build/functions/get-started/",
+        "https://docs.netlify.com/build/functions/api/",
+        "https://docs.netlify.com/build/functions/configuration/",
+        "https://docs.netlify.com/build/configure-builds/file-based-configuration/"
+      ],
+      "certification": {
+        "verifiedAt": "2026-11-01T20:31:50.981Z",
+        "provider": "Netlify",
+        "providerVersion": "Netlify CLI 27.1.1 (netlify-cli/27.1.1 win32-x64 node-v22.19.0)",
+        "commit": "4b04f90f075f101d029b614c5510a7b0c9bb50a7",
+        "commitSha": "4b04f90f075f101d029b614c5510a7b0c9bb50a7",
+        "packageVersion": "0.8.0",
+        "packedArtifact": {
+          "file": "metaplate-0.8.0.tgz",
+          "sha256": "4ff95d579afae4ede7f2d21628172a3674aa9a8f4341ceb5c8cce68f31dcd278",
+          "installedAs": "file:./metaplate-0.8.0.tgz in the deployed fixture"
+        },
+        "evidenceUrlOrArtifact": ".planning/hosted-evidence/netlify-2026-11-01.json",
+        "runtimeVersion": "Netlify Functions nodejs24.x (us-east-2, 1024 MB, stream invocation mode)",
+        "site": "teal-elf-920c7c",
+        "siteId": "818d31da-2427-4c4d-ae79-89b99a92355a",
+        "deploymentId": "6ae79fef0394fb3bf983c6c3",
+        "productionBuild": {
+          "command": "netlify deploy --prod --no-build --site 818d31da-2427-4c4d-ae79-89b99a92355a --dir public --functions netlify/functions",
+          "site": "teal-elf-920c7c",
+          "deploymentId": "6ae79fef0394fb3bf983c6c3",
+          "state": "ready",
+          "context": "production",
+          "publishedAt": "2026-11-01T20:24:27.308Z"
+        },
+        "output": "https://teal-elf-920c7c.netlify.app",
+        "servedOutput": [
+          "https://teal-elf-920c7c.netlify.app/og/hosted",
+          "https://teal-elf-920c7c.netlify.app/og/netlify"
+        ],
+        "imageVerification": {
+          "verified": true,
+          "tool": "metaplate verify-url --json --size 1200x630 --format png",
+          "results": [
+            {
+              "url": "https://teal-elf-920c7c.netlify.app/og/hosted",
+              "valid": true,
+              "contentType": "image/png",
+              "format": "png",
+              "width": 1200,
+              "height": 630,
+              "bytes": 15536
+            },
+            {
+              "url": "https://teal-elf-920c7c.netlify.app/og/netlify",
+              "valid": true,
+              "contentType": "image/png",
+              "format": "png",
+              "width": 1200,
+              "height": 630,
+              "bytes": 15407
+            }
+          ]
+        },
+        "responseVerification": {
+          "verified": true,
+          "distinctBytesPerSlug": true,
+          "nonUniformImages": true,
+          "results": [
+            {
+              "url": "https://teal-elf-920c7c.netlify.app/og/hosted",
+              "status": 200,
+              "contentType": "image/png",
+              "cacheControl": "public,max-age=86400",
+              "contentLength": "15536",
+              "transferEncoding": null,
+              "etag": "\"9cac74498fce619d617599e55c1b58631e4db5a976e6a5de377f5d96b534f60d\"",
+              "sha256": "9cac74498fce619d617599e55c1b58631e4db5a976e6a5de377f5d96b534f60d",
+              "cacheStatus": "\"Netlify Edge\"; hit; ttl=86008",
+              "contentCheck": {
+                "tool": "sharp stats()",
+                "entropy": 0.184,
+                "uniform": false
+              }
+            },
+            {
+              "url": "https://teal-elf-920c7c.netlify.app/og/netlify",
+              "status": 200,
+              "contentType": "image/png",
+              "cacheControl": "public,max-age=86400",
+              "contentLength": null,
+              "transferEncoding": "chunked",
+              "etag": "\"4b548bcad1f3918c7aa7b0a1038a168d009f6cb18604e605591b39c9176416a7\"",
+              "sha256": "4b548bcad1f3918c7aa7b0a1038a168d009f6cb18604e605591b39c9176416a7",
+              "cacheStatus": "\"Netlify Durable\"; fwd=bypass, \"Netlify Edge\"; fwd=miss; fwd-status=200; stored",
+              "contentCheck": {
+                "tool": "sharp stats()",
+                "entropy": 0.181,
+                "uniform": false
+              }
+            }
+          ]
+        },
+        "nativeAddon": "external_node_modules = [\"@resvg/resvg-js\", \"@resvg/resvg-js-linux-x64-gnu\"] with node_bundler = \"esbuild\"; metaplate/node rasterizes only through @resvg/resvg-js, so the 200 PNG responses show the Linux binding loaded"
+      }
+    },
+    {
+      "id": "netlify-edge",
+      "provider": "Netlify Edge Functions",
+      "runtime": "Netlify Edge Functions (Deno-based edge)",
+      "edgeRuntime": true,
+      "api": "metaplate/edge createEdgeOg fetchableFrom with resvg.wasm and layout.wasm fetched as bytes",
+      "status": "certified",
+      "evidence": ".planning/hosted-evidence/netlify-2026-11-01.json; fixture examples/hosted/netlify/edge",
+      "runtimeBoundary": "Hosted Netlify Edge Function, production deploy of 2026-11-01 from the packed 0.8.0 tarball; the Wasm modules and the font are static files of the same site, fetched on first render. metaplate/node remains unsupported on edge.",
+      "officialDocs": "https://docs.netlify.com/build/edge-functions/api/",
+      "officialReferences": [
+        "https://docs.netlify.com/build/edge-functions/overview/",
+        "https://docs.netlify.com/build/edge-functions/api/",
+        "https://docs.netlify.com/build/edge-functions/limits/"
+      ],
+      "certification": {
+        "verifiedAt": "2026-11-01T20:31:49.265Z",
+        "provider": "Netlify",
+        "providerVersion": "Netlify CLI 27.1.1 (netlify-cli/27.1.1 win32-x64 node-v22.19.0)",
+        "commit": "4b04f90f075f101d029b614c5510a7b0c9bb50a7",
+        "commitSha": "4b04f90f075f101d029b614c5510a7b0c9bb50a7",
+        "packageVersion": "0.8.0",
+        "packedArtifact": {
+          "file": "metaplate-0.8.0.tgz",
+          "sha256": "4ff95d579afae4ede7f2d21628172a3674aa9a8f4341ceb5c8cce68f31dcd278",
+          "installedAs": "file:./metaplate-0.8.0.tgz in the deployed fixture"
+        },
+        "evidenceUrlOrArtifact": ".planning/hosted-evidence/netlify-2026-11-01.json",
+        "runtimeVersion": "Netlify Edge Functions, Deno-based (Deno.version.deno reported as an empty string)",
+        "site": "stellular-arithmetic-22095e",
+        "siteId": "515b4a5c-38d0-43aa-b7b8-c9f357003dc5",
+        "deploymentId": "6ae7a1815a2fc0ea74f6bc1b",
+        "productionBuild": {
+          "command": "netlify deploy --prod --no-build --site 515b4a5c-38d0-43aa-b7b8-c9f357003dc5 --dir public",
+          "site": "stellular-arithmetic-22095e",
+          "deploymentId": "6ae7a1815a2fc0ea74f6bc1b",
+          "state": "ready",
+          "context": "production",
+          "publishedAt": "2026-11-01T20:30:59.994Z"
+        },
+        "output": "https://stellular-arithmetic-22095e.netlify.app",
+        "servedOutput": [
+          "https://stellular-arithmetic-22095e.netlify.app/og-edge/cert-990d8a",
+          "https://stellular-arithmetic-22095e.netlify.app/og-edge/cert-d16553"
+        ],
+        "imageVerification": {
+          "verified": true,
+          "tool": "metaplate verify-url --json --size 1200x630 --format png",
+          "results": [
+            {
+              "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/cert-990d8a",
+              "valid": true,
+              "contentType": "image/png",
+              "format": "png",
+              "width": 1200,
+              "height": 630,
+              "bytes": 19767
+            },
+            {
+              "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/cert-d16553",
+              "valid": true,
+              "contentType": "image/png",
+              "format": "png",
+              "width": 1200,
+              "height": 630,
+              "bytes": 19452
+            }
+          ]
+        },
+        "responseVerification": {
+          "verified": true,
+          "distinctBytesPerSlug": true,
+          "nonUniformImages": true,
+          "results": [
+            {
+              "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/cert-990d8a",
+              "status": 200,
+              "contentType": "image/png",
+              "cacheControl": "public, max-age=86400",
+              "contentLength": null,
+              "transferEncoding": "chunked",
+              "etag": "\"025e84897312f43748f462f4b990abc3b60a4ea514a693ed22e071cf20da6350\"",
+              "sha256": "025e84897312f43748f462f4b990abc3b60a4ea514a693ed22e071cf20da6350",
+              "xMetaplateRuntime": "deno:",
+              "contentCheck": {
+                "tool": "sharp stats()",
+                "entropy": 0.245,
+                "uniform": false
+              }
+            },
+            {
+              "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/cert-d16553",
+              "status": 200,
+              "contentType": "image/png",
+              "cacheControl": "public, max-age=86400",
+              "contentLength": null,
+              "transferEncoding": "chunked",
+              "etag": "\"95d7a5250e4eb134dec9f1c8fa89062faf0352d950b7adff4607d07ed758cd8f\"",
+              "sha256": "95d7a5250e4eb134dec9f1c8fa89062faf0352d950b7adff4607d07ed758cd8f",
+              "xMetaplateRuntime": "deno:",
+              "contentCheck": {
+                "tool": "sharp stats()",
+                "entropy": 0.243,
+                "uniform": false
+              }
+            }
+          ]
+        },
+        "packaging": "npm packages installed in node_modules and imported by name (Netlify's documented npm support for Edge Functions; no import map, no npm: specifiers), bundled by the CLI's edge-functions bundling step during the --no-build deploy. The two Wasm modules and the font are static files in the publish directory, fetched as bytes from the request origin on first render and passed to createEdgeOg as resvg.wasm and layout.wasm, so neither Wasm module is inside the edge bundle.",
+        "bundle": {
+          "bundlerVersion": "@netlify/edge-bundler 16.0.3 (from .netlify/edge-functions-dist/manifest.json)",
+          "format": "eszip2",
+          "eszipBytes": 3292842,
+          "gzipBytes": 1103580,
+          "limit": "20 MB after compression (https://docs.netlify.com/build/edge-functions/limits/)",
+          "note": "Measured from the local bundle the CLI produced for the final deploy. It vendors Satori's default build beside satori/standalone; the Wasm modules are not inside it."
+        },
+        "cpuLimit": "Netlify documents 50 ms of CPU per request (https://docs.netlify.com/build/edge-functions/limits/); every observed render, including the first requests after each deploy, returned 200, so the limit did not block them. CPU time per request was not measured",
+        "caveat": {
+          "observed": "2026-11-01, deploy 6ae7a0b5dd9e780c65a1acf3 (the edge site's first deploy, same fixture sources)",
+          "symptom": "/og-edge/hosted and /og-edge/edge returned 200 image/png 1200x630, but both were the same solid #064e3b card with no text: identical ETag (062b3cea...c478) and image entropy 0.000. verify-url's format, dimension, and content-type checks alone would have accepted them. The CDN cached both for 24h under Cache-Control: public, max-age=86400, so those slugs are not used as evidence.",
+          "diagnosis": "Diagnostic deploy 6ae7a13742402c1143a1acf1 logged every asset fetch: two fresh cold-start slugs rendered text (entropy 0.215 and 0.213), and /wasm/layout.wasm (200 application/wasm, 520763 bytes, head 0061736d), /wasm/resvg.wasm (200 application/wasm, 2478606 bytes, head 0061736d), and /fonts/inter-latin-700-normal.woff (200 application/font-woff, 31320 bytes, head 774f4646) all returned the right bytes. A local Node reproduction of createEdgeOg with the same files renders text on the first call, sequential and concurrent. Most likely a first-deploy propagation race: the same-origin font fetch received non-font bytes while the brand-new site propagated, and Satori drew no glyphs without raising an error. Not reproduced on demand.",
+          "followUp": "A library change that rejects non-font bytes with an error is being made separately. This evidence therefore adds a decoded-content check (sharp stats(): not uniform, entropy > 0) for every certified URL."
+        }
+      }
     },
     {
       "id": "github-pages",
