@@ -56,3 +56,14 @@ export type {
   SocialMetaMediaInput,
   SocialMetaVideoInput,
 } from "./og-media.js";
+export {
+  serializeJsonLd,
+  socialImageJsonLd,
+  socialImageJsonLdScript,
+  type SchemaOrgPixels,
+  type SocialImageCreator,
+  type SocialImageJsonLd,
+  type SocialImageJsonLdInput,
+  type SocialImageJsonLdOptions,
+  type SocialImageObject,
+} from "./json-ld.js";
