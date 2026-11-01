@@ -62,11 +62,11 @@ export function redirectTo(location: string, status = 302): Handler {
 /** Dispatches by request path; anything unrouted is a 404. */
 export function routes(table: Record<string, Handler>): Handler {
   // A Map keeps request paths such as "/constructor" from reaching
-  // Object.prototype members.
+  // Object.prototype members, and the type check guards the dispatch.
   const handlers = new Map(Object.entries(table));
   return (request, response) => {
     const handler = handlers.get(request.url ?? "");
-    if (handler) {
+    if (typeof handler === "function") {
       handler(request, response);
       return;
     }
