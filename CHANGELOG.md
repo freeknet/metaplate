@@ -226,6 +226,11 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Documentation
 
+- Document why image responses are buffered rather than streamed: each
+  response carries `Content-Length` and a strong `ETag` from the final bytes,
+  which CDNs and the verification tools rely on, and cards are too small for
+  streaming to help.
+
 - The support table claims SvelteKit 3 `+server` routes with `adapter-node` 6
   on Node 22.17 or newer. The SvelteKit example now imports from `#lib`,
   because SvelteKit 3 removed `$lib` in favor of `package.json` subpath
