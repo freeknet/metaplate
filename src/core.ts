@@ -61,6 +61,11 @@ export type XImageOptions<Card extends XCard = XCard> = {
   card?: Card;
   /** A channel-specific image. Omit it to reuse the default social image. */
   image?: SocialImageDescriptor;
+  /**
+   * Names a declared size variant to use as the X Card image instead of the
+   * default. Mutually exclusive with `image`.
+   */
+  variant?: string;
   site?: string;
   siteId?: string;
   creator?: string;
@@ -70,6 +75,20 @@ export type XImageOptions<Card extends XCard = XCard> = {
 /** Wire-format alias retained for Next.js and existing consumers. */
 export type TwitterImageOptions<Card extends XCard = XCard> =
   XImageOptions<Card>;
+
+/**
+ * One additional size of the same card, such as a 1080x1080 square beside the
+ * 1200x630 default. Its `imagePath` defaults to the default `imagePath` with
+ * `-<name>` inserted before the extension (see `variantImagePath`).
+ */
+export type SocialImageVariantOptions = {
+  size: ImageSize;
+  imagePath?: string;
+  /** Alternative text for this variant; defaults to the card's `alt`. */
+  alt?: string;
+  /** Media type of this variant; defaults to the card's `type`. */
+  type?: string;
+};
 
 export type SocialImageOptions<Card extends XCard = XCard> = {
   size?: ImageSize;
@@ -83,6 +102,11 @@ export type SocialImageOptions<Card extends XCard = XCard> = {
   origin?: string;
   /** Media type of the image, carried into `og:image:type` where used. */
   type?: string;
+  /**
+   * Named size variants. Each adds one `og:image` descriptor after the
+   * default, in declaration order. Names are lowercase kebab-case.
+   */
+  variants?: Readonly<Record<string, SocialImageVariantOptions>>;
   /** Replaces the default Open Graph image while preserving caller order. */
   openGraph?: OpenGraphImageOptions;
   /** Overrides X Card image, card style, and account identity. */
@@ -207,6 +231,41 @@ export function socialImagePath(
   return origin ? absoluteImageUrl(origin, path) : path;
 }
 
+const VARIANT_NAME = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+
+/**
+ * Variant names become path suffixes and object keys, so they are restricted
+ * to lowercase kebab-case starting with a letter: URL-safe, and never an
+ * integer-like key that JavaScript would reorder ahead of declaration order.
+ */
+export function assertVariantName(name: string): void {
+  if (!VARIANT_NAME.test(name)) {
+    throw new Error(
+      `Invalid variant name: expected lowercase kebab-case starting with a letter; received ${JSON.stringify(name)}`,
+    );
+  }
+}
+
+/**
+ * Derives a variant's image path by inserting `-<variant>` before the last
+ * segment's extension: `og-image.png` becomes `og-image-square.png`, and an
+ * extension-free `og-image` becomes `og-image-square`.
+ */
+export function variantImagePath(imagePath: string, variant: string): string {
+  assertVariantName(variant);
+  let end = imagePath.length;
+  while (end > 0 && imagePath[end - 1] === "/") end -= 1;
+  const path = imagePath.slice(0, end);
+  const segmentStart = path.lastIndexOf("/") + 1;
+  if (segmentStart === path.length) {
+    throw new Error("imagePath must contain at least one non-slash character");
+  }
+  const dot = path.lastIndexOf(".");
+  return dot > segmentStart
+    ? `${path.slice(0, dot)}-${variant}${path.slice(dot)}`
+    : `${path}-${variant}`;
+}
+
 /** Builds the image object shared by Open Graph and Twitter metadata. */
 export function socialImage(
   route: string,
@@ -240,9 +299,57 @@ function copyImages(
 }
 
 /**
+ * Builds one descriptor per declared variant, keyed by name in declaration
+ * order. Every variant URL must differ from the default and from each other,
+ * because two sizes served from one URL cannot both match their metadata.
+ */
+function variantImages(
+  route: string,
+  alt: string,
+  defaultImage: SocialImageDescriptor,
+  options: SocialImageOptions,
+): Map<string, SocialImageDescriptor> {
+  const images = new Map<string, SocialImageDescriptor>();
+  const urls = new Set([defaultImage.url]);
+  const imagePath = options.imagePath ?? "og-image";
+  for (const [name, variant] of Object.entries(options.variants ?? {})) {
+    assertVariantName(name);
+    const image = socialImage(route, variant.alt ?? alt, {
+      size: variant.size,
+      imagePath: variant.imagePath ?? variantImagePath(imagePath, name),
+      ...(options.basePath === undefined ? {} : { basePath: options.basePath }),
+      ...(options.origin === undefined ? {} : { origin: options.origin }),
+      ...((variant.type ?? options.type) ? { type: variant.type ?? options.type } : {}),
+    });
+    if (urls.has(image.url)) {
+      throw new Error(`Variant "${name}" image URL ${image.url} is already used by another size`);
+    }
+    urls.add(image.url);
+    images.set(name, image);
+  }
+  return images;
+}
+
+function selectTwitterImage(
+  twitter: XImageOptions | undefined,
+  defaultImage: SocialImageDescriptor,
+  variants: Map<string, SocialImageDescriptor>,
+): SocialImageDescriptor {
+  if (twitter?.variant === undefined) return twitter?.image ?? defaultImage;
+  if (twitter.image) {
+    throw new Error("twitter.image and twitter.variant are mutually exclusive");
+  }
+  const image = variants.get(twitter.variant);
+  if (!image) throw new Error(`Unknown twitter.variant: ${twitter.variant}`);
+  return image;
+}
+
+/**
  * Builds Open Graph and X Card image metadata. With no overrides it preserves
  * the original one-image, large-card behavior; channel overrides are copied
- * so later caller mutation cannot change the generated metadata.
+ * so later caller mutation cannot change the generated metadata. Declared
+ * `variants` add one `og:image` each after the default; the X Card image stays
+ * the default unless `twitter.variant` or `twitter.image` selects another.
  */
 export function socialImageMetadata<
   Card extends XCard = "summary_large_image",
@@ -252,10 +359,11 @@ export function socialImageMetadata<
   options: SocialImageOptions<Card> = {},
 ): SocialImageMetadata<Card> {
   const image = socialImage(route, alt, options);
+  const variants = variantImages(route, alt, image, options);
   const openGraphImages = options.openGraph
     ? copyImages(options.openGraph.images, "Open Graph")
-    : [copyDescriptor(image, "Open Graph")];
-  const twitterImage = options.twitter?.image ?? image;
+    : [image, ...variants.values()].map((entry) => copyDescriptor(entry, "Open Graph"));
+  const twitterImage = selectTwitterImage(options.twitter, image, variants);
   const twitter = options.twitter;
   return {
     openGraph: { images: openGraphImages },

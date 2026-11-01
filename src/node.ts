@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { OG_CONTENT_TYPE } from "./core.js";
 import { detectFormat, imageContentType, type ImageFormat, type OutputFormat } from "./image.js";
 import { loadPeerPair } from "./optional-peer.js";
-import { createPlateHandlers, createPlateSocial } from "./plate.js";
+import { createPlateHandlers, createPlateSocial, createPlateViews } from "./plate.js";
 import { loadResvg, loadSatori } from "./peers.js";
 import {
   createSvgOg,
@@ -89,7 +89,15 @@ export type OutputEncoder =
       encode: (image: RenderedPixels) => Promise<Uint8Array> | Uint8Array;
     };
 
-export type NodeOgDefinition<Copy> = SvgOgDefinition<Copy> & {
+export type {
+  PlateContext,
+  PlateMetadataOptions,
+  PlateVariant,
+  PlateVariants,
+  PlateView,
+} from "./plate.js";
+
+export type NodeOgDefinition<Copy, Variant extends string = string> = SvgOgDefinition<Copy, Variant> & {
   /** Resvg rendering controls such as background and font configuration. */
   resvg?: ResvgRenderOptions;
   /** Headers added to Web Responses returned by `response` and `handler`. */
@@ -167,33 +175,110 @@ function strongEtag(bytes: Uint8Array): string {
  * Defines a Node renderer that emits image bytes and Fetch API Responses for
  * Astro, SvelteKit, Remix, Express adapters, build scripts, and other runtimes.
  */
-export function createNodeOg<Copy>(definition: NodeOgDefinition<Copy>) {
+export function createNodeOg<Copy, Variant extends string = string>(
+  definition: NodeOgDefinition<Copy, Variant>,
+) {
   const svg = createSvgOg(definition);
-  assertDimensionPreservingResvgOptions(definition.resvg, svg.size);
+  // Every size the plate renders must survive Resvg unchanged, not only the
+  // default: a `fitTo` width matching 1200 would rescale a 1080 square.
+  for (const name of [undefined, ...svg.variants]) {
+    assertDimensionPreservingResvgOptions(
+      definition.resvg,
+      name === undefined ? svg.size : svg.variant(name).size,
+    );
+  }
   assertResponseHeaderConfiguration(definition.headers, Boolean(definition.etag));
   const contentType = outputContentType(definition.output);
   assertMediaType(contentType);
   const social = createPlateSocial(definition, contentType, svg.size);
+  const encode = createEncoder(definition.output);
 
-  async function rasterize(copy: Copy) {
-    // Both peers resolve before rendering so an install missing both is told
-    // to add both, rather than reporting them one run at a time.
-    const [, Resvg] = await loadPeerPair(loadSatori, loadResvg, "metaplate/node");
-    const source = await svg.renderSvg(copy);
-    const image = new Resvg(source, definition.resvg).render();
-    if (image.width !== svg.size.width || image.height !== svg.size.height) {
-      throw new Error(
-        `Renderer dimension mismatch: expected ${svg.size.width}x${svg.size.height}, ` +
-          `received ${image.width}x${image.height}`,
-      );
+  return createPlateViews(social.variants, (name) => {
+    const svgView = name === undefined ? svg : svg.variant(name);
+    const view = social.view(name);
+    const { size } = view.context;
+
+    async function rasterize(copy: Copy) {
+      // Both peers resolve before rendering so an install missing both is
+      // told to add both, rather than reporting them one run at a time.
+      const [, Resvg] = await loadPeerPair(loadSatori, loadResvg, "metaplate/node");
+      const source = await svgView.renderSvg(copy);
+      const image = new Resvg(source, definition.resvg).render();
+      if (image.width !== size.width || image.height !== size.height) {
+        throw new Error(
+          `Renderer dimension mismatch: expected ${size.width}x${size.height}, ` +
+            `received ${image.width}x${image.height}`,
+        );
+      }
+      return image;
     }
-    return image;
-  }
 
-  async function encode(image: Awaited<ReturnType<typeof rasterize>>) {
-    if (!definition.output) return image.asPng();
+    async function render(copy: Copy): Promise<Uint8Array> {
+      return encode(await rasterize(copy));
+    }
 
-    const encoded = await definition.output.encode({
+    /**
+     * Renders raw RGBA bytes rather than PNG. A card compositing a
+     * photograph encodes far smaller as JPEG or WebP, and returning the
+     * pixmap keeps an image encoder out of this package.
+     */
+    async function renderPixels(copy: Copy): Promise<RenderedPixels> {
+      const image = await rasterize(copy);
+      return { pixels: image.pixels, width: image.width, height: image.height };
+    }
+
+    /** Bytes plus metadata describing exactly those bytes and this size. */
+    async function artifact(route: string, copy: Copy) {
+      const bytes = await render(copy);
+      const format = definition.output && "format" in definition.output
+        ? definition.output.format
+        : detectFormat(bytes);
+      return Object.freeze({
+        bytes,
+        byteLength: bytes.byteLength,
+        contentType,
+        format,
+        size,
+        image: Object.freeze({ width: size.width, height: size.height, format }),
+        metadata: view.ownMetadata(route, copy),
+        ...(definition.etag ? { etag: strongEtag(bytes) } : {}),
+      });
+    }
+
+    async function response(copy: Copy) {
+      const bytes = await render(copy);
+      const etag = definition.etag ? strongEtag(bytes) : undefined;
+      const headers = createResponseHeaders(definition as NodeOgDefinition<unknown>, contentType, bytes.byteLength, etag);
+      const body = bytes.buffer.slice(
+        bytes.byteOffset,
+        bytes.byteOffset + bytes.byteLength,
+      ) as ArrayBuffer;
+      return new Response(body, { headers });
+    }
+
+    return {
+      size,
+      image: view.image,
+      metadata: view.metadata,
+      renderSvg: svgView.renderSvg,
+      contentType,
+      render,
+      renderPixels,
+      artifact,
+      response,
+      ...createPlateHandlers(response),
+    };
+  });
+}
+
+type RasterImage = { pixels: Uint8Array; width: number; height: number; asPng(): Uint8Array };
+
+/** Encodes a raster with the plate's declared encoder, checking its output. */
+function createEncoder(output: OutputEncoder | undefined) {
+  return async function encode(image: RasterImage): Promise<Uint8Array> {
+    if (!output) return image.asPng();
+
+    const encoded = await output.encode({
       pixels: image.pixels,
       width: image.width,
       height: image.height,
@@ -214,69 +299,15 @@ export function createNodeOg<Copy>(definition: NodeOgDefinition<Copy>) {
     // A JPEG encoder that returns WebP bytes makes every downstream consumer
     // serve one format while advertising another; the agreement is declared
     // here so the mismatch is reported where it is created.
-    if ("format" in definition.output && detectFormat(encoded) !== definition.output.format) {
+    if ("format" in output && detectFormat(encoded) !== output.format) {
       throw new Error(
         `output.encode produced ${describeFormat(detectFormat(encoded))} bytes, not the declared ` +
-          `${definition.output.format} format`,
+          `${output.format} format`,
       );
     }
 
     return encoded;
-  }
-
-  async function render(copy: Copy): Promise<Uint8Array> {
-    const image = await rasterize(copy);
-    return encode(image);
-  }
-
-  /**
-   * Renders raw RGBA bytes rather than PNG. A card compositing a photograph
-   * encodes far smaller as JPEG or WebP, and returning the pixmap keeps an
-   * image encoder out of this package.
-   */
-  async function renderPixels(copy: Copy): Promise<RenderedPixels> {
-    const image = await rasterize(copy);
-    return { pixels: image.pixels, width: image.width, height: image.height };
-  }
-
-  async function artifact(route: string, copy: Copy) {
-    const bytes = await render(copy);
-    const format = definition.output && "format" in definition.output
-      ? definition.output.format
-      : detectFormat(bytes);
-    return Object.freeze({
-      bytes,
-      byteLength: bytes.byteLength,
-      contentType,
-      format,
-      size: svg.size,
-      image: Object.freeze({ width: svg.size.width, height: svg.size.height, format }),
-      metadata: social.metadata(route, copy),
-      ...(definition.etag ? { etag: strongEtag(bytes) } : {}),
-    });
-  }
-
-  async function response(copy: Copy) {
-    const bytes = await render(copy);
-    const etag = definition.etag ? strongEtag(bytes) : undefined;
-    const headers = createResponseHeaders(definition as NodeOgDefinition<unknown>, contentType, bytes.byteLength, etag);
-    const body = bytes.buffer.slice(
-      bytes.byteOffset,
-      bytes.byteOffset + bytes.byteLength,
-    ) as ArrayBuffer;
-    return new Response(body, { headers });
-  }
-
-  return Object.freeze({
-    ...svg,
-    ...social,
-    contentType,
-    render,
-    renderPixels,
-    artifact,
-    response,
-    ...createPlateHandlers(response),
-  });
+  };
 }
 
 export {
