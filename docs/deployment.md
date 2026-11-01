@@ -34,7 +34,7 @@ into an image or asset element; allowlist remote assets or keep them local.
 | Next.js native route | `metaplate/next`, or `metaplate/node` in a route handler | Next build/Node runtime | Metadata file or route handler | Static export and `next start` server output locally certified from the packed artifact; hosted Next deployment is separate |
 | Astro on-demand endpoint | `handlerFrom()` as the endpoint `GET` | `@astrojs/node` standalone server | `src/pages/[slug]/og-image.png.ts` | Locally certified from the packed artifact through the built `entry.mjs`; hosted Astro adapters are separate |
 | SvelteKit `+server` route | `handlerFrom()` as the `GET` `RequestHandler` | `adapter-node` on Node.js | `src/routes/[slug]/og-image.png/+server.ts` | Locally certified framework contract; hosted deployment of the Node server remains a recipe |
-| Cloudflare Workers / Vercel Edge / Netlify Edge | `metaplate/edge` (`fetchable()` / `fetchableFrom()`), not `metaplate/node` | `@resvg/resvg-wasm` with caller-supplied Wasm | Provider route | Tested in Node against the Wasm renderer; not certified on a hosted edge platform |
+| Cloudflare Workers / Vercel Edge / Netlify Edge | `metaplate/edge` (`fetchable()` / `fetchableFrom()`), not `metaplate/node` | `@resvg/resvg-wasm` with caller-supplied `index_bg.wasm` and `satori/layout.wasm` | Provider route | Tested in Node against the Wasm renderer; not certified on a hosted edge platform |
 
 ## Static generation
 
@@ -254,8 +254,13 @@ Cloudflare Workers, Vercel Edge, and Netlify Edge implement Web APIs, but that
 does not make the native Resvg binding executable there. Cloudflare documents
 that Node compatibility includes both supported APIs and importable shims whose
 methods may throw. `metaplate/edge` is the Wasm-compatible path: it renders
-PNG through `@resvg/resvg-wasm`, takes the Wasm module and fonts as bytes from
-the caller, and imports no Node built-ins. See the README section
+PNG through `@resvg/resvg-wasm` and lays out through `satori/standalone`,
+takes both Wasm modules (`@resvg/resvg-wasm/index_bg.wasm` and
+`satori/layout.wasm`) and fonts as bytes from the caller, and imports no Node
+built-ins. Size limits decide where it fits: a minimal edge function is about
+1.6 MB gzip, mostly the two Wasm modules, which exceeds Vercel Hobby's 1 MB Edge
+Function limit (the Resvg Wasm alone is about 0.96 MB) and fits Vercel Pro's
+2 MB. See the README section
 [Edge runtimes with `metaplate/edge`](../README.md#edge-runtimes-with-metaplateedge).
 It is tested in Node against the Wasm renderer and from the packed tarball, but
 no hosted edge deployment is certified yet.
