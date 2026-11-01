@@ -109,6 +109,17 @@ All notable changes to Metaplate are documented in this file. The project uses
   65535. `metaplate/next` rejects relative video and audio URLs because Next
   emits them without resolving `metadataBase`. Metadata without `media` is
   unchanged.
+- `socialImageJsonLd` and `socialImageJsonLdScript` describe a metadata
+  object's Open Graph images as schema.org `ImageObject` JSON-LD, following
+  schema.org's ImageObject definition and Google's image metadata guidance:
+  `contentUrl`, `url`, `caption` (alt text), `encodingFormat`, and `width` and
+  `height` as pixel `QuantitativeValue`s, plus optional `name`, `creditText`,
+  `creator`, `copyrightNotice`, `license`, `acquireLicensePage`, and
+  `representativeOfPage` from options. One image yields a single node and
+  several yield an `@graph`, with a fixed key order. Relative URLs resolve
+  against a canonical `url` validated exactly as for `socialMetaTags`. The
+  script form, and the exported `serializeJsonLd`, escape `<`, `>`, `&`,
+  U+2028, and U+2029 so the payload can never close its `<script>` element.
 
 ### Changed
 
