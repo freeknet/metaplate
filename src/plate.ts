@@ -10,6 +10,7 @@ import {
   type SocialImageOptions,
   type SocialImageVariantOptions,
 } from "./core.js";
+import type { OpenGraphMediaOptions } from "./og-media.js";
 
 /**
  * The second argument every plate `component` receives. `variant` is
@@ -41,6 +42,11 @@ export type PlateVariants<Copy, Variant extends string = string> = {
 
 /** Per-call metadata options for a plate. */
 export type PlateMetadataOptions<Variant extends string = string> = {
+  /**
+   * Open Graph video and audio for this page, carried onto
+   * `metadata.openGraph.videos` and `.audio` (see `OpenGraphMediaOptions`).
+   */
+  media?: OpenGraphMediaOptions;
   /** Selects a declared variant as the X Card image instead of the default. */
   twitter?: { variant?: Variant };
 };
@@ -53,6 +59,11 @@ type PlateSocialDefinition<Copy, Variant extends string> = {
   origin?: string;
   variants?: PlateVariants<Copy, Variant>;
 };
+
+/** Forwards per-call media only when supplied, keeping media-free output unchanged. */
+function mediaOption(options: PlateMetadataOptions | undefined): Pick<SocialImageOptions, "media"> {
+  return options?.media === undefined ? {} : { media: options.media };
+}
 
 type ResolvedVariant<Copy, Variant extends string> = Readonly<{
   context: PlateContext<Variant>;
@@ -133,6 +144,7 @@ export function createPlateSocial<Copy, Variant extends string = string>(
         ...options,
         ...variantOptions(copy),
         ...(twitterVariant === undefined ? {} : { twitter: { variant: twitterVariant } }),
+        ...mediaOption(metadataOptions),
       });
     },
     /** Metadata describing only this size, as an artifact's bytes do. */
@@ -164,7 +176,10 @@ export function createPlateSocial<Copy, Variant extends string = string>(
             `plate.variant("${name}") describes only its own size; select twitter.variant on the default plate`,
           );
         }
-        return ownMetadata(route, copy);
+        return socialImageMetadata(route, variant.alt(copy), {
+          ...sizeOptions,
+          ...mediaOption(metadataOptions),
+        });
       },
       ownMetadata,
     });
