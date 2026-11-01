@@ -36,6 +36,7 @@ It works with plain Node, static build scripts, Next.js, and Node-compatible fra
 - [Static hosts](#static-hosts)
 - [Deployment routes](#deployment-routes)
 - [Verify generated files](#verify-generated-files)
+  - [Verify a deployed URL](#verify-a-deployed-url)
 - [Entry points](#entry-points)
 - [Design lineage](#design-lineage)
 - [License](#license)
@@ -962,6 +963,84 @@ A target without `--url` or `--alt` verifies only image and platform facts and
 does not invent metadata; those two flags are evaluated against targets only,
 so they are rejected without at least one `--target`.
 
+### Verify a deployed URL
+
+`metaplate verify-url` fetches an image over http(s) and runs it through the
+same checks as `verify`, so a deployment pipeline can confirm what a crawler
+will actually receive:
+
+```sh
+npx metaplate verify-url --format png --size 1200x630 https://example.com/og.png
+```
+
+It takes the same `--json`, `--target`, `--alt`, `--max-file-size`, `--format`,
+and repeatable `--size` groups as `verify`, with URLs in place of files.
+`--target` checks evaluate the requested URL as it would be published. Beyond
+the `verify` checks, the response `Content-Type` must name the format the bytes
+really are. A success line reports the byte count and, after redirects, the
+final URL; `--json` prints `{ "schemaVersion": 1, "urls": [...] }`, where each
+entry carries the `verify` fields plus `url`, `finalUrl`, `redirects`,
+`contentType`, and `bytes`, and each failure carries a stable `code`.
+
+Fetching a URL someone else controls from a CI runner is a server-side request
+forgery risk, so the fetcher refuses by default anything that is not plainly a
+public image:
+
+- **Schemes and ports.** Only `http:` and `https:` on their default ports.
+  `file:`, `data:`, `ftp:`, and every other scheme are refused, as is any other
+  port unless it is allowed with `--allow-port PORT` (repeatable).
+- **Credentials.** URLs with user information (`https://user:pass@host/`) are
+  refused, and the password is never echoed into logs or reports. Requests
+  carry no cookies or `Authorization` header, `Set-Cookie` is ignored, and the
+  only headers sent are `Host`, `User-Agent: metaplate-verify/<version>`,
+  `Accept: image/*`, and `Accept-Encoding: identity`.
+- **Addresses.** The hostname is resolved once per hop, and the fetch is
+  refused if *any* resolved address is loopback, private (10/8, 172.16/12,
+  192.168/16), carrier-grade NAT, link-local (including 169.254.169.254 cloud
+  metadata), unique-local, unspecified, multicast, reserved, or an IPv4-mapped,
+  NAT64, or 6to4 form of one. The connection is then made to the checked
+  address itself, with the original name in `Host` and TLS SNI, so a DNS answer
+  that changes between check and connect cannot move the request.
+- **Redirects.** At most `--max-redirects N` (default 3) are followed, and every
+  hop gets the full scheme, credential, port, and address check again.
+- **Limits.** The body is capped at `--max-bytes N` (default 16 MiB) while it
+  streams, and the whole fetch, redirects included, must finish within
+  `--timeout MS` (default 10000). Each connection, from connect to the last
+  body byte, is also held to 10 seconds or the total budget, whichever is
+  lower. Only a `200` response is verified.
+
+`--allow-private` lifts the address check so you can verify a local server
+such as `http://127.0.0.1:3000`. It exists for local development only; do not
+pass it in a pipeline that fetches URLs you do not control:
+
+```sh
+npx metaplate verify-url --allow-private --allow-port 3000 --size 1200x630 http://127.0.0.1:3000/og.png
+```
+
+The same fetcher is available from `metaplate/node` as `verifyRemoteImage` and
+`fetchRemoteImage`. Failures throw `RemoteImageError` with a `code` such as
+`address`, `scheme`, `byte-limit`, `timeout`, or `content-type`:
+
+```ts
+import { RemoteImageError, verifyRemoteImage } from "metaplate/node";
+
+try {
+  const checked = await verifyRemoteImage(
+    "https://example.com/og.png",
+    { width: 1200, height: 630, format: "png" },
+    { maxBytes: 5_000_000, timeoutMs: 5_000 },
+  );
+  console.log(checked.finalUrl, checked.byteLength, checked.image);
+} catch (error) {
+  if (error instanceof RemoteImageError) console.error(error.code, error.message);
+  throw error;
+}
+```
+
+Options mirror the CLI flags: `allowPrivate`, `allowedPorts`, `maxRedirects`,
+`maxBytes`, `timeoutMs`, plus `connectionTimeoutMs` for the per-connection
+ceiling and `resolve` to replace `dns.lookup` (its answers are still checked).
+
 ## Entry points
 
 - `metaplate` — framework-free paths, dimensions, metadata, social
@@ -970,7 +1049,8 @@ so they are rejected without at least one `--target`.
   automatically.
 - `metaplate/node` — SVG, PNG, raw pixels, and any format a supplied encoder
   produces, plus Fetch API responses. Satori and Resvg are installed
-  automatically.
+  automatically. Also the hardened remote fetcher behind `verify-url`
+  (`fetchRemoteImage`, `verifyRemoteImage`).
 - `metaplate/next` — native Next.js `ImageResponse` adapter. Needs `next`.
 - `metaplate/font-data` — runtime-neutral normalization and memoization for
   application/framework-provided bytes. No peers or Node built-ins.

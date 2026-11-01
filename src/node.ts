@@ -278,3 +278,18 @@ export function createNodeOg<Copy>(definition: NodeOgDefinition<Copy>) {
     ...createPlateHandlers(response),
   });
 }
+
+export {
+  REMOTE_FETCH_DEFAULTS,
+  REMOTE_USER_AGENT,
+  RemoteImageError,
+  fetchRemoteImage,
+  verifyRemoteImage,
+  type RemoteAddress,
+  type RemoteFetchOptions,
+  type RemoteImage,
+  type RemoteImageErrorCode,
+  type RemoteImageExpectation,
+  type RemoteImageVerification,
+  type RemoteResolver,
+} from "./remote.js";
