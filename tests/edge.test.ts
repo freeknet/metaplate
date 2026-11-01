@@ -170,6 +170,64 @@ it(
   30_000,
 );
 
+it(
+  "renders declared size variants through @resvg/resvg-wasm",
+  async () => {
+    const { createEdgeOg } = await edgeEntry();
+    const contexts: { variant: string | undefined; width: number; height: number }[] = [];
+    const plate = createEdgeOg({
+      ...definition,
+      resvg: { wasm: resvgWasm },
+      imagePath: "og-image.png",
+      variants: { square: { size: { width: 1080, height: 1080 } } },
+      component: (copy: { title: string }, { variant, size }) => {
+        contexts.push({ variant, ...size });
+        return definition.component(copy);
+      },
+    });
+    const square = plate.variant("square");
+    const copy = { title: "Square" };
+
+    expect(plate.variants).toEqual(["square"]);
+    expect(square.variantName).toBe("square");
+    expect(square.size).toEqual({ width: 1080, height: 1080 });
+    expect(square.contentType).toBe("image/png");
+    expect("handler" in square).toBe(false);
+
+    const png = await square.render(copy);
+    expect(verifyImage(png, square.size, "png")).toEqual({
+      width: 1080,
+      height: 1080,
+      format: "png",
+    });
+    expect(contexts).toEqual([{ variant: "square", width: 1080, height: 1080 }]);
+
+    const response = await square.fetchable(copy).fetch();
+    expect(response.headers.get("content-type")).toBe("image/png");
+    verifyImage(new Uint8Array(await response.arrayBuffer()), square.size, "png");
+
+    const artifact = await square.artifact("/docs", copy);
+    expect(artifact.image).toEqual({ width: 1080, height: 1080, format: "png" });
+    expect(artifact.metadata.openGraph.images.map((image) => image.url)).toEqual([
+      "/docs/og-image-square.png",
+    ]);
+    expect(plate.metadata("/docs", copy).openGraph.images.map((image) => image.url)).toEqual([
+      "/docs/og-image.png",
+      "/docs/og-image-square.png",
+    ]);
+
+    // Resvg size checks cover every declared size, not only the default.
+    expect(() =>
+      createEdgeOg({
+        ...definition,
+        variants: { square: { size: { width: 1080, height: 1080 } } },
+        resvg: { fitTo: { mode: "width", value: 1200 } },
+      }),
+    ).toThrow(/must preserve the plate.s 1080x1080 dimensions/);
+  },
+  30_000,
+);
+
 it("offers Fetch-shaped handlers and no copy-bound handler", async () => {
   const { createEdgeOg } = await edgeEntry();
   const plate = createEdgeOg({ ...definition, resvg: { wasm: resvgWasm } });

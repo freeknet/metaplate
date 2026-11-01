@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { loadPeerPair } from "./optional-peer.js";
-import { createPlateHandlers } from "./plate.js";
+import { createPlateHandlers, createPlateViews } from "./plate.js";
 import { loadResvg, loadSatori } from "./peers.js";
 import {
   createRasterPlate,
@@ -16,7 +16,15 @@ export type {
   ResvgRenderOptions,
 } from "./raster.js";
 
-export type NodeOgDefinition<Copy> = SvgOgDefinition<Copy> & {
+export type {
+  PlateContext,
+  PlateMetadataOptions,
+  PlateVariant,
+  PlateVariants,
+  PlateView,
+} from "./plate.js";
+
+export type NodeOgDefinition<Copy, Variant extends string = string> = SvgOgDefinition<Copy, Variant> & {
   /** Resvg rendering controls such as background and font configuration. */
   resvg?: ResvgRenderOptions;
   /** Headers added to Web Responses returned by `response` and `handler`. */
@@ -35,8 +43,10 @@ function strongEtag(bytes: Uint8Array): string {
  * Defines a Node renderer that emits image bytes and Fetch API Responses for
  * Astro, SvelteKit, Remix, Express adapters, build scripts, and other runtimes.
  */
-export function createNodeOg<Copy>(definition: NodeOgDefinition<Copy>) {
-  const plate = createRasterPlate(definition, {
+export function createNodeOg<Copy, Variant extends string = string>(
+  definition: NodeOgDefinition<Copy, Variant>,
+) {
+  const raster = createRasterPlate(definition, {
     satori: loadSatori,
     async rasterize(source, read) {
       // Both peers resolve before rendering so an install missing both is told
@@ -47,8 +57,8 @@ export function createNodeOg<Copy>(definition: NodeOgDefinition<Copy>) {
     etag: strongEtag,
   });
 
-  return Object.freeze({
-    ...plate,
-    ...createPlateHandlers(plate.response),
+  return createPlateViews(raster.variants, (name) => {
+    const view = raster.view(name);
+    return { ...view, ...createPlateHandlers(view.response) };
   });
 }

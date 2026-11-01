@@ -1,5 +1,5 @@
 import { loadPeerPair } from "./optional-peer.js";
-import { createPlateHandlers } from "./plate.js";
+import { createPlateHandlers, createPlateViews } from "./plate.js";
 import {
   loadEdgeSatori,
   loadResvgWasm,
@@ -13,6 +13,14 @@ import type { SvgOgDefinition } from "./render.js";
 import type { SatoriRender } from "./svg-plate.js";
 
 export type { RenderedPixels } from "./raster.js";
+
+export type {
+  PlateContext,
+  PlateMetadataOptions,
+  PlateVariant,
+  PlateVariants,
+  PlateView,
+} from "./plate.js";
 
 /**
  * A compiled or compilable WebAssembly module: the module a Workers
@@ -46,7 +54,7 @@ export type EdgeResvgOptions = Omit<ResvgRenderOptions, "font" | "logLevel"> & {
   wasm?: EdgeWasmSource;
 };
 
-export type EdgeOgDefinition<Copy> = SvgOgDefinition<Copy> & {
+export type EdgeOgDefinition<Copy, Variant extends string = string> = SvgOgDefinition<Copy, Variant> & {
   /** Resvg rendering controls and the `@resvg/resvg-wasm` module. */
   resvg?: EdgeResvgOptions;
   /**
@@ -162,7 +170,9 @@ export async function initEdgeRenderer(
  * Node built-ins; fonts arrive as bytes, typically through
  * `metaplate/font-data`.
  */
-export function createEdgeOg<Copy>(definition: EdgeOgDefinition<Copy>) {
+export function createEdgeOg<Copy, Variant extends string = string>(
+  definition: EdgeOgDefinition<Copy, Variant>,
+) {
   if ((definition as { output?: unknown }).output !== undefined) {
     throw new TypeError(
       "metaplate/edge renders PNG only: @resvg/resvg-wasm has no JPEG or WebP encoder. " +
@@ -173,7 +183,7 @@ export function createEdgeOg<Copy>(definition: EdgeOgDefinition<Copy>) {
   provide(resvgSlot, wasm);
   provide(layoutSlot, definition.layout?.wasm);
 
-  const plate = createRasterPlate(
+  const raster = createRasterPlate(
     { ...definition, resvg: resvgOptions },
     {
       satori: loadSatori,
@@ -211,14 +221,17 @@ export function createEdgeOg<Copy>(definition: EdgeOgDefinition<Copy>) {
     },
   );
 
-  // Edge runtimes are Fetch-shaped, so the Fetchable forms are the primary
-  // API; the copy-bound `handler` stays a `metaplate/node` convenience.
-  const { handlerFrom, fetchable, fetchableFrom } = createPlateHandlers(plate.response);
-  return Object.freeze({
-    ...plate,
-    contentType: "image/png" as const,
-    handlerFrom,
-    fetchable,
-    fetchableFrom,
+  return createPlateViews(raster.variants, (name) => {
+    const view = raster.view(name);
+    // Edge runtimes are Fetch-shaped, so the Fetchable forms are the primary
+    // API; the copy-bound `handler` stays a `metaplate/node` convenience.
+    const { handlerFrom, fetchable, fetchableFrom } = createPlateHandlers(view.response);
+    return {
+      ...view,
+      contentType: "image/png" as const,
+      handlerFrom,
+      fetchable,
+      fetchableFrom,
+    };
   });
 }
