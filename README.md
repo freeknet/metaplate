@@ -322,8 +322,13 @@ entry:
 npm install @resvg/resvg-wasm
 ```
 
-Edge runtimes cannot locate a package's `.wasm` file on their own, so the
-caller supplies it. In a Cloudflare Worker, Wrangler
+Every edge plate needs two WebAssembly modules: Resvg's,
+`@resvg/resvg-wasm/index_bg.wasm`, and Satori's Yoga layout engine,
+`satori/layout.wasm`. `metaplate/edge` lays out through `satori/standalone`
+only, never Satori's default build, which embeds its own Yoga copy and would
+otherwise ship in the same bundle. Edge runtimes cannot locate a package's
+`.wasm` files on their own, so the caller supplies both. In a Cloudflare
+Worker, Wrangler
 [bundles `.wasm` imports as `WebAssembly.Module` values](https://developers.cloudflare.com/workers/wrangler/bundling/)
 ([Wasm in JavaScript](https://developers.cloudflare.com/workers/runtime-apis/webassembly/javascript/)),
 and `fetchableFrom` returns the `{ fetch }` object a Worker exports as its
@@ -368,36 +373,49 @@ export default og.fetchableFrom((request: Request) => ({
 }));
 ```
 
-`layout` supplies Satori's Yoga layout engine. Satori's default build compiles
-an embedded copy from bytes at runtime, which Workers rejects because its
-[`WebAssembly.instantiate()` only supports pre-compiled modules](https://developers.cloudflare.com/workers/runtime-apis/webassembly/);
-with `layout`, Metaplate uses `satori/standalone` instead (the audited Satori
-0.63.2 exports both `satori/standalone` and `satori/layout.wasm`). Runtimes
-that allow compiling Wasm from bytes, such as Deno, can omit `layout`, and
-can fetch the Resvg module instead of importing it:
+Importing the modules this way also suits Workers' rule that
+[`WebAssembly.instantiate()` only accepts pre-compiled modules](https://developers.cloudflare.com/workers/runtime-apis/webassembly/).
+The audited Satori 0.63.2 exports both `satori/standalone` and
+`satori/layout.wasm`. In Deno, or another runtime that can compile Wasm from
+bytes, copy the same two files next to the module and fetch them on the first
+render instead:
 
 ```ts
+// vendor/index_bg.wasm is copied from @resvg/resvg-wasm/index_bg.wasm,
+// vendor/layout.wasm from satori/layout.wasm.
+const vendored = (file: string) => () => fetch(new URL(`./vendor/${file}`, import.meta.url));
+
 const og = createEdgeOg({
   ...plate,
-  resvg: {
-    wasm: () => fetch(new URL("./vendor/resvg/index_bg.wasm", import.meta.url)),
-  },
+  resvg: { wasm: vendored("index_bg.wasm") },
+  layout: { wasm: vendored("layout.wasm") },
 });
 ```
 
 `resvg.wasm` and `layout.wasm` accept a `WebAssembly.Module`, bytes, a
 `Response`, a `URL`, a promise of one, or a function returning one; a function
 runs on the first render. Each Wasm module is a single instance per isolate,
-so the first source supplied wins. To supply them once for every plate, call
+so the first source supplied wins, and a source whose initialisation fails is
+tried again on the next render. To supply both once for every plate, call
 `initEdgeRenderer(resvgWasm, { layout: layoutWasm })` at module scope instead.
+A render with either module missing fails with an error naming it and where to
+pass it.
 
 The boundary is deliberately narrow:
 
 - **PNG only.** `@resvg/resvg-wasm` has no JPEG or WebP encoder, so
   `metaplate/edge` rejects `output` encoders. `renderPixels` still returns raw
   RGBA for a Wasm encoder of your own.
-- **The caller supplies the Wasm.** Nothing is fetched from `node_modules` or a
-  CDN on your behalf.
+- **The caller supplies both Wasm modules.** Nothing is fetched from
+  `node_modules` or a CDN on your behalf.
+- **About 1.6 MB gzip per edge function.** An esbuild bundle of a minimal
+  consumer measures 414 KB gzip of JavaScript (1.13 MB minified, mostly
+  `satori/standalone`) plus the two Wasm modules, `@resvg/resvg-wasm`'s
+  959 KB gzip (2.48 MB raw) and `satori/layout.wasm`'s 213 KB gzip (521 KB
+  raw). The Resvg Wasm alone fills almost all of Vercel Hobby's 1 MB (gzip)
+  Edge Function limit, so `metaplate/edge` does not fit on Hobby; Vercel Pro's
+  2 MB limit fits. Check your platform's script-size limit before choosing
+  this entry, or generate images at build time instead.
 - **Fonts arrive as bytes**, through `metaplate/font-data` loaders, never file
   paths; `resvg.font` is not available because Satori outlines text first.
 - **Fetch-shaped API.** `fetchable`, `fetchableFrom`, `handlerFrom`,
@@ -1369,7 +1387,8 @@ ceiling and `resolve` to replace `dns.lookup` (its answers are still checked).
   (`fetchRemoteImage`, `verifyRemoteImage`).
 - `metaplate/edge` — PNG, raw pixels, and Fetch API responses through
   `@resvg/resvg-wasm` for Workers, Deno, and other edge runtimes. No Node
-  built-ins. Needs `@resvg/resvg-wasm` and caller-supplied Wasm.
+  built-ins. Needs `@resvg/resvg-wasm` and the caller-supplied
+  `@resvg/resvg-wasm/index_bg.wasm` and `satori/layout.wasm` modules.
 - `metaplate/next` — native Next.js `ImageResponse` adapter. Needs `next`.
 - `metaplate/font-data` — runtime-neutral normalization and memoization for
   application/framework-provided bytes. No peers or Node built-ins.
