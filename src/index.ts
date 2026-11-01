@@ -46,3 +46,15 @@ export {
   type SocialMetaOptions,
   type SocialMetaTag,
 } from "./meta-tags.js";
+
+export {
+  serializeJsonLd,
+  socialImageJsonLd,
+  socialImageJsonLdScript,
+  type SchemaOrgPixels,
+  type SocialImageCreator,
+  type SocialImageJsonLd,
+  type SocialImageJsonLdInput,
+  type SocialImageJsonLdOptions,
+  type SocialImageObject,
+} from "./json-ld.js";
