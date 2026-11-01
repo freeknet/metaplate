@@ -14,9 +14,10 @@ brand. Choose the route that matches the entry point you use.
    provider to its Node runtime, not its Edge runtime.
 3. **Does the provider run only an edge runtime?** `metaplate/node` is not
    supported there because it loads the native `@resvg/resvg-js` binding. Use
-   static generation or `metaplate/edge`, which renders PNG through
-   `@resvg/resvg-wasm`. Web `Request`/`Response` support alone is not enough
-   for `metaplate/node`.
+   static generation or, on a Deno-based edge such as Netlify Edge Functions,
+   `metaplate/edge`, which renders PNG through `@resvg/resvg-wasm`. Cloudflare
+   Workers run neither entry (see [Edge runtimes](#edge-runtimes)). Web
+   `Request`/`Response` support alone is not enough for `metaplate/node`.
 
 Generated responses are buffered and rendering is CPU/memory intensive. For
 public dynamic routes, bound route text, use stable path keys, set cache headers,
@@ -34,7 +35,8 @@ into an image or asset element; allowlist remote assets or keep them local.
 | Next.js native route | `metaplate/next`, or `metaplate/node` in a route handler | Next build/Node runtime | Metadata file or route handler | Static export and `next start` server output locally certified from the packed artifact; hosted Next deployment is separate |
 | Astro on-demand endpoint | `handlerFrom()` as the endpoint `GET` | `@astrojs/node` standalone server | `src/pages/[slug]/og-image.png.ts` | Locally certified from the packed artifact through the built `entry.mjs`; hosted Astro adapters are separate |
 | SvelteKit `+server` route | `handlerFrom()` as the `GET` `RequestHandler` | `adapter-node` on Node.js | `src/routes/[slug]/og-image.png/+server.ts` | Locally certified framework contract; hosted deployment of the Node server remains a recipe |
-| Cloudflare Workers / Vercel Edge / Netlify Edge | `metaplate/edge` (`fetchable()` / `fetchableFrom()`), not `metaplate/node` | `@resvg/resvg-wasm` with caller-supplied `index_bg.wasm` and `satori/layout.wasm` | Provider route | Tested in Node against the Wasm renderer; hosted-certified on Netlify Edge Functions (2026-11-01); Vercel Edge was refused on the Hobby plan's 1 MB limit at 2.13 MB before the standalone-only change (about 1.59 MB now, inside Pro's 2 MB, not yet redeployed); Workers not certified |
+| Netlify Edge Functions and other Deno-based edges | `metaplate/edge` (`fetchable()` / `fetchableFrom()`), not `metaplate/node` | `@resvg/resvg-wasm` with caller-supplied `index_bg.wasm` and `satori/layout.wasm`, on a runtime that compiles Wasm at run time | Provider route | Tested in Node against the Wasm renderer; hosted-certified on Netlify Edge Functions (2026-11-01) |
+| Cloudflare Workers / Vercel Edge | None: not `metaplate/edge`, not `metaplate/node` | Isolates that forbid compiling Wasm from bytes | Static files, or the provider's Node runtime | Not supported. Workers fail every render under `wrangler dev` (workerd) because Satori's bundled HarfBuzz reads `self.location.href` and compiles its Wasm at run time (2026-11-01, local reproduction). Vercel Edge forbids the same compilation and is expected to fail likewise; its 2026-11-01 deploy was refused for size (2.13 MB gzip against Hobby's 1 MB) before any render |
 
 ## Static generation
 
@@ -193,14 +195,19 @@ certified from real production deployments made on 2026-11-01 from the packed
   `"/*/og-image.jpg"` matches, a literal `"/[slug]/og-image.jpg"` does not.
   The page's `og:image` (with Next's `?<hash>` query) and `twitter:image` were
   fetched exactly as advertised.
-- **Vercel Edge, `metaplate/edge`: not certified.** Edge cannot compile Wasm
+- **Vercel Edge, `metaplate/edge`: not supported.** Edge cannot compile Wasm
   from bytes, so both modules were `?module` imports
   (`@resvg/resvg-wasm/index_bg.wasm?module` as `resvg.wasm`,
   `satori/layout.wasm?module` as `layout.wasm`). The build accepted them, but
   the deploy was rejected: the function is 2.13 MB after gzip and the Hobby
   plan's Edge limit is 1 MB. The Resvg Wasm alone is 0.95 MB gzip, and the
-  bundle also carries Satori's default build beside `satori/standalone`. Pro's
-  2 MB limit is untested. Use the Node.js runtime on Vercel.
+  bundle also carries Satori's default build beside `satori/standalone`. A
+  smaller bundle would not help: Vercel documents that `WebAssembly.instantiate`
+  on the Edge runtime "requires the Wasm source code to be provided using the
+  import statement", and Satori's bundled HarfBuzz compiles its Wasm from
+  embedded bytes, the failure reproduced on Cloudflare Workers (see
+  [Edge runtimes](#edge-runtimes)). Not observed on Vercel, because no render
+  ran. Use the Node.js runtime on Vercel.
 
 Each certification covers that dated deployment, its runtime, and the packed
 version; it is not a guarantee for later Vercel or Next releases.
@@ -336,24 +343,43 @@ assets as files and load them using stable URLs/paths.
 Cloudflare Workers, Vercel Edge, and Netlify Edge implement Web APIs, but that
 does not make the native Resvg binding executable there. Cloudflare documents
 that Node compatibility includes both supported APIs and importable shims whose
-methods may throw. `metaplate/edge` is the Wasm-compatible path: it renders
-PNG through `@resvg/resvg-wasm` and lays out through `satori/standalone`,
-takes both Wasm modules (`@resvg/resvg-wasm/index_bg.wasm` and
-`satori/layout.wasm`) and fonts as bytes from the caller, and imports no Node
-built-ins. Size limits decide where it fits: a minimal edge function is about
-1.6 MB gzip, mostly the two Wasm modules, which exceeds Vercel Hobby's 1 MB Edge
-Function limit (the Resvg Wasm alone is about 0.96 MB) and fits Vercel Pro's
-2 MB. See the README section
+methods may throw. `metaplate/edge` is the Wasm path: it renders PNG through
+`@resvg/resvg-wasm` and lays out through `satori/standalone`, takes both Wasm
+modules (`@resvg/resvg-wasm/index_bg.wasm` and `satori/layout.wasm`) and fonts
+as bytes from the caller, and imports no Node built-ins. It runs on Deno-based
+edges, which allow WebAssembly to be compiled at run time: it is tested in Node
+against the Wasm renderer and from the packed tarball, and hosted-certified on
+Netlify Edge Functions (see [Hosted Netlify evidence](#hosted-netlify-evidence)).
+A minimal edge function is about 1.6 MB gzip, mostly the two Wasm modules; the
+certified Netlify Edge bundle was 1.10 MB gzip against a 20 MB limit. See the
+README section
 [Edge runtimes with `metaplate/edge`](../README.md#edge-runtimes-with-metaplateedge).
-It is tested in Node against the Wasm renderer and from the packed tarball, and
-hosted-certified on Netlify Edge Functions (see
-[Hosted Netlify evidence](#hosted-netlify-evidence)); other edge platforms are
-not certified.
 
-Where that is not enough, or where JPEG or WebP output is required:
+**Cloudflare Workers are not supported.** Satori shapes text with a HarfBuzz
+build bundled into `satori/standalone`. In a worker-shaped isolate it reads
+`self.location.href`, and it compiles HarfBuzz from embedded bytes on first
+use. Workers define no `location` and accept only pre-compiled Wasm modules, so
+a Worker built from the packed 0.8.0 tarball returned 500 for every render
+under `wrangler dev --local` (workerd, Wrangler 4.156.0) on 2026-11-01: first
+`TypeError: Cannot read properties of undefined (reading 'href')`, then, with
+`location` defined as a probe, `Wasm code generation disallowed by embedder`.
+Satori takes no precompiled HarfBuzz module, and every Satori release that
+exports `satori/layout.wasm` (0.35.2 and later) bundles this build, so the
+caller cannot work around it. `metaplate/edge` reports either failure as an
+error naming this limitation. The reproduction is
+[`examples/hosted/cloudflare`](https://github.com/lnorton89/metaplate/tree/main/examples/hosted/cloudflare),
+and the `cloudflare-workers` route in `deployment-evidence.json` records it.
+Vercel's Edge runtime also refuses to compile Wasm from a buffer, so it is
+expected to fail the same way (see [Vercel](#hosted-vercel-evidence)); that was
+not observed, because the deployment was refused for size first.
+
+On those runtimes, or where JPEG or WebP output is required:
 
 - generate images during a Node build and publish static files; or
 - run the image route on the provider's Node runtime/service.
 
 - [Cloudflare Workers Node.js compatibility](https://developers.cloudflare.com/workers/runtime-apis/nodejs/)
 - [Cloudflare Workers WebAssembly](https://developers.cloudflare.com/workers/runtime-apis/webassembly/)
+- [Cloudflare Workers web standards (`WebAssembly.compile` and `WebAssembly.instantiate` with a buffer are not allowed)](https://developers.cloudflare.com/workers/runtime-apis/web-standards/)
+- [Vercel Edge runtime unsupported APIs](https://vercel.com/docs/functions/runtimes/edge#unsupported-apis)
+- [Netlify Edge Functions overview](https://docs.netlify.com/build/edge-functions/overview/)

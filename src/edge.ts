@@ -19,7 +19,7 @@ export type {
 } from "./plate.js";
 
 /**
- * A compiled or compilable WebAssembly module: the module a Workers
+ * A compiled or compilable WebAssembly module: the module a bundler's
  * `import wasm from "…/index_bg.wasm"` yields, its bytes, a `Response` from
  * `fetch`, or a URL the runtime can `fetch`.
  */
@@ -144,29 +144,65 @@ function initialiseLayout(satori: SatoriStandalone): Promise<void> {
 async function loadSatori(): Promise<SatoriRender> {
   const satori = await loadSatoriStandalone();
   await initialiseLayout(satori);
-  return satori.default as unknown as SatoriRender;
+  const render = satori.default as unknown as SatoriRender;
+  return (async (...args: Parameters<SatoriRender>) => {
+    try {
+      return await render(...args);
+    } catch (error) {
+      throw explainHarfBuzzRuntime(error);
+    }
+  }) as SatoriRender;
+}
+
+const EDGE_RUNTIMES_DOC = "https://github.com/lnorton89/metaplate#edge-runtimes-with-metaplateedge";
+
+/**
+ * Satori's standalone build shapes text with a bundled HarfBuzz Emscripten
+ * build. In a worker-shaped isolate it reads `self.location.href`, which
+ * Cloudflare Workers do not define, and it compiles HarfBuzz from embedded
+ * bytes, which Workers refuse ("Wasm code generation disallowed by
+ * embedder"). Satori takes no precompiled HarfBuzz module, so neither failure
+ * can be fixed by the caller; this names the cause instead of the symptom.
+ * Every other error is returned unchanged.
+ */
+function explainHarfBuzzRuntime(error: unknown): unknown {
+  const message =
+    error instanceof Error ? error.message : typeof error === "string" ? error : "";
+  const missingLocation =
+    message.includes("reading 'href'") &&
+    typeof (globalThis as { WorkerGlobalScope?: unknown }).WorkerGlobalScope !== "undefined" &&
+    typeof (globalThis as { location?: unknown }).location === "undefined";
+  if (!missingLocation && !message.includes("Wasm code generation disallowed")) return error;
+  return new Error(
+    "metaplate/edge cannot render text in this runtime: Satori's bundled HarfBuzz text shaper " +
+      "compiles WebAssembly at runtime and expects self.location, which this runtime forbids " +
+      "(Cloudflare Workers and other V8 isolates that disallow Wasm code generation). " +
+      "metaplate/edge runs on edge runtimes that allow it, such as Deno and Netlify Edge " +
+      `Functions. See ${EDGE_RUNTIMES_DOC}`,
+    { cause: error },
+  );
 }
 
 function missingLayoutError(): Error {
   return new Error(
     "metaplate/edge has no satori/layout.wasm module to lay out with. Pass it as " +
-      "layout.wasm to createEdgeOg or to initEdgeRenderer(wasm, { layout }); in Cloudflare " +
-      'Workers, import layoutWasm from "satori/layout.wasm".',
+      "layout.wasm to createEdgeOg or to initEdgeRenderer(wasm, { layout }), for example as " +
+      "bytes fetched from a static copy of satori/layout.wasm.",
   );
 }
 
 function missingWasmError(cause: unknown): Error {
   return new Error(
     "metaplate/edge has no @resvg/resvg-wasm module to render with. Pass it as " +
-      "resvg.wasm to createEdgeOg or to initEdgeRenderer(wasm, { layout }); in Cloudflare " +
-      'Workers, import wasm from "@resvg/resvg-wasm/index_bg.wasm".',
+      "resvg.wasm to createEdgeOg or to initEdgeRenderer(wasm, { layout }), for example as " +
+      "bytes fetched from a static copy of @resvg/resvg-wasm/index_bg.wasm.",
     { cause },
   );
 }
 
 /**
  * Supplies both Wasm modules once for every edge plate, for example at the top
- * of a Worker module: `@resvg/resvg-wasm/index_bg.wasm` and Satori's
+ * of an edge function module: `@resvg/resvg-wasm/index_bg.wasm` and Satori's
  * `satori/layout.wasm`. Resolves when both renderers are ready.
  */
 export async function initEdgeRenderer(
@@ -180,10 +216,12 @@ export async function initEdgeRenderer(
 }
 
 /**
- * Defines a PNG renderer for Workers, Deno, and other Fetch-shaped runtimes,
- * rasterising through `@resvg/resvg-wasm` rather than native Resvg. It uses no
- * Node built-ins; fonts arrive as bytes, typically through
- * `metaplate/font-data`.
+ * Defines a PNG renderer for Deno-based edges (such as Netlify Edge
+ * Functions) and other Fetch-shaped runtimes that allow WebAssembly
+ * compilation at run time, rasterising through `@resvg/resvg-wasm` rather than
+ * native Resvg. It uses no Node built-ins; fonts arrive as bytes, typically
+ * through `metaplate/font-data`. Cloudflare Workers are not supported: Satori's
+ * bundled HarfBuzz cannot start there.
  */
 export function createEdgeOg<Copy, Variant extends string = string>(
   definition: EdgeOgDefinition<Copy, Variant>,

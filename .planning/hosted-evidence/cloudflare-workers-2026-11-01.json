@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "provider": "Cloudflare Workers",
+  "recordedAt": "2026-11-01",
+  "result": "not-supported",
+  "route": "cloudflare-workers",
+  "commit": "e122a8a06afc2167f28e315e093fc3a9b41d6b31",
+  "packageVersion": "0.8.0",
+  "packedArtifact": {
+    "file": "metaplate-0.8.0.tgz",
+    "command": "npm run build && npm pack",
+    "sha256": "49b523d2d5e9e9fcf542d4c25f66c1b6ebf016961660d0ed6b177579fee649b0",
+    "consumption": "copied into the fixture directory and installed as \"metaplate\": \"file:./metaplate-0.8.0.tgz\""
+  },
+  "tooling": {
+    "localNode": "v24.22.2",
+    "localNpm": "11",
+    "wrangler": "4.156.0 (npx --yes wrangler@4.156.0)",
+    "workerd": "1.20261023.1 (bundled with wrangler 4.156.0)",
+    "miniflare": "5.20261023.3-beta"
+  },
+  "scope": "Local only: wrangler dev --local runs the Worker in workerd on 127.0.0.1. Nothing was deployed and no Cloudflare account was contacted; wrangler deploy was run only with --dry-run.",
+  "fixture": {
+    "path": "examples/hosted/cloudflare/worker",
+    "compatibilityDate": "2026-10-01",
+    "dependencies": {
+      "@fontsource/inter": "5.3.0",
+      "@resvg/resvg-wasm": "2.6.2",
+      "metaplate": "file:./metaplate-0.8.0.tgz",
+      "satori": "0.63.2"
+    },
+    "wasm": "@resvg/resvg-wasm/index_bg.wasm and satori/layout.wasm imported as WebAssembly.Module values (Wrangler bundling default); the Inter 700 WOFF bundled as a Data module (ArrayBuffer)",
+    "api": "createEdgeOg({ resvg: { wasm }, layout: { wasm }, fonts: fontLoader(...) }).fetchableFrom(...) behind /og/:slug"
+  },
+  "bundle": {
+    "command": "npx --yes wrangler@4.156.0 deploy --dry-run --outdir dist",
+    "output": "Total Upload: 4551.43 KiB / gzip: 1636.10 KiB",
+    "modules": {
+      "index.js": 1628820,
+      "index_bg.wasm": 2478606,
+      "layout.wasm": 520763,
+      "inter-latin-700-normal.woff": 31320
+    }
+  },
+  "run": {
+    "command": "npx --yes wrangler@4.156.0 dev --local --port 8797 --ip 127.0.0.1",
+    "request": "GET http://127.0.0.1:8797/og/check",
+    "status": 500,
+    "observations": [
+      {
+        "step": "as built",
+        "error": "TypeError: Cannot read properties of undefined (reading 'href')",
+        "origin": "Satori's bundled HarfBuzz Emscripten glue in node_modules/satori/dist/standalone.js: B=typeof WorkerGlobalScope<\"u\" is true in workerd, so it runs A=self.location.href, and Workers define no location. The glue is an async factory invoked when satori/standalone is imported; its rejection is cached and surfaces on every render, so every request returns 500."
+      },
+      {
+        "step": "probe: globalThis.location defined before rendering (diagnostic only, not part of the fixture)",
+        "error": "RuntimeError: Aborted(CompileError: WebAssembly.instantiate(): Wasm code generation disallowed by embedder)",
+        "origin": "The glue then compiles HarfBuzz from bytes embedded in the bundle (function J(){return r(\"hb.wasm\")} with embedded bytes D, then WebAssembly.instantiate(bytes, ...)). Workers allow WebAssembly.instantiate only with a pre-compiled WebAssembly.Module."
+      }
+    ],
+    "sourceMapNote": "Wrangler source maps attribute the glue to harfbuzzjs 0.10.0 (patched) vendored inside satori (satori/src/harfbuzz.ts)."
+  },
+  "satoriVersionSurvey": {
+    "question": "Does any Satori version usable with metaplate/edge shape text on Workers?",
+    "findings": [
+      "0.35.2 and later: export ./layout.wasm (required by metaplate/edge) and ship the bundled HarfBuzz Emscripten glue that reads self.location.href in a WorkerGlobalScope and compiles hb.wasm from embedded bytes.",
+      "0.33.5 to 0.35.1: import the harfbuzzjs package instead and export ./yoga.wasm, not ./layout.wasm, so metaplate/edge cannot use them.",
+      "Satori's init(input) accepts only layout.wasm; there is no option to pass a precompiled HarfBuzz module."
+    ],
+    "conclusion": "No Satori version usable with metaplate/edge shapes text on Cloudflare Workers today."
+  },
+  "rerunWithExplanation": {
+    "recordedAt": "2026-11-01",
+    "change": "fix(edge): metaplate/edge rethrows both HarfBuzz failures as an Error naming the limitation, with the original as cause",
+    "packedArtifactSha256": "4596ddf107944bcc98df630320861f4c8119a20e58cd2d159cba56e625e8818c",
+    "packedFrom": "branch fix/edge-workers-harfbuzz working tree before commit",
+    "status": 500,
+    "bodyFirstLine": "Error: metaplate/edge cannot render text in this runtime: Satori's bundled HarfBuzz text shaper compiles WebAssembly at runtime and expects self.location, which this runtime forbids (Cloudflare Workers and other V8 isolates that disallow Wasm code generation). metaplate/edge runs on edge runtimes that allow it, such as Deno and Netlify Edge Functions. See https://github.com/lnorton89/metaplate#edge-runtimes-with-metaplateedge",
+    "consoleCause": "Caused by: TypeError: Cannot read properties of undefined (reading 'href')",
+    "bundle": "Total Upload: 4551.43 KiB / gzip: 1636.10 KiB"
+  },
+  "relatedPlatforms": {
+    "netlifyEdge": "Deno-based; allows run-time Wasm compilation and exposes location, so Satori's HarfBuzz starts. Hosted-certified on 2026-11-01 (netlify-edge).",
+    "vercelEdge": "Vercel documents that WebAssembly.instantiate on the Edge runtime requires the Wasm source to be provided with the import statement, not a buffer, so the same failure is expected. Not observed: the 2026-11-01 deployment was refused for size (2.13 MB gzip against Hobby's 1 MB) before any render ran (vercel-edge)."
+  },
+  "officialReferences": [
+    "https://developers.cloudflare.com/workers/runtime-apis/webassembly/",
+    "https://developers.cloudflare.com/workers/runtime-apis/web-standards/",
+    "https://developers.cloudflare.com/workers/wrangler/bundling/",
+    "https://vercel.com/docs/functions/runtimes/edge#unsupported-apis"
+  ]
+}

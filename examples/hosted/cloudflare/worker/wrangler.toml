@@ -1,0 +1,15 @@
+# Cloudflare Workers reproduction fixture for metaplate/edge: every render
+# fails because Satori's bundled HarfBuzz cannot start in workerd.
+# https://developers.cloudflare.com/workers/wrangler/configuration/
+# https://developers.cloudflare.com/workers/wrangler/bundling/
+name = "metaplate-repro-worker"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+# .wasm imports are bundled as WebAssembly.Module values by default; the font
+# is bundled as an ArrayBuffer so no same-origin font fetch is involved.
+[[rules]]
+type = "Data"
+globs = ["**/*.woff"]
+fallthrough = true
