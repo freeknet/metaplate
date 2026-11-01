@@ -12,13 +12,19 @@ All notable changes to Metaplate are documented in this file. The project uses
   shares `metaplate/node`'s SVG rendering, size variants, dimension checks,
   owned headers, ETags (computed with Web Crypto), `artifact`, `response`,
   `fetchable`, `fetchableFrom`, and `handlerFrom`, and imports no Node
-  built-ins. The caller supplies the Wasm module through `resvg.wasm` or
-  `initEdgeRenderer`, and may supply Satori's Yoga module through
-  `layout.wasm` for runtimes, such as Workers, that only instantiate
-  pre-compiled modules. Output is PNG only: `output` encoders are rejected
-  because `@resvg/resvg-wasm` has no JPEG or WebP encoder. The entry is tested
-  in Node against the Wasm renderer and from the packed tarball, not yet on a
-  hosted edge platform.
+  built-ins. It lays out through `satori/standalone` only and never
+  references Satori's default build, so edge bundlers ship one Satori build.
+  The caller supplies both Wasm modules, `@resvg/resvg-wasm/index_bg.wasm`
+  and `satori/layout.wasm`, through `createEdgeOg({ resvg: { wasm },
+  layout: { wasm } })` or `initEdgeRenderer(resvgWasm, { layout })`; the
+  first source supplied wins, a failed initialisation is retried on the next
+  render, and a missing module fails with an error naming it. A minimal
+  esbuild-bundled consumer is 414 KB gzip of JavaScript plus about 1.17 MB
+  gzip of Wasm, about 1.6 MB in all: within Vercel Pro's 2 MB Edge Function
+  limit, not Vercel Hobby's 1 MB. Output is PNG only: `output` encoders are
+  rejected because `@resvg/resvg-wasm` has no JPEG or WebP encoder. The entry
+  is tested in Node against the Wasm renderer and from the packed tarball, not
+  yet on a hosted edge platform.
 - `@resvg/resvg-wasm` (`>=2.6.2 <3`) is a new optional peer. `npm install
   metaplate` does not install it, and a missing peer reports
   `npm install @resvg/resvg-wasm`.
