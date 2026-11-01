@@ -1,10 +1,18 @@
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
-import { describe, expect, it } from "vitest";
-import { formatVerifyPath, parseVerifyTargets, VERIFY_USAGE } from "../src/cli-args.js";
+import { spawn, spawnSync } from "node:child_process";
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  formatVerifyPath,
+  parseVerifyTargets,
+  parseVerifyUrlInvocation,
+  VERIFY_URL_USAGE,
+  VERIFY_USAGE,
+} from "../src/cli-args.js";
 import { METAPLATE_VERSION } from "../src/version.js";
+import { closeLocalServers, localServer, redirectTo, routes, serveBytes } from "./helpers/http-fixtures.js";
+import { completePng } from "./helpers/image-fixtures.js";
 
 // The CLI runs against the built bundle; rebuild it (fast, no types) so the
 // spawn-based tests never go stale. The bundle is written into a temp dir so
@@ -22,6 +30,19 @@ await build({
 
 function run(args: string[], cwd: string) {
   return spawnSync(process.execPath, [bundlePath, ...args], { cwd, encoding: "utf8" });
+}
+
+/** Spawns without blocking, so an in-process test server can still answer. */
+function runAsync(args: string[]) {
+  return new Promise<{ status: number | null; stdout: string; stderr: string }>((resolve, reject) => {
+    const child = spawn(process.execPath, [bundlePath, ...args]);
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8").on("data", (chunk: string) => { stdout += chunk; });
+    child.stderr.setEncoding("utf8").on("data", (chunk: string) => { stderr += chunk; });
+    child.on("error", reject);
+    child.on("close", (status) => resolve({ status, stdout, stderr }));
+  });
 }
 
 it("keeps parent directories when files share a basename", () => {
@@ -147,6 +168,7 @@ describe("verify CLI", () => {
     expect(help.status).toBe(0);
     expect(help.stderr).toBe("");
     expect(help.stdout).toContain(VERIFY_USAGE);
+    expect(help.stdout).toContain(VERIFY_URL_USAGE);
     expect(shortHelp.stdout).toBe(help.stdout);
     expect(version.status).toBe(0);
     expect(version.stderr).toBe("");
@@ -301,5 +323,146 @@ describe("verify CLI", () => {
     );
     expect(verifiedSvg.status).toBe(0);
     expect(verifiedSvg.stdout).toContain("✓ good.svg 1200x630");
+  });
+});
+
+describe("parseVerifyUrlInvocation", () => {
+  it("parses URL groups, shared verify flags, and fetch limits", () => {
+    expect(
+      parseVerifyUrlInvocation([
+        "verify-url",
+        "--json",
+        "--allow-private",
+        "--allow-port",
+        "8080",
+        "--allow-port",
+        "8080",
+        "--max-bytes",
+        "1000",
+        "--max-redirects",
+        "0",
+        "--timeout",
+        "2500",
+        "--format",
+        "png",
+        "--size",
+        "1200x630",
+        "http://127.0.0.1:8080/og.png",
+      ]),
+    ).toEqual({
+      targets: [{ url: "http://127.0.0.1:8080/og.png", size: { width: 1200, height: 630 }, format: "png" }],
+      json: true,
+      socialTargets: [],
+      fetch: { allowPrivate: true, allowedPorts: [8080], maxBytes: 1000, maxRedirects: 0, timeoutMs: 2500 },
+    });
+  });
+
+  it("defaults to the strict policy", () => {
+    expect(parseVerifyUrlInvocation(["verify-url", "--size", "1x1", "https://example.com/og.png"]).fetch).toEqual({
+      allowPrivate: false,
+      allowedPorts: [],
+    });
+  });
+
+  it.each([
+    { args: ["verify-url"] },
+    { args: ["verify", "--size", "1x1", "https://example.com/og.png"] },
+    { args: ["verify-url", "https://example.com/og.png"] },
+    { args: ["verify-url", "--allow-port", "0", "--size", "1x1", "https://example.com/og.png"] },
+    { args: ["verify-url", "--allow-port", "65536", "--size", "1x1", "https://example.com/og.png"] },
+    { args: ["verify-url", "--max-bytes", "0", "--size", "1x1", "https://example.com/og.png"] },
+    { args: ["verify-url", "--max-redirects", "21", "--size", "1x1", "https://example.com/og.png"] },
+    { args: ["verify-url", "--timeout", "1e3", "--size", "1x1", "https://example.com/og.png"] },
+    { args: ["verify-url", "--alt", "Card", "--size", "1x1", "https://example.com/og.png"] },
+  ] satisfies { args: string[] }[])("rejects invalid arguments: $args", ({ args }) => {
+    expect(() => parseVerifyUrlInvocation(args)).toThrow(VERIFY_URL_USAGE);
+  });
+});
+
+describe("verify-url CLI", () => {
+  afterEach(closeLocalServers);
+
+  const card = completePng(1200, 630);
+
+  async function cardServer() {
+    const server = await localServer(routes({
+      "/og.png": serveBytes(card, "image/png"),
+      "/moved": redirectTo("/og.png", 301),
+      "/mislabeled": serveBytes(card, "image/jpeg"),
+    }));
+    return { ...server, local: ["--allow-private", "--allow-port", String(server.port)] };
+  }
+
+  it("verifies a local development URL and reports its byte count", async () => {
+    const server = await cardServer();
+    const result = await runAsync(["verify-url", ...server.local, "--format", "png", "--size", "1200x630", `${server.origin}/og.png`]);
+
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe(`✓ ${server.origin}/og.png 1200x630 (${card.byteLength} bytes)\n`);
+  });
+
+  it("emits the verify JSON shape plus the final URL after redirects", async () => {
+    const server = await cardServer();
+    const result = await runAsync([
+      "verify-url", "--json", ...server.local, "--target", "universal", "--size", "1200x630", `${server.origin}/moved`,
+    ]);
+    const report = JSON.parse(result.stdout) as { schemaVersion: number; urls: unknown[] };
+
+    // The bytes are valid, but target checks judge the URL as it would be
+    // published, and crawlers need https.
+    expect(result.status).toBe(1);
+    expect(report.schemaVersion).toBe(1);
+    expect(report.urls[0]).toMatchObject({
+      url: `${server.origin}/moved`,
+      finalUrl: `${server.origin}/og.png`,
+      redirects: [`${server.origin}/og.png`],
+      contentType: "image/png",
+      bytes: card.byteLength,
+      valid: true,
+      image: { format: "png", width: 1200, height: 630, bytes: card.byteLength },
+      globalIssues: [],
+      targets: { universal: { compatible: false, issues: [expect.objectContaining({ code: "url" })] } },
+    });
+  });
+
+  it("refuses a loopback URL without --allow-private and exits non-zero", async () => {
+    const server = await cardServer();
+    const result = await runAsync([
+      "verify-url", "--allow-port", String(server.port), "--size", "1200x630", `${server.origin}/og.png`,
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(`✗ ${server.origin}/og.png verification failed: Refusing`);
+    expect(result.stderr).toContain("a loopback address");
+    expect(result.stderr).toContain("1 of 1 URLs failed verification");
+    expect(server.requests).toHaveLength(0);
+  });
+
+  it("reports every failing URL with stable codes in JSON", async () => {
+    const server = await cardServer();
+    const result = await runAsync([
+      "verify-url", "--json", ...server.local, "--size", "1200x630",
+      `${server.origin}/mislabeled`, "file:///etc/passwd", `http://user:hunter2@127.0.0.1:${server.port}/og.png`,
+    ]);
+    const report = JSON.parse(result.stdout) as {
+      urls: Array<{ url: string; valid: boolean; globalIssues: Array<{ code?: string }> }>;
+    };
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).not.toContain("hunter2");
+    expect(report.urls.map(({ valid }) => valid)).toEqual([false, false, false]);
+    expect(report.urls.map(({ globalIssues }) => globalIssues[0]?.code)).toEqual([
+      "content-type",
+      "scheme",
+      "credentials",
+    ]);
+  });
+
+  it("prints the verify-url usage for argument errors", async () => {
+    const result = await runAsync(["verify-url", "--timeout", "soon", "--size", "1x1", "https://example.com/og.png"]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Invalid timeout.");
+    expect(result.stderr).toContain(VERIFY_URL_USAGE);
   });
 });
