@@ -11,11 +11,7 @@
     "skipLibCheck": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
-    "types": ["node", "react"],
-    // tsup 8's declaration build injects `baseUrl`, which TypeScript 6
-    // reports as an error (TS5101). tsup 9 removes it but requires Node 22+,
-    // and the compatibility matrix still builds on Node 20.
-    "ignoreDeprecations": "6.0"
+    "types": ["node", "react"]
   },
   "include": ["src", "tests", "tsup.config.ts", "eslint.config.js"]
 }
