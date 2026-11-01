@@ -1,0 +1,11 @@
+{
+  "name": "metaplate-cert-edge",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@resvg/resvg-wasm": "2.6.2",
+    "metaplate": "file:./metaplate-0.8.0.tgz",
+    "react": "19.3.1",
+    "satori": "0.63.2"
+  }
+}

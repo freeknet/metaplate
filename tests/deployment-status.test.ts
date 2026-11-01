@@ -71,6 +71,38 @@ describe("deployment certification boundaries", () => {
     ]);
   });
 
+  it("certifies an edge route only when it renders through metaplate/edge", () => {
+    const edgeRoute = {
+      id: "provider-edge",
+      provider: "Example Edge",
+      runtime: "Edge Functions",
+      edgeRuntime: true,
+      status: "certified",
+      evidence: "hosted edge deployment",
+      certification: {
+        packedArtifact: true,
+        productionBuild: true,
+        output: true,
+        imageVerification: { verified: true },
+        responseVerification: { verified: true },
+        providerVersion: "1.0",
+        runtimeVersion: "edge",
+        commitSha: "abc123",
+        evidenceUrlOrArtifact: "evidence.json",
+      },
+    };
+    expect(validateDeploymentManifest({
+      ...base,
+      routes: [{ ...edgeRoute, api: "metaplate/edge createEdgeOg fetchableFrom" }],
+    })).toEqual([]);
+    for (const api of [undefined, "metaplate/node handlerFrom", "not supported by metaplate/node"]) {
+      expect(validateDeploymentManifest({
+        ...base,
+        routes: [{ ...edgeRoute, ...(api === undefined ? {} : { api }) }],
+      })).toContain("provider-edge: native edge runtime cannot be certified without an edge renderer");
+    }
+  });
+
   it("requires related upstream references to be HTTPS URLs", () => {
     const route = {
       id: "sveltekit-node",
