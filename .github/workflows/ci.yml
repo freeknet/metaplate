@@ -92,6 +92,52 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  runtimes:
+    name: Runtime smoke / ${{ matrix.runtime }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Evidence in progress, not yet a merge gate. These jobs are new and have
+    # not passed on main, so a failure is reported without failing the run,
+    # and they are deliberately absent from the branch-protection required
+    # checks. Drop continue-on-error and require "Runtime smoke / bun" and
+    # "Runtime smoke / deno" once they have passed consistently on main.
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [bun, deno]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Node installs the lockfile and builds dist/ exactly as the other jobs
+      # do; only the smoke itself runs under the runtime being evidenced.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      # Control: the same smoke under Node separates a broken script from a
+      # runtime that cannot run the package.
+      - name: Smoke the built package under Node
+        run: node scripts/verify-runtime.mjs --expect-runtime=node
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        if: matrix.runtime == 'bun'
+        with:
+          bun-version: latest
+      - name: Smoke the built package under Bun
+        if: matrix.runtime == 'bun'
+        run: bun scripts/verify-runtime.mjs --expect-runtime=bun
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        if: matrix.runtime == 'deno'
+        with:
+          deno-version: 2.x
+      # Deno 2 resolves bare specifiers from the npm-installed node_modules
+      # because package.json is present; --no-lock keeps it from writing a
+      # deno.lock, and --allow-all covers the file reads and Resvg's N-API load.
+      - name: Smoke the built package under Deno
+        if: matrix.runtime == 'deno'
+        run: deno run --allow-all --no-lock scripts/verify-runtime.mjs --expect-runtime=deno
+
   dependency-review:
     name: Dependency review
     if: github.event_name == 'pull_request'
