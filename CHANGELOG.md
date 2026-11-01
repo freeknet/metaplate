@@ -106,10 +106,12 @@ All notable changes to Metaplate are documented in this file. The project uses
   hosted Netlify Edge deployment during the site's first deploy.
 
 - `Runtime smoke / bun` and `Runtime smoke / deno` are now blocking, required
-  checks on `main` after passing every run since they were added. Bun and Deno
-  stay `documented` rather than certified: the smoke runs the built checkout,
-  not the packed tarball or a hosted deployment.
-
+  checks on `main`, and they run against the packed tarball:
+  `scripts/prepare-runtime-consumer.mjs` installs it, with the lockfile's peer
+  versions, into a clean consumer, and the smoke imports `metaplate` by
+  package name and fails unless every entry resolves into that consumer's
+  `node_modules`. Bun and Deno are recorded as `certified` for the packed
+  package on linux-x64; no hosted Bun or Deno Deploy deployment is certified.
 - The packed-package verifier copies a dependency's installed optional
   dependencies with its lockfile-verified closure, so Next's SWC binaries and
   its optional sharp encoder (with sharp's platform binaries) arrive through

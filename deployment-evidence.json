@@ -669,18 +669,96 @@
       "provider": "Bun",
       "runtime": "Bun 1.x Node compatibility",
       "api": "metaplate/node artifact and handlerFrom",
-      "status": "documented",
-      "evidence": "scripts/verify-runtime.mjs in the required CI runtimes matrix; documented, not certified: the smoke runs the built checkout, not the packed tarball or a hosted deployment",
-      "officialDocs": "https://bun.com/docs/runtime/node-api"
+      "status": "certified",
+      "evidence": "Required CI check \"Runtime smoke / bun\": scripts/prepare-runtime-consumer.mjs installs the packed tarball into a clean consumer and scripts/verify-runtime.mjs renders and verifies a PNG there; .planning/hosted-evidence/runtimes-2026-11-01.json",
+      "officialDocs": "https://bun.com/docs/runtime/node-api",
+      "runtimeBoundary": "Packed metaplate tarball on Bun 1.4.4 (linux-x64, GitHub Actions ubuntu-latest) through Bun's Node compatibility with the native @resvg/resvg-js binding; no hosted Bun deployment is certified",
+      "certification": {
+        "verifiedAt": "2026-11-01T22:33:18Z",
+        "provider": "Bun",
+        "providerVersion": "1.4.4",
+        "runtimeVersion": "bun 1.4.4 (Node compatibility 26.3.0); control node 24.22.1",
+        "commit": "c42fa9e",
+        "commitSha": "c42fa9e0d6c77b168629dfb746201723121c679d",
+        "packageVersion": "0.8.0",
+        "packedArtifact": "metaplate-0.8.0.tgz sha256 8b46134be1ecc4237fe6f2a918509010f981ee6416b1871e416210f154b745af, installed into a clean consumer with @resvg/resvg-js@2.6.2, satori@0.63.2, react@19.3.1, @fontsource/inter@5.3.0",
+        "productionBuild": "npm ci --ignore-scripts && npm run build && node scripts/prepare-runtime-consumer.mjs \"$RUNNER_TEMP/runtime-consumer\"",
+        "output": "In-process Web Response from createNodeOg(...).handlerFrom under bun: status 200, 15978 bytes",
+        "servedOutput": "https://github.com/lnorton89/metaplate/actions/runs/41357713413/job/125001256310",
+        "evidenceUrlOrArtifact": "https://github.com/lnorton89/metaplate/actions/runs/41357713413/job/125001256310; .planning/hosted-evidence/runtimes-2026-11-01.json",
+        "imageVerification": {
+          "verified": true,
+          "tool": "verifyImage from the installed metaplate/image",
+          "format": "png",
+          "width": 1200,
+          "height": 630,
+          "svgGlyphPaths": true,
+          "artifactAndResponseIdentical": true
+        },
+        "responseVerification": {
+          "verified": true,
+          "status": 200,
+          "headers": {
+            "content-type": "image/png",
+            "content-length": "15978"
+          }
+        },
+        "resolvedEntries": {
+          "metaplate": "dist/index.js",
+          "metaplate/render": "dist/render.js",
+          "metaplate/node": "dist/node.js",
+          "metaplate/fonts": "dist/fonts.js",
+          "metaplate/image": "dist/image.js"
+        }
+      }
     },
     {
       "id": "deno",
       "provider": "Deno",
       "runtime": "Deno 2.x Node and npm compatibility",
       "api": "metaplate/node artifact and handlerFrom",
-      "status": "documented",
-      "evidence": "scripts/verify-runtime.mjs in the required CI runtimes matrix; documented, not certified: the smoke runs the built checkout, not the packed tarball or a hosted deployment",
-      "officialDocs": "https://docs.deno.com/runtime/fundamentals/node/"
+      "status": "certified",
+      "evidence": "Required CI check \"Runtime smoke / deno\": scripts/prepare-runtime-consumer.mjs installs the packed tarball into a clean consumer and scripts/verify-runtime.mjs renders and verifies a PNG there; .planning/hosted-evidence/runtimes-2026-11-01.json",
+      "officialDocs": "https://docs.deno.com/runtime/fundamentals/node/",
+      "runtimeBoundary": "Packed metaplate tarball on Deno 2.9.8 (linux-x64, GitHub Actions ubuntu-latest) through Deno's Node compatibility with the native @resvg/resvg-js binding; no hosted Deno Deploy deployment is certified",
+      "certification": {
+        "verifiedAt": "2026-11-01T22:33:18Z",
+        "provider": "Deno",
+        "providerVersion": "2.9.8",
+        "runtimeVersion": "deno 2.9.8 (Node compatibility 26.5.1); control node 24.22.1",
+        "commit": "c42fa9e",
+        "commitSha": "c42fa9e0d6c77b168629dfb746201723121c679d",
+        "packageVersion": "0.8.0",
+        "packedArtifact": "metaplate-0.8.0.tgz sha256 8b46134be1ecc4237fe6f2a918509010f981ee6416b1871e416210f154b745af, installed into a clean consumer with @resvg/resvg-js@2.6.2, satori@0.63.2, react@19.3.1, @fontsource/inter@5.3.0",
+        "productionBuild": "npm ci --ignore-scripts && npm run build && node scripts/prepare-runtime-consumer.mjs \"$RUNNER_TEMP/runtime-consumer\"",
+        "output": "In-process Web Response from createNodeOg(...).handlerFrom under deno: status 200, 15978 bytes",
+        "servedOutput": "https://github.com/lnorton89/metaplate/actions/runs/41357713413/job/125001256644",
+        "evidenceUrlOrArtifact": "https://github.com/lnorton89/metaplate/actions/runs/41357713413/job/125001256644; .planning/hosted-evidence/runtimes-2026-11-01.json",
+        "imageVerification": {
+          "verified": true,
+          "tool": "verifyImage from the installed metaplate/image",
+          "format": "png",
+          "width": 1200,
+          "height": 630,
+          "svgGlyphPaths": true,
+          "artifactAndResponseIdentical": true
+        },
+        "responseVerification": {
+          "verified": true,
+          "status": 200,
+          "headers": {
+            "content-type": "image/png",
+            "content-length": "15978"
+          }
+        },
+        "resolvedEntries": {
+          "metaplate": "dist/index.js",
+          "metaplate/render": "dist/render.js",
+          "metaplate/node": "dist/node.js",
+          "metaplate/fonts": "dist/fonts.js",
+          "metaplate/image": "dist/image.js"
+        }
+      }
     },
     {
       "id": "edge",

@@ -1,0 +1,359 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-11-01T22:40:00Z",
+  "commitSha": "c42fa9e0d6c77b168629dfb746201723121c679d",
+  "ciRun": "https://github.com/lnorton89/metaplate/actions/runs/41357713413",
+  "method": "scripts/prepare-runtime-consumer.mjs packs the tarball and installs it with the lockfile peer versions into $RUNNER_TEMP/runtime-consumer; scripts/verify-runtime.mjs runs there under Node (control) and the runtime under test, importing metaplate by package name with a resolve-packed step.",
+  "runtimes": {
+    "bun": {
+      "job": "https://github.com/lnorton89/metaplate/actions/runs/41357713413/job/125001256310",
+      "consumer": {
+        "consumer": "/home/runner/work/_temp/runtime-consumer",
+        "tarball": "metaplate-0.8.0.tgz",
+        "sha256": "8b46134be1ecc4237fe6f2a918509010f981ee6416b1871e416210f154b745af",
+        "version": "0.8.0",
+        "files": 38,
+        "dependencies": {
+          "metaplate": "file:./metaplate-0.8.0.tgz",
+          "@resvg/resvg-js": "2.6.2",
+          "satori": "0.63.2",
+          "react": "19.3.1",
+          "@fontsource/inter": "5.3.0"
+        }
+      },
+      "control": {
+        "ok": true,
+        "runtime": {
+          "name": "node",
+          "version": "24.22.1"
+        },
+        "nodeCompatibility": "24.22.1",
+        "platform": "linux-x64",
+        "steps": [
+          {
+            "step": "runtime",
+            "runtime": "node",
+            "version": "24.22.1"
+          },
+          {
+            "step": "resolve-packed",
+            "version": "0.8.0",
+            "root": "/home/runner/work/_temp/runtime-consumer/node_modules",
+            "resolved": {
+              "metaplate": "dist/index.js",
+              "metaplate/render": "dist/render.js",
+              "metaplate/node": "dist/node.js",
+              "metaplate/fonts": "dist/fonts.js",
+              "metaplate/image": "dist/image.js"
+            }
+          },
+          {
+            "step": "import-metadata",
+            "entries": [
+              "metaplate"
+            ]
+          },
+          {
+            "step": "metadata",
+            "url": "/runtime-smoke/og-image"
+          },
+          {
+            "step": "import-renderers",
+            "entries": [
+              "metaplate/render",
+              "metaplate/node",
+              "metaplate/fonts",
+              "metaplate/image"
+            ]
+          },
+          {
+            "step": "font-load",
+            "family": "Inter",
+            "weight": 700,
+            "bytes": 31320
+          },
+          {
+            "step": "satori-render",
+            "width": 1200,
+            "height": 630,
+            "characters": 13108
+          },
+          {
+            "step": "resvg-raster",
+            "bytes": 15978,
+            "format": "png"
+          },
+          {
+            "step": "response",
+            "bytes": 15978,
+            "status": 200,
+            "headers": {
+              "content-type": "image/png",
+              "content-length": "15978"
+            }
+          },
+          {
+            "step": "verify",
+            "format": "png",
+            "width": 1200,
+            "height": 630
+          }
+        ]
+      },
+      "smoke": {
+        "ok": true,
+        "runtime": {
+          "name": "bun",
+          "version": "1.4.4"
+        },
+        "nodeCompatibility": "26.3.0",
+        "platform": "linux-x64",
+        "steps": [
+          {
+            "step": "runtime",
+            "runtime": "bun",
+            "version": "1.4.4"
+          },
+          {
+            "step": "resolve-packed",
+            "version": "0.8.0",
+            "root": "/home/runner/work/_temp/runtime-consumer/node_modules",
+            "resolved": {
+              "metaplate": "dist/index.js",
+              "metaplate/render": "dist/render.js",
+              "metaplate/node": "dist/node.js",
+              "metaplate/fonts": "dist/fonts.js",
+              "metaplate/image": "dist/image.js"
+            }
+          },
+          {
+            "step": "import-metadata",
+            "entries": [
+              "metaplate"
+            ]
+          },
+          {
+            "step": "metadata",
+            "url": "/runtime-smoke/og-image"
+          },
+          {
+            "step": "import-renderers",
+            "entries": [
+              "metaplate/render",
+              "metaplate/node",
+              "metaplate/fonts",
+              "metaplate/image"
+            ]
+          },
+          {
+            "step": "font-load",
+            "family": "Inter",
+            "weight": 700,
+            "bytes": 31320
+          },
+          {
+            "step": "satori-render",
+            "width": 1200,
+            "height": 630,
+            "characters": 13108
+          },
+          {
+            "step": "resvg-raster",
+            "bytes": 15978,
+            "format": "png"
+          },
+          {
+            "step": "response",
+            "bytes": 15978,
+            "status": 200,
+            "headers": {
+              "content-type": "image/png",
+              "content-length": "15978"
+            }
+          },
+          {
+            "step": "verify",
+            "format": "png",
+            "width": 1200,
+            "height": 630
+          }
+        ]
+      }
+    },
+    "deno": {
+      "job": "https://github.com/lnorton89/metaplate/actions/runs/41357713413/job/125001256644",
+      "consumer": {
+        "consumer": "/home/runner/work/_temp/runtime-consumer",
+        "tarball": "metaplate-0.8.0.tgz",
+        "sha256": "8b46134be1ecc4237fe6f2a918509010f981ee6416b1871e416210f154b745af",
+        "version": "0.8.0",
+        "files": 38,
+        "dependencies": {
+          "metaplate": "file:./metaplate-0.8.0.tgz",
+          "@resvg/resvg-js": "2.6.2",
+          "satori": "0.63.2",
+          "react": "19.3.1",
+          "@fontsource/inter": "5.3.0"
+        }
+      },
+      "control": {
+        "ok": true,
+        "runtime": {
+          "name": "node",
+          "version": "24.22.1"
+        },
+        "nodeCompatibility": "24.22.1",
+        "platform": "linux-x64",
+        "steps": [
+          {
+            "step": "runtime",
+            "runtime": "node",
+            "version": "24.22.1"
+          },
+          {
+            "step": "resolve-packed",
+            "version": "0.8.0",
+            "root": "/home/runner/work/_temp/runtime-consumer/node_modules",
+            "resolved": {
+              "metaplate": "dist/index.js",
+              "metaplate/render": "dist/render.js",
+              "metaplate/node": "dist/node.js",
+              "metaplate/fonts": "dist/fonts.js",
+              "metaplate/image": "dist/image.js"
+            }
+          },
+          {
+            "step": "import-metadata",
+            "entries": [
+              "metaplate"
+            ]
+          },
+          {
+            "step": "metadata",
+            "url": "/runtime-smoke/og-image"
+          },
+          {
+            "step": "import-renderers",
+            "entries": [
+              "metaplate/render",
+              "metaplate/node",
+              "metaplate/fonts",
+              "metaplate/image"
+            ]
+          },
+          {
+            "step": "font-load",
+            "family": "Inter",
+            "weight": 700,
+            "bytes": 31320
+          },
+          {
+            "step": "satori-render",
+            "width": 1200,
+            "height": 630,
+            "characters": 13108
+          },
+          {
+            "step": "resvg-raster",
+            "bytes": 15978,
+            "format": "png"
+          },
+          {
+            "step": "response",
+            "bytes": 15978,
+            "status": 200,
+            "headers": {
+              "content-type": "image/png",
+              "content-length": "15978"
+            }
+          },
+          {
+            "step": "verify",
+            "format": "png",
+            "width": 1200,
+            "height": 630
+          }
+        ]
+      },
+      "smoke": {
+        "ok": true,
+        "runtime": {
+          "name": "deno",
+          "version": "2.9.8"
+        },
+        "nodeCompatibility": "26.5.1",
+        "platform": "linux-x64",
+        "steps": [
+          {
+            "step": "runtime",
+            "runtime": "deno",
+            "version": "2.9.8"
+          },
+          {
+            "step": "resolve-packed",
+            "version": "0.8.0",
+            "root": "/home/runner/work/_temp/runtime-consumer/node_modules",
+            "resolved": {
+              "metaplate": "dist/index.js",
+              "metaplate/render": "dist/render.js",
+              "metaplate/node": "dist/node.js",
+              "metaplate/fonts": "dist/fonts.js",
+              "metaplate/image": "dist/image.js"
+            }
+          },
+          {
+            "step": "import-metadata",
+            "entries": [
+              "metaplate"
+            ]
+          },
+          {
+            "step": "metadata",
+            "url": "/runtime-smoke/og-image"
+          },
+          {
+            "step": "import-renderers",
+            "entries": [
+              "metaplate/render",
+              "metaplate/node",
+              "metaplate/fonts",
+              "metaplate/image"
+            ]
+          },
+          {
+            "step": "font-load",
+            "family": "Inter",
+            "weight": 700,
+            "bytes": 31320
+          },
+          {
+            "step": "satori-render",
+            "width": 1200,
+            "height": 630,
+            "characters": 13108
+          },
+          {
+            "step": "resvg-raster",
+            "bytes": 15978,
+            "format": "png"
+          },
+          {
+            "step": "response",
+            "bytes": 15978,
+            "status": 200,
+            "headers": {
+              "content-type": "image/png",
+              "content-length": "15978"
+            }
+          },
+          {
+            "step": "verify",
+            "format": "png",
+            "width": 1200,
+            "height": 630
+          }
+        ]
+      }
+    }
+  }
+}
