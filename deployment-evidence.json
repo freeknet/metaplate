@@ -587,6 +587,23 @@
       }
     },
     {
+      "id": "cloudflare-workers",
+      "provider": "Cloudflare Workers",
+      "runtime": "edge",
+      "edgeRuntime": true,
+      "api": "metaplate/edge fetchableFrom",
+      "status": "not-supported",
+      "evidence": ".planning/hosted-evidence/cloudflare-workers-2026-11-01.json; fixture examples/hosted/cloudflare/worker; local wrangler dev --local (workerd) reproduction, no Cloudflare deployment",
+      "reason": "Every render fails on Workers. A Worker built from the packed 0.8.0 tarball (resvg.wasm and layout.wasm imported as WebAssembly.Module values, Wrangler 4.156.0 dry-run bundle 4551 KiB / 1636 KiB gzip) returned 500 for every request under wrangler dev --local (workerd) on 2026-11-01. Satori's bundled HarfBuzz Emscripten glue sees WorkerGlobalScope and reads self.location.href, which Workers do not define: \"TypeError: Cannot read properties of undefined (reading 'href')\". With globalThis.location defined as a probe, it then compiles HarfBuzz from embedded bytes, which Workers forbid: \"RuntimeError: Aborted(CompileError: WebAssembly.instantiate(): Wasm code generation disallowed by embedder)\". Satori accepts no precompiled HarfBuzz module, and every Satori release that exports satori/layout.wasm (0.35.2 and later) bundles this glue, so no caller-side fix exists; metaplate/edge rethrows either failure as an error naming the limitation.",
+      "runtimeBoundary": "Local workerd through wrangler dev --local only; nothing was deployed to a Cloudflare account. Deno-based edges (netlify-edge) allow run-time Wasm compilation and are unaffected.",
+      "officialDocs": "https://developers.cloudflare.com/workers/runtime-apis/webassembly/",
+      "officialReferences": [
+        "https://developers.cloudflare.com/workers/runtime-apis/webassembly/",
+        "https://developers.cloudflare.com/workers/runtime-apis/web-standards/",
+        "https://developers.cloudflare.com/workers/wrangler/bundling/"
+      ]
+    },
+    {
       "id": "github-pages",
       "provider": "GitHub Pages",
       "runtime": "static files",
@@ -673,7 +690,7 @@
       "api": "not supported by metaplate/node",
       "status": "not-supported",
       "evidence": "docs/deployment.md",
-      "reason": "The current renderer uses native @resvg/resvg-js; no edge/Wasm renderer is certified."
+      "reason": "metaplate/node renders through the native @resvg/resvg-js Node-API binding, which edge isolates cannot load. For edge runtimes use metaplate/edge: it is hosted-certified on Netlify Edge Functions (netlify-edge) and not supported on Cloudflare Workers or Vercel Edge (cloudflare-workers, vercel-edge)."
     }
   ]
 }
