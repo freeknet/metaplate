@@ -23,6 +23,7 @@ It works with plain Node, static build scripts, Next.js, and Node-compatible fra
   - [Fetch-based framework routes](#fetch-based-framework-routes)
   - [Express and build scripts](#express-and-build-scripts)
   - [Runtime and dynamic-route safety](#runtime-and-dynamic-route-safety)
+  - [Edge runtimes with `metaplate/edge`](#edge-runtimes-with-metaplateedge)
   - [Authoring without a JSX toolchain](#authoring-without-a-jsx-toolchain)
   - [SVG-only rendering](#svg-only-rendering)
 - [Next.js adapter](#nextjs-adapter)
@@ -55,8 +56,9 @@ versions already present in an application.
 
 ### Dependency behavior
 
-`next` remains the only optional peer: Next applications already own their
-framework version, and non-Next applications should not download it. The
+`next` and `@resvg/resvg-wasm` are the optional peers: Next applications
+already own their framework version, non-Next applications should not download
+it, and only `metaplate/edge` needs the WebAssembly renderer. The
 renderer peers are bounded to the release-tested major/minor lines instead of
 silently accepting unknown breaking releases.
 
@@ -242,7 +244,8 @@ export const loader = og.handlerFrom(({ params }: Route.LoaderArgs) => ({
 
 These routes require a Node-compatible deployment adapter because
 `metaplate/node` loads Resvg's native Node binding. A framework implementing
-Web `Response` does not by itself make its edge runtime compatible.
+Web `Response` does not by itself make its edge runtime compatible; use
+[`metaplate/edge`](#edge-runtimes-with-metaplateedge) there.
 
 ### Express and build scripts
 
@@ -286,7 +289,7 @@ set actually exercised by the release gate.
 | React Router resource routes | [Resource routes](https://reactrouter.com/how-to/resource-routes) | React Router 8 framework mode on Node 22.22+ | Exact packed artifact is type-generated, typechecked, built, served, and fetched through a dynamic `loader(args)` route. |
 | SvelteKit | [`+server` routing](https://svelte.dev/docs/kit/routing#server) and [`adapter-node`](https://svelte.dev/docs/kit/adapter-node) | Node-compatible adapters | `handlerFrom` follows its `RequestHandler` contract, but certification is deferred while the latest stable Kit line retains an upstream Cookie advisory. |
 | Express | [Express 5 response API](https://expressjs.com/en/5x/api/#res.send) | Express 5 on Node | Exact packed artifact is served over an ephemeral HTTP server and checked for headers, bytes, and dimensions. |
-| Workers, Deno, and other edge runtimes | Consult the framework's adapter/runtime documentation | Not supported by `metaplate/node` | Native Resvg cannot be inferred from Web `Response` support. Use a compatible renderer instead. |
+| Workers, Deno, and other edge runtimes | [Workers Fetch handler](https://developers.cloudflare.com/workers/runtime-apis/handlers/fetch/) and [Wasm modules](https://developers.cloudflare.com/workers/runtime-apis/webassembly/javascript/); consult other runtimes' documentation | `metaplate/edge` renders PNG through `@resvg/resvg-wasm`; `metaplate/node` remains unsupported there | Tested in Node against the Wasm renderer and from the packed tarball; no hosted edge platform is certified. See [Edge runtimes with `metaplate/edge`](#edge-runtimes-with-metaplateedge). |
 
 Public dynamic image routes are CPU- and memory-intensive. Bound copy length
 and component complexity, use stable path params rather than arbitrary query
@@ -294,6 +297,108 @@ strings, set an explicit cache policy, and apply deployment-level concurrency
 and timeout limits. Never pass a request-controlled remote image URL into a
 Satori component: allowlist asset origins so server-side rendering cannot be
 used to reach private or link-local services.
+
+### Edge runtimes with `metaplate/edge`
+
+`metaplate/edge` renders the same plates to PNG through
+[`@resvg/resvg-wasm`](https://www.npmjs.com/package/@resvg/resvg-wasm), the
+WebAssembly build of the Resvg release behind `@resvg/resvg-js`. It imports no
+Node built-ins, so it can run where `metaplate/node` cannot: Cloudflare
+Workers, Deno, and other Fetch-shaped runtimes. `@resvg/resvg-wasm` is an
+optional peer that `npm install metaplate` does not add; install it for this
+entry:
+
+```sh
+npm install @resvg/resvg-wasm
+```
+
+Edge runtimes cannot locate a package's `.wasm` file on their own, so the
+caller supplies it. In a Cloudflare Worker, Wrangler
+[bundles `.wasm` imports as `WebAssembly.Module` values](https://developers.cloudflare.com/workers/wrangler/bundling/)
+([Wasm in JavaScript](https://developers.cloudflare.com/workers/runtime-apis/webassembly/javascript/)),
+and `fetchableFrom` returns the `{ fetch }` object a Worker exports as its
+[Fetch handler](https://developers.cloudflare.com/workers/runtime-apis/handlers/fetch/):
+
+```ts
+// src/index.ts
+import resvgWasm from "@resvg/resvg-wasm/index_bg.wasm";
+import layoutWasm from "satori/layout.wasm";
+import { createEdgeOg } from "metaplate/edge";
+import { fontLoader } from "metaplate/font-data";
+
+const titles: Record<string, string> = { "/": "Home", "/guide": "Guide" };
+
+const og = createEdgeOg({
+  alt: (copy: { title: string }) => `${copy.title} social card`,
+  resvg: { wasm: resvgWasm },
+  layout: { wasm: layoutWasm },
+  fonts: fontLoader([
+    {
+      name: "Inter",
+      weight: 700,
+      data: async () => {
+        const response = await fetch("https://example.com/fonts/inter-700.woff");
+        if (!response.ok) throw new Error(`Unable to load font: ${response.status}`);
+        return response.arrayBuffer();
+      },
+    },
+  ]),
+  headers: { "Cache-Control": "public, max-age=86400" },
+  component: (copy: { title: string }) => ({
+    type: "div",
+    props: {
+      style: { width: "100%", height: "100%", display: "flex", fontFamily: "Inter", fontSize: 64 },
+      children: copy.title,
+    },
+  }),
+});
+
+export default og.fetchableFrom((request: Request) => ({
+  title: titles[new URL(request.url).pathname] ?? "Metaplate",
+}));
+```
+
+`layout` supplies Satori's Yoga layout engine. Satori's default build compiles
+an embedded copy from bytes at runtime, which Workers rejects because its
+[`WebAssembly.instantiate()` only supports pre-compiled modules](https://developers.cloudflare.com/workers/runtime-apis/webassembly/);
+with `layout`, Metaplate uses `satori/standalone` instead (the audited Satori
+0.63.2 exports both `satori/standalone` and `satori/layout.wasm`). Runtimes
+that allow compiling Wasm from bytes, such as Deno, can omit `layout`, and
+can fetch the Resvg module instead of importing it:
+
+```ts
+const og = createEdgeOg({
+  ...plate,
+  resvg: {
+    wasm: () => fetch(new URL("./vendor/resvg/index_bg.wasm", import.meta.url)),
+  },
+});
+```
+
+`resvg.wasm` and `layout.wasm` accept a `WebAssembly.Module`, bytes, a
+`Response`, a `URL`, a promise of one, or a function returning one; a function
+runs on the first render. Each Wasm module is a single instance per isolate,
+so the first source supplied wins. To supply them once for every plate, call
+`initEdgeRenderer(resvgWasm, { layout: layoutWasm })` at module scope instead.
+
+The boundary is deliberately narrow:
+
+- **PNG only.** `@resvg/resvg-wasm` has no JPEG or WebP encoder, so
+  `metaplate/edge` rejects `output` encoders. `renderPixels` still returns raw
+  RGBA for a Wasm encoder of your own.
+- **The caller supplies the Wasm.** Nothing is fetched from `node_modules` or a
+  CDN on your behalf.
+- **Fonts arrive as bytes**, through `metaplate/font-data` loaders, never file
+  paths; `resvg.font` is not available because Satori outlines text first.
+- **Fetch-shaped API.** `fetchable`, `fetchableFrom`, `handlerFrom`,
+  `response`, `render`, `renderPixels`, and `artifact` behave as in
+  `metaplate/node`, with the same owned headers and ETags (computed with Web
+  Crypto). The copy-bound `handler` is not provided.
+- **Tested in Node against the Wasm renderer, not yet on a hosted edge
+  platform.** The test suite renders through `@resvg/resvg-wasm` and
+  `satori/standalone` in Node and checks dimensions, media type, headers, and
+  ETags against `metaplate/node`, and the package gate renders from the packed
+  tarball. No Workers or Deno Deploy deployment is certified yet.
 
 ### Authoring without a JSX toolchain
 
@@ -883,8 +988,9 @@ route evidence and certification status lives in
 [`deployment-evidence.json`](https://github.com/lnorton89/metaplate/blob/main/deployment-evidence.json)
 in the repository. The short version is:
 use a real `.png`/`.jpg` file for static hosts, use the provider's Node runtime
-for `metaplate/node`, and do not deploy the native renderer to an Edge/Workers
-runtime without a separately tested Wasm-compatible renderer.
+for `metaplate/node`, and never deploy the native renderer to an Edge/Workers
+runtime; use `metaplate/edge`, which is tested in Node against its Wasm renderer
+but not yet certified on a hosted edge platform.
 
 ## Verify generated files
 
@@ -971,6 +1077,9 @@ so they are rejected without at least one `--target`.
 - `metaplate/node` — SVG, PNG, raw pixels, and any format a supplied encoder
   produces, plus Fetch API responses. Satori and Resvg are installed
   automatically.
+- `metaplate/edge` — PNG, raw pixels, and Fetch API responses through
+  `@resvg/resvg-wasm` for Workers, Deno, and other edge runtimes. No Node
+  built-ins. Needs `@resvg/resvg-wasm` and caller-supplied Wasm.
 - `metaplate/next` — native Next.js `ImageResponse` adapter. Needs `next`.
 - `metaplate/font-data` — runtime-neutral normalization and memoization for
   application/framework-provided bytes. No peers or Node built-ins.

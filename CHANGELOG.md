@@ -3,6 +3,31 @@
 All notable changes to Metaplate are documented in this file. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `metaplate/edge` renders plates to PNG through `@resvg/resvg-wasm` for
+  Cloudflare Workers, Deno, and other Fetch-shaped runtimes. `createEdgeOg`
+  shares `metaplate/node`'s SVG rendering, dimension checks, owned headers,
+  ETags (computed with Web Crypto), `artifact`, `response`, `fetchable`,
+  `fetchableFrom`, and `handlerFrom`, and imports no Node built-ins. The caller
+  supplies the Wasm module through `resvg.wasm` or `initEdgeRenderer`, and may
+  supply Satori's Yoga module through `layout.wasm` for runtimes, such as
+  Workers, that only instantiate pre-compiled modules. Output is PNG only:
+  `output` encoders are rejected because `@resvg/resvg-wasm` has no JPEG or
+  WebP encoder. The entry is tested in Node against the Wasm renderer and from
+  the packed tarball, not yet on a hosted edge platform.
+- `@resvg/resvg-wasm` (`>=2.6.2 <3`) is a new optional peer. `npm install
+  metaplate` does not install it, and a missing peer reports
+  `npm install @resvg/resvg-wasm`.
+
+### Changed
+
+- `metaplate/node`'s renderer-independent code moved into an internal module
+  shared with `metaplate/edge`. Its public API, types, and output are
+  unchanged.
+
 ## [0.8.0] - 2026-10-31
 
 ### Added
