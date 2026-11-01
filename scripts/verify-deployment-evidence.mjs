@@ -88,6 +88,17 @@ export function validateDeploymentManifest(manifest) {
       errors.push(`${route.id}: officialDocs must be an HTTPS URL`);
     }
     if (
+      route.officialReferences !== undefined &&
+      (!Array.isArray(route.officialReferences) ||
+        route.officialReferences.length === 0 ||
+        !route.officialReferences.every((url) => typeof url === "string" && /^https:\/\//.test(url)))
+    ) {
+      errors.push(`${route.id}: officialReferences must be a non-empty array of HTTPS URLs`);
+    }
+    if (route.runtimeBoundary !== undefined && (typeof route.runtimeBoundary !== "string" || route.runtimeBoundary.trim() === "")) {
+      errors.push(`${route.id}: runtimeBoundary must be a non-empty string`);
+    }
+    if (
       route.relatedDocs !== undefined &&
       (!Array.isArray(route.relatedDocs) || !route.relatedDocs.every((url) => /^https:\/\//.test(url)))
     ) {
