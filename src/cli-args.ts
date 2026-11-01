@@ -31,9 +31,32 @@ export function formatVerifyPath(file: string, cwd = process.cwd()): string {
   return (relative || path.basename(file)).split(path.sep).join("/");
 }
 
-function parseSize(value: string | undefined): ImageSize {
+export const VERIFY_URL_USAGE =
+  "Usage: metaplate verify-url [--json] [--target TARGET] [--alt TEXT] [--max-file-size BYTES] [--format svg|png|jpeg|webp|gif] [--max-bytes BYTES] [--max-redirects N] [--timeout MS] [--allow-port PORT] [--allow-private] --size WIDTHxHEIGHT <url> [...] [--size WIDTHxHEIGHT <url> [...]]";
+
+export type VerifyUrlTarget = {
+  url: string;
+  size: ImageSize;
+  format?: ImageFormat;
+};
+
+/** Fetch limits for `verify-url`; omitted fields use the fetcher defaults. */
+export type VerifyUrlFetchOptions = {
+  allowPrivate: boolean;
+  allowedPorts: number[];
+  maxBytes?: number;
+  maxRedirects?: number;
+  timeoutMs?: number;
+};
+
+export type VerifyUrlInvocation = Omit<VerifyInvocation, "targets" | "url"> & {
+  targets: VerifyUrlTarget[];
+  fetch: VerifyUrlFetchOptions;
+};
+
+function parseSize(value: string | undefined, usage: string): ImageSize {
   const match = /^(\d+)x(\d+)$/.exec(value ?? "");
-  if (!match) throw new Error(`Invalid size. ${VERIFY_USAGE}`);
+  if (!match) throw new Error(`Invalid size. ${usage}`);
 
   const size: ImageSize = { width: Number(match[1]), height: Number(match[2]) };
   if (
@@ -44,32 +67,55 @@ function parseSize(value: string | undefined): ImageSize {
     size.width > MAX_IMAGE_DIMENSION ||
     size.height > MAX_IMAGE_DIMENSION
   ) {
-    throw new Error(`Invalid size. ${VERIFY_USAGE}`);
+    throw new Error(`Invalid size. ${usage}`);
   }
 
   return size;
 }
 
-function parseMaxFileSize(value: string | undefined): number {
+/** Parses a plain decimal integer within bounds, naming the flag on failure. */
+function parseInteger(
+  value: string | undefined,
+  label: string,
+  usage: string,
+  minimum = 0,
+  maximum = Number.MAX_SAFE_INTEGER,
+): number {
   // Only plain decimal digits: `Number("")` is 0 and `Number("0x10")` is 16,
   // and neither is a byte ceiling anyone typed on purpose.
   const parsed = /^\d+$/.test(value ?? "") ? Number(value) : Number.NaN;
-  if (!Number.isSafeInteger(parsed)) {
-    throw new Error(`Invalid max file size. ${VERIFY_USAGE}`);
+  if (!Number.isSafeInteger(parsed) || parsed < minimum || parsed > maximum) {
+    throw new Error(`Invalid ${label}. ${usage}`);
   }
   return parsed;
 }
 
-/** Parses one or more size-delimited groups of image paths and social checks. */
-export function parseVerifyInvocation(args: string[]): VerifyInvocation {
-  if (args[0] !== "verify") throw new Error(VERIFY_USAGE);
+type GroupEntry = { value: string; size: ImageSize; format?: ImageFormat };
 
-  const targets: VerifyTarget[] = [];
+type ParsedGroups = {
+  entries: GroupEntry[];
+  json: boolean;
+  socialTargets: SocialTarget[];
+  alt?: string;
+  maxFileSize?: number;
+};
+
+type CommandFlags = {
+  /** Flags that take exactly one value. */
+  values?: Readonly<Record<string, (value: string | undefined) => void>>;
+  /** Flags that take no value. */
+  switches?: Readonly<Record<string, () => void>>;
+};
+
+/** Parses the flags shared by `verify` and `verify-url` plus command-specific ones. */
+function parseGroups(args: string[], command: string, usage: string, flags: CommandFlags): ParsedGroups {
+  if (args[0] !== command) throw new Error(usage);
+
+  const entries: GroupEntry[] = [];
   const socialTargets: SocialTarget[] = [];
   let size: ImageSize | undefined;
   let format: ImageFormat | undefined;
   let json = false;
-  let url: string | undefined;
   let alt: string | undefined;
   let maxFileSize: number | undefined;
 
@@ -79,63 +125,116 @@ export function parseVerifyInvocation(args: string[]): VerifyInvocation {
       json = true;
       continue;
     }
+    const toggle = argument === undefined ? undefined : flags.switches?.[argument];
+    if (toggle) {
+      toggle();
+      continue;
+    }
+    const value = args[index + 1];
+    const handler = argument === undefined ? undefined : flags.values?.[argument];
+    if (handler) {
+      handler(value);
+      index += 1;
+      continue;
+    }
     if (argument === "--size") {
-      size = parseSize(args[index + 1]);
+      size = parseSize(value, usage);
       index += 1;
       continue;
     }
     if (argument === "--format") {
-      const value = args[index + 1];
       if (!value || !FORMATS.has(value as ImageFormat)) {
-        throw new Error(`Invalid format. ${VERIFY_USAGE}`);
+        throw new Error(`Invalid format. ${usage}`);
       }
       format = value as ImageFormat;
       index += 1;
       continue;
     }
     if (argument === "--target") {
-      const value = args[index + 1] as SocialTarget | undefined;
-      if (!value || !TARGETS.has(value)) {
-        throw new Error(`Invalid target. ${VERIFY_USAGE}`);
+      if (!value || !TARGETS.has(value as SocialTarget)) {
+        throw new Error(`Invalid target. ${usage}`);
       }
-      socialTargets.push(value);
-      index += 1;
-      continue;
-    }
-    if (argument === "--url") {
-      url = args[index + 1];
-      if (!url) throw new Error(`Invalid URL. ${VERIFY_USAGE}`);
+      socialTargets.push(value as SocialTarget);
       index += 1;
       continue;
     }
     if (argument === "--alt") {
-      alt = args[index + 1];
-      if (!alt) throw new Error(`Invalid alt text. ${VERIFY_USAGE}`);
+      alt = value;
+      if (!alt) throw new Error(`Invalid alt text. ${usage}`);
       index += 1;
       continue;
     }
     if (argument === "--max-file-size") {
-      maxFileSize = parseMaxFileSize(args[index + 1]);
+      maxFileSize = parseInteger(value, "max file size", usage);
       index += 1;
       continue;
     }
-    if (!size || !argument) throw new Error(VERIFY_USAGE);
-    targets.push(format ? { file: argument, size, format } : { file: argument, size });
+    if (!size || !argument) throw new Error(usage);
+    entries.push(format ? { value: argument, size, format } : { value: argument, size });
   }
 
-  if (targets.length === 0) throw new Error(VERIFY_USAGE);
+  if (entries.length === 0) throw new Error(usage);
+  return {
+    entries,
+    json,
+    socialTargets: [...new Set(socialTargets)],
+    ...(alt ? { alt } : {}),
+    ...(maxFileSize !== undefined ? { maxFileSize } : {}),
+  };
+}
+
+function entryTarget<Key extends string>(key: Key, { value, size, format }: GroupEntry) {
+  return { [key]: value, size, ...(format ? { format } : {}) } as Record<Key, string> & {
+    size: ImageSize;
+    format?: ImageFormat;
+  };
+}
+
+/** Parses one or more size-delimited groups of image paths and social checks. */
+export function parseVerifyInvocation(args: string[]): VerifyInvocation {
+  let url: string | undefined;
+  const { entries, ...parsed } = parseGroups(args, "verify", VERIFY_USAGE, {
+    values: {
+      "--url": (value) => {
+        if (!value) throw new Error(`Invalid URL. ${VERIFY_USAGE}`);
+        url = value;
+      },
+    },
+  });
+
   // Metadata fields are only ever evaluated against a compatibility profile;
   // accepting them without one would silently verify less than was asked for.
-  if ((url !== undefined || alt !== undefined) && socialTargets.length === 0) {
+  if ((url !== undefined || parsed.alt !== undefined) && parsed.socialTargets.length === 0) {
     throw new Error(`--url and --alt require at least one --target. ${VERIFY_USAGE}`);
   }
   return {
-    targets,
-    json,
-    socialTargets: [...new Set(socialTargets)],
+    targets: entries.map((entry) => entryTarget("file", entry)),
+    ...parsed,
     ...(url ? { url } : {}),
-    ...(alt ? { alt } : {}),
-    ...(maxFileSize !== undefined ? { maxFileSize } : {}),
+  };
+}
+
+/** Parses `verify-url`: the shared verify flags plus the remote fetch limits. */
+export function parseVerifyUrlInvocation(args: string[]): VerifyUrlInvocation {
+  const limits: VerifyUrlFetchOptions = { allowPrivate: false, allowedPorts: [] };
+  const usage = VERIFY_URL_USAGE;
+  const { entries, ...parsed } = parseGroups(args, "verify-url", usage, {
+    switches: { "--allow-private": () => { limits.allowPrivate = true; } },
+    values: {
+      "--allow-port": (value) => { limits.allowedPorts.push(parseInteger(value, "port", usage, 1, 65_535)); },
+      "--max-bytes": (value) => { limits.maxBytes = parseInteger(value, "max bytes", usage, 1); },
+      "--max-redirects": (value) => { limits.maxRedirects = parseInteger(value, "max redirects", usage, 0, 20); },
+      "--timeout": (value) => { limits.timeoutMs = parseInteger(value, "timeout", usage, 1); },
+    },
+  });
+
+  if (parsed.alt !== undefined && parsed.socialTargets.length === 0) {
+    throw new Error(`--alt requires at least one --target. ${usage}`);
+  }
+  return {
+    targets: entries.map((entry) => entryTarget("url", entry)),
+    ...parsed,
+    fetch: { ...limits, allowedPorts: [...new Set(limits.allowedPorts)] },
   };
 }
 
