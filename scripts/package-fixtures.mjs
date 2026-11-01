@@ -24,6 +24,7 @@ export const FRAMEWORK_DEPENDENCIES = Object.freeze({
     "typescript",
     "@types/node",
     "@types/react",
+    "@types/react-dom",
     "@fontsource/inter",
     "isbot",
   ]),
