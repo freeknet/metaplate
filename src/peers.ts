@@ -17,14 +17,10 @@ export const loadResvg = /* @__PURE__ */ optionalPeer(
     (await import("@resvg/resvg-js")).Resvg,
 );
 
-/** Satori's default build, which compiles its embedded Yoga layout engine. */
-export const loadEdgeSatori = /* @__PURE__ */ optionalPeer(
-  { package: "satori", entries: "metaplate/edge" },
-  async (): Promise<typeof import("satori").default> =>
-    (await import("satori")).default,
-);
-
-/** Satori without its embedded Yoga, for runtimes that forbid compiling Wasm from bytes. */
+/**
+ * Satori without its embedded Yoga: the only Satori build `metaplate/edge`
+ * references, so edge bundles never carry the default build as well.
+ */
 export const loadSatoriStandalone = /* @__PURE__ */ optionalPeer(
   { package: "satori", entries: "metaplate/edge" },
   async (): Promise<typeof import("satori/standalone")> => import("satori/standalone"),
