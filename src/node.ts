@@ -24,6 +24,15 @@ export type {
   PlateView,
 } from "./plate.js";
 
+/** The render-module contract `metaplate render` loads; see docs/render-cli.md. */
+export type {
+  RenderablePlate,
+  RenderFileArtifact,
+  RenderJob,
+  RenderModule,
+  RenderPage,
+} from "./render-files.js";
+
 export type NodeOgDefinition<Copy, Variant extends string = string> = SvgOgDefinition<Copy, Variant> & {
   /** Resvg rendering controls such as background and font configuration. */
   resvg?: ResvgRenderOptions;

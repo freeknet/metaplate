@@ -295,3 +295,60 @@ export function parseVerifyPageInvocation(args: string[]): VerifyPageInvocation 
 export function parseVerifyTargets(args: string[]): VerifyTarget[] {
   return parseVerifyInvocation(args).targets;
 }
+
+export const RENDER_USAGE =
+  "Usage: metaplate render [--json] [--out DIR] [--manifest FILE] [--concurrency N] <module>";
+
+export const MANIFEST_FILENAME = "metaplate-manifest.json";
+
+/** Renders in flight at once unless `--concurrency` says otherwise. */
+export const DEFAULT_RENDER_CONCURRENCY = 4;
+
+export type RenderInvocation = {
+  module: string;
+  outDir: string;
+  /** Defaults to `metaplate-manifest.json` inside `outDir`. */
+  manifest: string;
+  concurrency: number;
+  json: boolean;
+};
+
+/** Parses `render`: one module path plus output, manifest, and pool options. */
+export function parseRenderInvocation(args: string[]): RenderInvocation {
+  const usage = RENDER_USAGE;
+  if (args[0] !== "render") throw new Error(usage);
+  let outDir = "public";
+  let manifest: string | undefined;
+  let concurrency = DEFAULT_RENDER_CONCURRENCY;
+  let json = false;
+  let module: string | undefined;
+
+  for (let index = 1; index < args.length; index += 1) {
+    const argument = args[index]!;
+    const value = args[index + 1];
+    if (argument === "--json") {
+      json = true;
+    } else if (argument === "--out" || argument === "--manifest") {
+      if (!value || value.startsWith("--")) throw new Error(`Invalid ${argument.slice(2)} path. ${usage}`);
+      if (argument === "--out") outDir = value;
+      else manifest = value;
+      index += 1;
+    } else if (argument === "--concurrency") {
+      concurrency = parseInteger(value, "concurrency", usage, 1, 256);
+      index += 1;
+    } else if (argument.startsWith("--") || module !== undefined) {
+      throw new Error(usage);
+    } else {
+      module = argument;
+    }
+  }
+
+  if (module === undefined) throw new Error(usage);
+  return {
+    module,
+    outDir,
+    manifest: manifest ?? path.join(outDir, MANIFEST_FILENAME),
+    concurrency,
+    json,
+  };
+}

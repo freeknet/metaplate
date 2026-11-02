@@ -1,37 +1,28 @@
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   formatVerifyPath,
   parseVerifyPageInvocation,
   parseVerifyTargets,
+  RENDER_USAGE,
   parseVerifyUrlInvocation,
   VERIFY_PAGE_USAGE,
   VERIFY_URL_USAGE,
   VERIFY_USAGE,
 } from "../src/cli-args.js";
 import { METAPLATE_VERSION } from "../src/version.js";
+import { bundleCli, runCli } from "./helpers/cli-bundle.js";
 import { closeLocalServers, localServer, redirectTo, routes, serveBytes } from "./helpers/http-fixtures.js";
 import { completePng } from "./helpers/image-fixtures.js";
 
-// The CLI runs against the built bundle; rebuild it (fast, no types) so the
-// spawn-based tests never go stale. The bundle is written into a temp dir so
-// it cannot leak into lint or the package tarball.
-import { build } from "esbuild";
-const bundleDir = await mkdtemp(path.join(tmpdir(), "metaplate-cli-bundle-"));
-const bundlePath = path.join(bundleDir, "cli.mjs");
-await build({
-  entryPoints: [path.join(import.meta.dirname, "..", "src", "cli.ts")],
-  bundle: true,
-  platform: "node",
-  format: "esm",
-  outfile: bundlePath,
-});
+// The CLI runs against a freshly bundled build so spawn tests never go stale.
+const bundlePath = await bundleCli();
 
 function run(args: string[], cwd: string) {
-  return spawnSync(process.execPath, [bundlePath, ...args], { cwd, encoding: "utf8" });
+  return runCli(bundlePath, args, cwd);
 }
 
 /** Spawns without blocking, so an in-process test server can still answer. */
@@ -172,6 +163,7 @@ describe("verify CLI", () => {
     expect(help.stdout).toContain(VERIFY_USAGE);
     expect(help.stdout).toContain(VERIFY_URL_USAGE);
     expect(help.stdout).toContain(VERIFY_PAGE_USAGE);
+    expect(help.stdout).toContain(RENDER_USAGE);
     expect(shortHelp.stdout).toBe(help.stdout);
     expect(version.status).toBe(0);
     expect(version.stderr).toBe("");

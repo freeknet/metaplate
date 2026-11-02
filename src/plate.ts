@@ -120,6 +120,15 @@ export function createPlateSocial<Copy, Variant extends string = string>(
   const variants = resolveVariants(definition, options.imagePath);
   const defaultContext: PlateContext<Variant> = Object.freeze({ variant: undefined, size });
 
+  /**
+   * Where a size's image lives relative to the deployment root: `route`
+   * joined with that size's `imagePath`, without `basePath` or `origin`, and
+   * without a leading slash. It is the path a static build writes the file
+   * to, so the metadata URL resolves to it once the output is deployed under
+   * `basePath`.
+   */
+  const sitePathFor = (path: string) => (route: string) => socialImagePath(route, path).slice(1);
+
   function variantOptions(copy: Copy): Pick<SocialImageOptions, "variants"> {
     if (variants.size === 0) return {};
     const entries: [string, SocialImageVariantOptions][] = [];
@@ -150,6 +159,7 @@ export function createPlateSocial<Copy, Variant extends string = string>(
     /** Metadata describing only this size, as an artifact's bytes do. */
     ownMetadata: (route: string, copy: Copy) =>
       socialImageMetadata(route, definition.alt(copy), options),
+    sitePath: sitePathFor(options.imagePath),
   });
 
   function variantView(name: Variant) {
@@ -182,6 +192,7 @@ export function createPlateSocial<Copy, Variant extends string = string>(
         });
       },
       ownMetadata,
+      sitePath: sitePathFor(variant.imagePath),
     });
   }
 

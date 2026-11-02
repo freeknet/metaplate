@@ -3,14 +3,17 @@
 import { readFile } from "node:fs/promises";
 import process from "node:process";
 import {
+  DEFAULT_RENDER_CONCURRENCY,
   formatVerifyPath,
   parseVerifyInvocation,
   parseVerifyPageInvocation,
   parseVerifyUrlInvocation,
+  RENDER_USAGE,
   VERIFY_PAGE_USAGE,
   VERIFY_URL_USAGE,
   VERIFY_USAGE,
 } from "./cli-args.js";
+import { ReportedError, runRender } from "./cli-render.js";
 import type { SocialTarget } from "./compatibility-profiles.js";
 import type { ImageSize } from "./core.js";
 import { verifySocialImage } from "./social-verification.js";
@@ -22,11 +25,13 @@ import { METAPLATE_VERSION } from "./version.js";
 const CLI_HELP = `${VERIFY_USAGE}
 ${VERIFY_URL_USAGE}
 ${VERIFY_PAGE_USAGE}
+${RENDER_USAGE}
 
 Commands:
   verify        Verify image dimensions, format, and optional social metadata
   verify-url    Fetch an http(s) image under a hardened policy, then verify it
   verify-page   Fetch an http(s) page, extract its social images, and verify each
+  render        Write every page and size a render module declares as verified files
 
 Options:
   -h, --help       Show this help
@@ -47,6 +52,11 @@ verify-url options:
 verify-page options (plus the verify-url fetch options, which apply to every request):
   --max-html-bytes N  Abort a page larger than N bytes (default 4 MiB)
   --max-images N      Fetch at most N distinct image URLs per page (default 8)
+
+render options:
+  --out DIR          Directory the site is published from (default public)
+  --manifest FILE    Manifest path (default DIR/metaplate-manifest.json)
+  --concurrency N    Render at most N images at once (default ${DEFAULT_RENDER_CONCURRENCY})
 `;
 
 type CliIssue = Readonly<{
@@ -349,6 +359,7 @@ async function verifyPages(args: string[]) {
 const COMMANDS = new Map<string, { run: (args: string[]) => Promise<void>; usage: string }>([
   ["verify-url", { run: verifyUrls, usage: VERIFY_URL_USAGE }],
   ["verify-page", { run: verifyPages, usage: VERIFY_PAGE_USAGE }],
+  ["render", { run: runRender, usage: RENDER_USAGE }],
 ]);
 
 async function main(args: string[]) {
@@ -367,6 +378,8 @@ async function main(args: string[]) {
 main(process.argv.slice(2)).catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
   process.stderr.write(`${message}\n`);
-  process.stderr.write(`${COMMANDS.get(process.argv[2] ?? "")?.usage ?? VERIFY_USAGE}\n`);
+  if (!(error instanceof ReportedError)) {
+    process.stderr.write(`${COMMANDS.get(process.argv[2] ?? "")?.usage ?? VERIFY_USAGE}\n`);
+  }
   process.exitCode = 1;
 });

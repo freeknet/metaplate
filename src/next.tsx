@@ -98,6 +98,8 @@ export function createNextOg<Copy, Variant extends string = string>(
         assertAbsoluteMedia(metadata.openGraph, "metaplate/next");
         return metadata;
       },
+      /** The image path relative to the deployment root, without `basePath` or `origin`. */
+      sitePath: view.sitePath,
       contentType: OG_CONTENT_TYPE,
       render,
       ...createPlateHandlers(render),
