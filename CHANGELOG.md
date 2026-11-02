@@ -7,6 +7,52 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Added
 
+- Opt-in render guards fail (`"error"`) or report (`"warn"`) a render that
+  would ship a broken card. A plate's `guards` option on `createSvgOg`,
+  `createNodeOg`, and `createEdgeOg` takes `missingGlyphs` (text no plate font
+  covers that the emoji loader and `satori.loadAdditionalAsset` resolved to
+  nothing, reported with its segment and Satori language code), `overflow`
+  (an element holding text whose laid-out box reaches outside the canvas,
+  read through a composed `satori.onNodeDetected`; elements without text may
+  bleed), and, on the two raster renderers, `blank` (every pixel one color,
+  checked on the raw pixels before encoding). Errors reject the render with a
+  `RenderGuardError` listing every issue, exported from `metaplate/render`,
+  `metaplate/node`, and `metaplate/edge`; warnings go to `guards.onWarning`,
+  or `console.warn` without one. Every guard defaults to `"off"`, which leaves
+  Satori's options and every output unchanged, so no existing plate breaks.
+  Both Satori hooks behave identically in every release probed, 0.33.3
+  through 0.63.2. `createNextOg` rejects `guards`, because `ImageResponse`
+  exposes no hooks or pixels, and `createSvgOg` rejects `blank`. `metaplate verify` and `verify-url` gain
+  `--require-content`, which decodes PNG files and URLs with `node:zlib` and
+  fails one whose every pixel is the same color; other formats fail with the
+  flag rather than passing unchecked. See
+  [`docs/rendering.md`](docs/rendering.md#render-guards).
+- `socialMetaTags` and `socialMetaHtml` accept validated page-level fields:
+  `locale` and `alternateLocales` (`og:locale`, `og:locale:alternate`, in
+  `language_TERRITORY` form), `article` (`article:published_time`,
+  `modified_time`, and `expiration_time` as calendar dates, RFC 3339
+  date-times with an offset, or `Date`s, plus `article:author`,
+  `article:section`, and `article:tag`; `og:type` then defaults to
+  `article`), `pubdate` (Discord's `og:pubdate`, a full RFC 3339 timestamp),
+  and `themeColor` (`<meta name="theme-color">`, `#RRGGBB` or `#RRGGBBAA`, the
+  accent color Discord reads). They follow the existing page tags, so output
+  without them is unchanged; the `socialMetaHtml` key allowlist now admits
+  `article:` keys and exactly `theme-color`. `metaplate/next` adds
+  `nextPageMetadata` (Next `openGraph` fields plus `og:pubdate` through
+  `other`), `nextPageViewport` (`themeColor` for Next's `viewport` export),
+  and `NEXT_OPEN_GRAPH_TYPES`. See `docs/metadata.md#page-level-tags`.
+- Opt-in cache-busting image URLs. `socialImageMetadata` and `socialImage`
+  accept `version`, a token of 1 to 64 URI-unreserved characters appended as
+  `?v=<version>` to every image URL they build (default and variants, Open
+  Graph and X), and so to `socialMetaTags`, JSON-LD, and Adaptive Cards.
+  `socialImageVersion(copy, revision?)` derives an eight-hex-digit token from
+  a stable serialization of the copy (32-bit FNV-1a, synchronous and
+  runtime-neutral). Plates take `version: "copy"` and a design `revision`, and
+  `metadata`, `image`, and `artifact` take a per-call `{ version }`; a
+  `metaplate render` page may name its own `version`, and the manifest `url`
+  carries the token. `socialImagePath`, `sitePath`, and rendered file paths
+  never do, and `route`, `basePath`, and `imagePath` still reject queries. See
+  [`docs/metadata.md`](docs/metadata.md#versioned-image-urls).
 - `metaplate render <module>` renders static social images as a build step.
   The module's default export is `{ plate, pages: [{ route?, copy }] }`, an
   array of those, or a function returning either; a `createNodeOg` or
