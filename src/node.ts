@@ -19,9 +19,11 @@ export type {
 export type {
   PlateContext,
   PlateMetadataOptions,
+  PlateRouteOptions,
   PlateVariant,
   PlateVariants,
   PlateView,
+  SignedRouteOptions,
 } from "./plate.js";
 
 /** The render-module contract `metaplate render` loads; see docs/render-cli.md. */

@@ -13,9 +13,11 @@ export type { RenderedPixels } from "./raster.js";
 export type {
   PlateContext,
   PlateMetadataOptions,
+  PlateRouteOptions,
   PlateVariant,
   PlateVariants,
   PlateView,
+  SignedRouteOptions,
 } from "./plate.js";
 
 /**

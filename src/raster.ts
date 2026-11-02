@@ -309,6 +309,8 @@ export function createRasterPlate<Copy, Variant extends string = string>(
       size,
       image: socialView.image,
       metadata: socialView.metadata,
+      /** `metadata` with every image URL signed for a `signed` route; see docs/signed-routes.md. */
+      signedMetadata: socialView.signedMetadata,
       /** The image path relative to the deployment root, without `basePath` or `origin`. */
       sitePath: socialView.sitePath,
       renderSvg: svgView.renderSvg,

@@ -7,10 +7,14 @@ import {
   socialImagePath,
   variantImagePath,
   type ImageSize,
+  type SocialImageDescriptor,
+  type SocialImageMetadata,
   type SocialImageOptions,
   type SocialImageVariantOptions,
+  type XCard,
 } from "./core.js";
 import type { OpenGraphMediaOptions } from "./og-media.js";
+import { createImageSigner, signingSecrets, type ImageSigningKeys } from "./signing.js";
 
 /**
  * The second argument every plate `component` receives. `variant` is
@@ -102,6 +106,18 @@ function resolveVariants<Copy, Variant extends string>(
   return resolved;
 }
 
+/**
+ * `metadata` with every image URL signed for a signed dynamic route. Async
+ * because Web Crypto is. Static files (`metaplate render`, `sitePath`) are
+ * served unsigned, so pages pointing at them use `metadata` instead.
+ */
+function signedMetadataFor<Copy, Variant extends string, Metadata extends SocialImageMetadata<XCard>>(
+  metadata: (route: string, copy: Copy, options?: PlateMetadataOptions<Variant>) => Metadata,
+) {
+  return (route: string, copy: Copy, keys: ImageSigningKeys, options?: PlateMetadataOptions<Variant>) =>
+    signPlateMetadata(metadata(route, copy, options), keys);
+}
+
 /** Shared size/path/metadata contract used by every renderer adapter. */
 export function createPlateSocial<Copy, Variant extends string = string>(
   definition: PlateSocialDefinition<Copy, Variant>,
@@ -143,19 +159,21 @@ export function createPlateSocial<Copy, Variant extends string = string>(
   }
 
   /** The default size: page metadata lists every variant after it. */
+  const defaultMetadata = (route: string, copy: Copy, metadataOptions?: PlateMetadataOptions<Variant>) => {
+    const twitterVariant = metadataOptions?.twitter?.variant;
+    return socialImageMetadata(route, definition.alt(copy), {
+      ...options,
+      ...variantOptions(copy),
+      ...(twitterVariant === undefined ? {} : { twitter: { variant: twitterVariant } }),
+      ...mediaOption(metadataOptions),
+    });
+  };
   const defaultView = Object.freeze({
     context: defaultContext,
     image: (route: string, copy: Copy) =>
       socialImage(route, definition.alt(copy), options),
-    metadata: (route: string, copy: Copy, metadataOptions?: PlateMetadataOptions<Variant>) => {
-      const twitterVariant = metadataOptions?.twitter?.variant;
-      return socialImageMetadata(route, definition.alt(copy), {
-        ...options,
-        ...variantOptions(copy),
-        ...(twitterVariant === undefined ? {} : { twitter: { variant: twitterVariant } }),
-        ...mediaOption(metadataOptions),
-      });
-    },
+    metadata: defaultMetadata,
+    signedMetadata: signedMetadataFor(defaultMetadata),
     /** Metadata describing only this size, as an artifact's bytes do. */
     ownMetadata: (route: string, copy: Copy) =>
       socialImageMetadata(route, definition.alt(copy), options),
@@ -175,22 +193,24 @@ export function createPlateSocial<Copy, Variant extends string = string>(
     });
     const ownMetadata = (route: string, copy: Copy) =>
       socialImageMetadata(route, variant.alt(copy), sizeOptions);
+    const metadata = (route: string, copy: Copy, metadataOptions?: PlateMetadataOptions<Variant>) => {
+      const twitterVariant = metadataOptions?.twitter?.variant;
+      if (twitterVariant !== undefined && twitterVariant !== name) {
+        throw new Error(
+          `plate.variant("${name}") describes only its own size; select twitter.variant on the default plate`,
+        );
+      }
+      return socialImageMetadata(route, variant.alt(copy), {
+        ...sizeOptions,
+        ...mediaOption(metadataOptions),
+      });
+    };
     return Object.freeze({
       context: variant.context,
       image: (route: string, copy: Copy) =>
         socialImage(route, variant.alt(copy), sizeOptions),
-      metadata: (route: string, copy: Copy, metadataOptions?: PlateMetadataOptions<Variant>) => {
-        const twitterVariant = metadataOptions?.twitter?.variant;
-        if (twitterVariant !== undefined && twitterVariant !== name) {
-          throw new Error(
-            `plate.variant("${name}") describes only its own size; select twitter.variant on the default plate`,
-          );
-        }
-        return socialImageMetadata(route, variant.alt(copy), {
-          ...sizeOptions,
-          ...mediaOption(metadataOptions),
-        });
-      },
+      metadata,
+      signedMetadata: signedMetadataFor(metadata),
       ownMetadata,
       sitePath: sitePathFor(variant.imagePath),
     });
@@ -235,23 +255,135 @@ export function createPlateViews<Surface extends object, Variant extends string>
   return decorate(build(undefined), undefined);
 }
 
+/**
+ * Verifies a signed image path before a resolver or renderer runs. `secret` or
+ * `secrets` (newest first) are the HMAC keys `signedMetadata` signed with; see
+ * docs/signed-routes.md.
+ */
+export type SignedRouteOptions<Arguments extends unknown[] = unknown[]> = ImageSigningKeys & {
+  /**
+   * Status for a missing or invalid signature: 403 (default) or 404 to avoid
+   * revealing that the route exists. Either is sent with `Cache-Control:
+   * no-store` and never with the plate's `headers`.
+   */
+  status?: 403 | 404;
+  /**
+   * The public URL (or pathname) the request was made for. Defaults to the
+   * `url` of the first handler argument when it is a `Request`, or of its
+   * `request` property (SvelteKit, Astro, React Router). Supply it when a
+   * rewrite or proxy changes the path the handler sees.
+   */
+  url?: (...arguments_: Arguments) => string | URL;
+};
+
+/** Options for `handlerFrom` and `fetchableFrom`. */
+export type PlateRouteOptions<Arguments extends unknown[] = unknown[]> = {
+  /** Refuse to resolve or render unless the request path carries a valid signature. */
+  signed?: SignedRouteOptions<Arguments>;
+};
+
+function isRequestLike(value: unknown): value is { url: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { url?: unknown }).url === "string" &&
+    typeof (value as { method?: unknown }).method === "string"
+  );
+}
+
+function requestUrl(arguments_: readonly unknown[]): string {
+  const [first] = arguments_;
+  if (isRequestLike(first)) return first.url;
+  const request = (first as { request?: unknown } | null | undefined)?.request;
+  if (isRequestLike(request)) return request.url;
+  throw new TypeError(
+    "A signed image route needs the request URL, but its first argument is neither a Request " +
+      "nor an object with a request property; pass signed.url to supply it",
+  );
+}
+
+/**
+ * Builds the pre-render check for one route. Secrets are validated here, when
+ * the route is defined, and imported as keys once, on the first request.
+ */
+function signatureGate<Arguments extends unknown[]>(options: SignedRouteOptions<Arguments> | undefined) {
+  if (options === undefined) return undefined;
+  const signer = createImageSigner(signingSecrets(options));
+  const status = options.status ?? 403;
+  if (status !== 403 && status !== 404) {
+    throw new TypeError(`signed.status must be 403 or 404; received ${String(status)}`);
+  }
+  const urlOf = options.url ?? ((...arguments_: Arguments) => requestUrl(arguments_));
+  return async (arguments_: Arguments): Promise<Response | undefined> => {
+    const verification = await signer.verify(urlOf(...arguments_));
+    if (verification.valid) return undefined;
+    return new Response(status === 404 ? "Not Found" : "Forbidden", {
+      status,
+      headers: { "Cache-Control": "no-store", "Content-Type": "text/plain; charset=utf-8" },
+    });
+  };
+}
+
+/**
+ * Signs every image URL in plate metadata: the Open Graph images and the X
+ * Card image (normally one of them, so each distinct URL is signed once).
+ */
+export async function signPlateMetadata<Metadata extends SocialImageMetadata<XCard>>(
+  metadata: Metadata,
+  keys: ImageSigningKeys,
+): Promise<Metadata> {
+  const signer = createImageSigner(signingSecrets(keys));
+  const signed = new Map<string, Promise<string>>();
+  const sign = async (image: SocialImageDescriptor): Promise<SocialImageDescriptor> => {
+    let url = signed.get(image.url);
+    if (url === undefined) {
+      url = signer.sign(image.url);
+      signed.set(image.url, url);
+    }
+    return { ...image, url: await url };
+  };
+  const [openGraphImages, twitterImages] = await Promise.all([
+    Promise.all(metadata.openGraph.images.map(sign)),
+    Promise.all(metadata.twitter.images.map(sign)),
+  ]);
+  return {
+    ...metadata,
+    openGraph: { ...metadata.openGraph, images: openGraphImages },
+    twitter: { ...metadata.twitter, images: twitterImages },
+  };
+}
+
 /** Shared fixed-copy, resolver, and Fetchable handlers for route adapters. */
 export function createPlateHandlers<Copy, Result>(
   render: (copy: Copy) => Promise<Result>,
 ) {
+  function route<Arguments extends unknown[]>(
+    resolve: (...arguments_: Arguments) => Copy | Promise<Copy>,
+    options: PlateRouteOptions<Arguments> | undefined,
+  ) {
+    const gate = signatureGate(options?.signed);
+    if (gate === undefined) {
+      return async (...arguments_: Arguments): Promise<Result | Response> =>
+        render(await resolve(...arguments_));
+    }
+    return async (...arguments_: Arguments): Promise<Result | Response> =>
+      (await gate(arguments_)) ?? render(await resolve(...arguments_));
+  }
+
   return Object.freeze({
     handler: (copy: Copy) => () => render(copy),
     handlerFrom: <Arguments extends unknown[]>(
       resolve: (...arguments_: Arguments) => Copy | Promise<Copy>,
-    ) =>
-      async (...arguments_: Arguments) => render(await resolve(...arguments_)),
+      options?: PlateRouteOptions<Arguments>,
+    ) => route(resolve, options),
     fetchable: (copy: Copy) => ({
       fetch: () => render(copy),
     }),
     fetchableFrom: <Arguments extends unknown[]>(
       resolve: (...arguments_: Arguments) => Copy | Promise<Copy>,
+      options?: PlateRouteOptions<Arguments>,
     ) => ({
-      fetch: async (...arguments_: Arguments) => render(await resolve(...arguments_)),
+      fetch: route(resolve, options),
     }),
   });
 }
