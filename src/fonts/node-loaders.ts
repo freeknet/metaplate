@@ -84,10 +84,10 @@ function assertPackageName(packageName: string): void {
   }
 }
 
-function resolveFontFile(packageDirectory: string, file: string): string {
+function resolveFontFile(packageDirectory: string, file: string, label = "Font file"): string {
   const root = path.resolve(packageDirectory);
   if (!file || path.isAbsolute(file)) {
-    throw new Error(`Font file must stay within its package directory: ${file}`);
+    throw new Error(`${label} must stay within its package directory: ${file}`);
   }
   const target = path.resolve(root, file);
   const relative = path.relative(root, target);
@@ -97,7 +97,7 @@ function resolveFontFile(packageDirectory: string, file: string): string {
     relative.startsWith(`..${path.sep}`) ||
     path.isAbsolute(relative)
   ) {
-    throw new Error(`Font file must stay within its package directory: ${file}`);
+    throw new Error(`${label} must stay within its package directory: ${file}`);
   }
   return target;
 }
@@ -433,7 +433,7 @@ const EMOJI_FILE = /^(?:emoji_u)?([0-9a-f]{1,6}(?:[-_][0-9a-f]{1,6})*)\.(svg|png
 function emojiDirectory(set: PackageEmojiSet, options: PackageFontOptions): string {
   const { package: packageName, directory } = typeof set === "string" ? EMOJI_SETS[set] : set;
   const root = findPackageDirectory(packageName, options.cwd, options.resolvePackage);
-  return directory ? resolveFontFile(root, directory) : root;
+  return directory ? resolveFontFile(root, directory, "Emoji directory") : root;
 }
 
 /**
