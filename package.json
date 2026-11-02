@@ -19,8 +19,7 @@
   "files": [
     "dist",
     "README.md",
-    "docs/deployment.md",
-    "docs/emoji.md",
+    "docs",
     "CHANGELOG.md",
     "LICENSE"
   ],
