@@ -131,7 +131,10 @@ public image:
   refused, and the password is never echoed into logs or reports. Requests
   carry no cookies or `Authorization` header, `Set-Cookie` is ignored, and the
   only headers sent are `Host`, `User-Agent: metaplate-verify/<version>`,
-  `Accept: image/*`, and `Accept-Encoding: identity`.
+  `Accept: image/*`, and `Accept-Encoding: identity`. A server may compress
+  anyway (an object stored with `Content-Encoding: gzip`, for example), and
+  crawlers decode it, so a `gzip`, `deflate`, or `br` body is decoded before
+  any check; any other coding fails the fetch.
 - **Addresses.** The hostname is resolved once per hop, and the fetch is
   refused if *any* resolved address is loopback, private (10/8, 172.16/12,
   192.168/16), carrier-grade NAT, link-local (including 169.254.169.254 cloud

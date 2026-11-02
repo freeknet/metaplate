@@ -1,3 +1,4 @@
+import { brotliCompressSync, deflateSync, gzipSync } from "node:zlib";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   REMOTE_USER_AGENT,
@@ -367,6 +368,38 @@ describe("fetchRemoteImage limits", () => {
     await expect(
       fetchRemoteImage(`${server.origin}/`, local(server.port, { maxBytes: 1024 })),
     ).rejects.toMatchObject({ code: "byte-limit", message: expect.stringContaining("1024-byte limit") });
+  });
+
+  it("decodes a body served with a content coding despite asking for identity", async () => {
+    const encoded = (coding: string, bytes: Uint8Array) => (_request: unknown, response: import("node:http").ServerResponse) => {
+      response.writeHead(200, { "Content-Type": "image/png", "Content-Encoding": coding });
+      response.end(bytes);
+    };
+    const server = await localServer(routes({
+      "/gzip.png": encoded("gzip", gzipSync(card)),
+      "/deflate.png": encoded("deflate", deflateSync(card)),
+      "/br.png": encoded("br", brotliCompressSync(card)),
+      "/twice.png": encoded("gzip, br", brotliCompressSync(gzipSync(card))),
+      "/bomb.png": encoded("gzip", gzipSync(new Uint8Array(4096))),
+      "/corrupt.png": encoded("gzip", card),
+      "/compress.png": encoded("compress", card),
+    }));
+    for (const path of ["/gzip.png", "/deflate.png", "/br.png", "/twice.png"]) {
+      const result = await verifyRemoteImage(`${server.origin}${path}`, cardSize, local(server.port));
+      expect(result.byteLength).toBe(card.byteLength);
+    }
+    // The byte limit applies to the decoded body.
+    await expect(
+      fetchRemoteImage(`${server.origin}/bomb.png`, local(server.port, { maxBytes: 1024 })),
+    ).rejects.toMatchObject({ code: "byte-limit" });
+    await expect(fetchRemoteImage(`${server.origin}/corrupt.png`, local(server.port))).rejects.toMatchObject({
+      code: "network",
+      message: expect.stringContaining("could not be decoded as Content-Encoding: gzip"),
+    });
+    await expect(fetchRemoteImage(`${server.origin}/compress.png`, local(server.port))).rejects.toMatchObject({
+      code: "network",
+      message: expect.stringContaining("Content-Encoding: compress, which cannot be decoded"),
+    });
   });
 
   it("aborts when the total time budget is exhausted", async () => {
