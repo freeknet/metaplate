@@ -164,6 +164,16 @@ All notable changes to Metaplate are documented in this file. The project uses
   against a canonical `url` validated exactly as for `socialMetaTags`. The
   script form, and the exported `serializeJsonLd`, escape `<`, `>`, `&`,
   U+2028, and U+2029 so the payload can never close its `<script>` element.
+- `socialImageCompatibility` and `metaplate verify --target` add the
+  `whatsapp`, `bluesky`, `telegram`, `threads`, and `pinterest` profiles,
+  each limited to what the platform's own documentation states. `whatsapp`
+  requires an absolute `og:image` URL and an image under 600KB, at least
+  300px wide, and no wider than 4:1, the documented conditions for WhatsApp's
+  large link preview. `bluesky` warns above the 1,000,000-byte limit the
+  `app.bsky.embed.external` lexicon sets on the card thumbnail blob a posting
+  client uploads. Telegram, Threads, and Pinterest publish no link-preview
+  image contract, so those profiles report `unknown`, as `instagram` does.
+  `SocialTarget` includes the new names.
 
 ### Changed
 

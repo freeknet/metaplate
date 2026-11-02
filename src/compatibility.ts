@@ -61,6 +61,24 @@ function crawlerReadyUrl(value: string): boolean {
   }
 }
 
+function absoluteHttpUrl(value: string): boolean {
+  try {
+    const { protocol } = new URL(value);
+    return protocol === "https:" || protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+function meetsMinimumSize(
+  image: Readonly<{ width: number; height: number }>,
+  minimum: SocialCompatibilityProfile["minimumSize"],
+): boolean {
+  return !minimum || (
+    image.width >= (minimum.width ?? 0) && image.height >= (minimum.height ?? 0)
+  );
+}
+
 /**
  * Evaluates one descriptor against documented social-preview constraints.
  * This is deliberately a local, side-effect-free check: fetchability,
@@ -92,19 +110,22 @@ export function socialImageCompatibility(
   for (const target of targets) {
     const profile: SocialCompatibilityProfile =
       SOCIAL_COMPATIBILITY_PROFILES[target];
-    if (
-      options.checkUrl !== false &&
-      (options.crawlerReady || profile.crawlerReady) &&
-      (!image.url || !crawlerReadyUrl(image.url))
-    ) {
-      issues.push(
-        issue(
-          target,
-          "error",
-          "url",
-          "Crawler-ready social images require an absolute HTTPS URL.",
-        ),
-      );
+    if (options.checkUrl !== false) {
+      if (
+        (options.crawlerReady || profile.crawlerReady) &&
+        (!image.url || !crawlerReadyUrl(image.url))
+      ) {
+        issues.push(
+          issue(
+            target,
+            "error",
+            "url",
+            "Crawler-ready social images require an absolute HTTPS URL.",
+          ),
+        );
+      } else if (profile.absoluteUrl && (!image.url || !absoluteHttpUrl(image.url))) {
+        issues.push(issue(target, "error", "url", profile.absoluteUrl));
+      }
     }
 
     if (options.checkAlt !== false && !image.alt) {
@@ -137,25 +158,34 @@ export function socialImageCompatibility(
       );
     }
 
-    if (profile.minimumSize) {
-      if (
-        image.width < profile.minimumSize.width ||
-        image.height < profile.minimumSize.height
-      ) {
-        issues.push(
-          issue(target, "error", "dimensions", profile.minimumSize.message),
-        );
-      }
+    const meetsMinimum = meetsMinimumSize(image, profile.minimumSize);
+    if (profile.minimumSize && !meetsMinimum) {
+      issues.push(
+        issue(target, "error", "dimensions", profile.minimumSize.message),
+      );
+    }
+    if (
+      profile.maximumAspectRatio &&
+      image.width / image.height > profile.maximumAspectRatio.value
+    ) {
+      const { message } = profile.maximumAspectRatio;
+      issues.push(issue(
+        target,
+        "error",
+        "dimensions",
+        `${message} Received ${image.width}x${image.height}.`,
+      ));
     }
     if (
       profile.maximumFileSize &&
       options.fileSize !== undefined &&
       options.fileSize > profile.maximumFileSize.bytes
     ) {
-      issues.push(issue(target, "error", "file-size", profile.maximumFileSize.message));
+      const { severity = "error", message } = profile.maximumFileSize;
+      issues.push(issue(target, severity, "file-size", message));
     }
 
-    if (profile.recommendedAspectRatio && (!profile.minimumSize || (image.width >= profile.minimumSize.width && image.height >= profile.minimumSize.height))) {
+    if (profile.recommendedAspectRatio && meetsMinimum) {
       const ratio = image.width / image.height;
       const { value, tolerance, message } = profile.recommendedAspectRatio;
       if (Math.abs(ratio - value) > tolerance) {
