@@ -13,6 +13,7 @@ function Card(copy: Copy, { size }: PlateContext<"square">) {
   return (
     <div
       style={{
+        boxSizing: "border-box",
         width: "100%",
         height: "100%",
         display: "flex",
