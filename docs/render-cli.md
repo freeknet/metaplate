@@ -231,6 +231,12 @@ failure is reported, and **no manifest is written**, so a deploy step that
 publishes only when the manifest exists never publishes half a build. Files
 written before the failure stay in `--out`.
 
+Format, size, and structure checks cannot tell a blank card from a drawn one.
+Give the module's plate [render guards](rendering.md#render-guards) set to
+`"error"` and a card with text off the canvas, text no font covers, or a
+single-color image fails its render here, exits `1`, and keeps the manifest
+unwritten.
+
 ### Manifest
 
 One entry of the manifest written for
