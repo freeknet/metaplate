@@ -60,7 +60,7 @@ curl -sS -o /dev/null -D - https://<site>.netlify.app/og/<slug>
   `@resvg/resvg-wasm/index_bg.wasm`, `satori/layout.wasm`, and the Inter WOFF
   into `public/`, and `og.ts` fetches them as bytes from the request origin on
   first render. Both Wasm modules are passed to `createEdgeOg`, as `resvg.wasm`
-  and `layout.wasm`. The bundle was 1.10 MB gzip against Netlify's 20 MB limit,
+  and `layout.wasm`. The bundle was 462 KB gzip against Netlify's 20 MB limit,
   and the documented 50 ms CPU limit did not stop any
   observed render (CPU time was not measured).
   `X-Metaplate-Runtime` reads `deno:` because Netlify's `Deno.version.deno` is
@@ -70,10 +70,16 @@ curl -sS -o /dev/null -D - https://<site>.netlify.app/og/<slug>
 
 The edge site's first deploy served `/og-edge/hosted` and `/og-edge/edge` as
 identical, uniform cards with no text: valid PNG, 1200x630, correct headers.
-Later cold renders, including the certified ones, drew text, and a diagnostic
-deploy showed every asset fetch returning the right bytes. The most likely
-cause is a first-deploy propagation race on the same-origin font fetch, which
-Satori turned into a card without glyphs instead of an error. It was not
-reproduced on demand. Check that a fresh deployment's images are not uniform,
-not just their format and size, and request new slugs: the CDN caches each
-response for 24 hours.
+
+The cause was this fixture's layout, not Netlify. The card was 100% wide and
+tall with 64px padding, and Satori sizes boxes as content-box, so the card
+grew to 1328x758. Its title is bottom-aligned, so a title that fits on one
+line was drawn below the 630px canvas. Longer titles wrap, and their first
+line lands on the canvas, which is why the certified slugs drew text. The
+original record blamed a first-deploy race on the font fetch. That was wrong,
+and the blank cards reproduce locally every time.
+
+`og.ts` now sets `boxSizing: "border-box"`, and the site was redeployed and
+re-certified with one-line titles. Check that a deployment's images are not
+uniform, not just their format and size, and test a one-line title. The CDN
+caches each response for 24 hours, so request new slugs.

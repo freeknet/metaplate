@@ -468,7 +468,7 @@
       "api": "metaplate/edge createEdgeOg fetchableFrom with resvg.wasm and layout.wasm fetched as bytes",
       "status": "certified",
       "evidence": ".planning/hosted-evidence/netlify-2026-11-01.json; fixture examples/hosted/netlify/edge",
-      "runtimeBoundary": "Hosted Netlify Edge Function, production deploy of 2026-11-01 from the packed 0.8.0 tarball; the Wasm modules and the font are static files of the same site, fetched on first render. metaplate/node remains unsupported on edge.",
+      "runtimeBoundary": "Hosted Netlify Edge Function, production deploy of 2026-11-01, redeployed with the border-box fixture, from the packed 0.8.0 tarball; the Wasm modules and the font are static files of the same site, fetched on first render. metaplate/node remains unsupported on edge.",
       "officialDocs": "https://docs.netlify.com/build/edge-functions/api/",
       "officialReferences": [
         "https://docs.netlify.com/build/edge-functions/overview/",
@@ -476,56 +476,67 @@
         "https://docs.netlify.com/build/edge-functions/limits/"
       ],
       "certification": {
-        "verifiedAt": "2026-11-01T20:31:49.265Z",
+        "verifiedAt": "2026-11-02T02:01:00Z",
         "provider": "Netlify",
         "providerVersion": "Netlify CLI 27.1.1 (netlify-cli/27.1.1 win32-x64 node-v22.19.0)",
-        "commit": "4b04f90f075f101d029b614c5510a7b0c9bb50a7",
-        "commitSha": "4b04f90f075f101d029b614c5510a7b0c9bb50a7",
+        "commit": "c5d9f005703cf1ba1e14c96ebeede0446950df54",
+        "commitSha": "c5d9f005703cf1ba1e14c96ebeede0446950df54",
         "packageVersion": "0.8.0",
         "packedArtifact": {
           "file": "metaplate-0.8.0.tgz",
-          "sha256": "4ff95d579afae4ede7f2d21628172a3674aa9a8f4341ceb5c8cce68f31dcd278",
-          "installedAs": "file:./metaplate-0.8.0.tgz in the deployed fixture"
+          "sha256": "114a3c62ac482bd43e33fb94315d0c7f12225c57d60ad27550bd2feb5d29f268",
+          "installedAs": "file:./metaplate-0.8.0.tgz in the deployed fixture",
+          "packedFrom": "697f6f737c2a7eaaec971b7ebc299df6ac3c55be"
         },
         "evidenceUrlOrArtifact": ".planning/hosted-evidence/netlify-2026-11-01.json",
         "runtimeVersion": "Netlify Edge Functions, Deno-based (Deno.version.deno reported as an empty string)",
         "site": "stellular-arithmetic-22095e",
         "siteId": "515b4a5c-38d0-43aa-b7b8-c9f357003dc5",
-        "deploymentId": "6ae7a1815a2fc0ea74f6bc1b",
+        "deploymentId": "6ae7ee5478780e9836d6fa03",
         "productionBuild": {
           "command": "netlify deploy --prod --no-build --site 515b4a5c-38d0-43aa-b7b8-c9f357003dc5 --dir public",
           "site": "stellular-arithmetic-22095e",
-          "deploymentId": "6ae7a1815a2fc0ea74f6bc1b",
+          "deploymentId": "6ae7ee5478780e9836d6fa03",
           "state": "ready",
           "context": "production",
-          "publishedAt": "2026-11-01T20:30:59.994Z"
+          "publishedAt": "2026-11-02T01:58:55.332Z"
         },
         "output": "https://stellular-arithmetic-22095e.netlify.app",
         "servedOutput": [
-          "https://stellular-arithmetic-22095e.netlify.app/og-edge/cert-990d8a",
-          "https://stellular-arithmetic-22095e.netlify.app/og-edge/cert-d16553"
+          "https://stellular-arithmetic-22095e.netlify.app/og-edge/e1",
+          "https://stellular-arithmetic-22095e.netlify.app/og-edge/bx-short",
+          "https://stellular-arithmetic-22095e.netlify.app/og-edge/wrap-check-long-title-7c"
         ],
         "imageVerification": {
           "verified": true,
           "tool": "metaplate verify-url --json --size 1200x630 --format png",
           "results": [
             {
-              "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/cert-990d8a",
+              "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/e1",
               "valid": true,
               "contentType": "image/png",
               "format": "png",
               "width": 1200,
               "height": 630,
-              "bytes": 19767
+              "bytes": 18355
             },
             {
-              "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/cert-d16553",
+              "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/bx-short",
               "valid": true,
               "contentType": "image/png",
               "format": "png",
               "width": 1200,
               "height": 630,
-              "bytes": 19452
+              "bytes": 21149
+            },
+            {
+              "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/wrap-check-long-title-7c",
+              "valid": true,
+              "contentType": "image/png",
+              "format": "png",
+              "width": 1200,
+              "height": 630,
+              "bytes": 26862
             }
           ]
         },
@@ -533,36 +544,59 @@
           "verified": true,
           "distinctBytesPerSlug": true,
           "nonUniformImages": true,
+          "oneLineTitlesRender": true,
           "results": [
             {
-              "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/cert-990d8a",
+              "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/e1",
               "status": 200,
               "contentType": "image/png",
               "cacheControl": "public, max-age=86400",
               "contentLength": null,
               "transferEncoding": "chunked",
-              "etag": "\"025e84897312f43748f462f4b990abc3b60a4ea514a693ed22e071cf20da6350\"",
-              "sha256": "025e84897312f43748f462f4b990abc3b60a4ea514a693ed22e071cf20da6350",
+              "etag": "\"092256ed77d23164fe654cacf5737647f8042f2dcf9011d91c3a8f33909ba13c\"",
+              "sha256": "092256ed77d23164fe654cacf5737647f8042f2dcf9011d91c3a8f33909ba13c",
               "xMetaplateRuntime": "deno:",
+              "titleLines": "one line",
               "contentCheck": {
-                "tool": "sharp stats()",
-                "entropy": 0.245,
+                "tool": "Pillow 12.3.0: grayscale histogram entropy (bits) and distinct gray levels",
+                "entropy": 0.2256,
+                "distinctGrayLevels": 27,
                 "uniform": false
               }
             },
             {
-              "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/cert-d16553",
+              "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/bx-short",
               "status": 200,
               "contentType": "image/png",
               "cacheControl": "public, max-age=86400",
               "contentLength": null,
               "transferEncoding": "chunked",
-              "etag": "\"95d7a5250e4eb134dec9f1c8fa89062faf0352d950b7adff4607d07ed758cd8f\"",
-              "sha256": "95d7a5250e4eb134dec9f1c8fa89062faf0352d950b7adff4607d07ed758cd8f",
+              "etag": "\"3e9db7394a5284a7650bf034f799faf9524b33813841c1e6750c9c2d75a26912\"",
+              "sha256": "3e9db7394a5284a7650bf034f799faf9524b33813841c1e6750c9c2d75a26912",
               "xMetaplateRuntime": "deno:",
+              "titleLines": "one line",
               "contentCheck": {
-                "tool": "sharp stats()",
-                "entropy": 0.243,
+                "tool": "Pillow 12.3.0: grayscale histogram entropy (bits) and distinct gray levels",
+                "entropy": 0.2575,
+                "distinctGrayLevels": 27,
+                "uniform": false
+              }
+            },
+            {
+              "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/wrap-check-long-title-7c",
+              "status": 200,
+              "contentType": "image/png",
+              "cacheControl": "public, max-age=86400",
+              "contentLength": null,
+              "transferEncoding": "chunked",
+              "etag": "\"c3ed056469534d7dbfe96e70b5450c1a244758e1a7db88b3c98cb33ccd263c5f\"",
+              "sha256": "c3ed056469534d7dbfe96e70b5450c1a244758e1a7db88b3c98cb33ccd263c5f",
+              "xMetaplateRuntime": "deno:",
+              "titleLines": "two lines",
+              "contentCheck": {
+                "tool": "Pillow 12.3.0: grayscale histogram entropy (bits) and distinct gray levels",
+                "entropy": 0.332,
+                "distinctGrayLevels": 27,
                 "uniform": false
               }
             }
@@ -570,19 +604,20 @@
         },
         "packaging": "npm packages installed in node_modules and imported by name (Netlify's documented npm support for Edge Functions; no import map, no npm: specifiers), bundled by the CLI's edge-functions bundling step during the --no-build deploy. The two Wasm modules and the font are static files in the publish directory, fetched as bytes from the request origin on first render and passed to createEdgeOg as resvg.wasm and layout.wasm, so neither Wasm module is inside the edge bundle.",
         "bundle": {
-          "bundlerVersion": "@netlify/edge-bundler 16.0.3 (from .netlify/edge-functions-dist/manifest.json)",
+          "bundlerVersion": "@netlify/edge-bundler 16.0.4 (from .netlify/edge-functions-dist/manifest.json)",
           "format": "eszip2",
-          "eszipBytes": 3292842,
-          "gzipBytes": 1103580,
+          "eszipBytes": 1548091,
+          "gzipBytes": 462072,
           "limit": "20 MB after compression (https://docs.netlify.com/build/edge-functions/limits/)",
-          "note": "Measured from the local bundle the CLI produced for the final deploy. It vendors Satori's default build beside satori/standalone; the Wasm modules are not inside it."
+          "note": "Measured from the local bundle the CLI produced for this deploy. It is smaller than the first certification's 3292842-byte bundle because createEdgeOg now imports only satori/standalone."
         },
         "cpuLimit": "Netlify documents 50 ms of CPU per request (https://docs.netlify.com/build/edge-functions/limits/); every observed render, including the first requests after each deploy, returned 200, so the limit did not block them. CPU time per request was not measured",
         "caveat": {
           "observed": "2026-11-01, deploy 6ae7a0b5dd9e780c65a1acf3 (the edge site's first deploy, same fixture sources)",
           "symptom": "/og-edge/hosted and /og-edge/edge returned 200 image/png 1200x630, but both were the same solid #064e3b card with no text: identical ETag (062b3cea...c478) and image entropy 0.000. verify-url's format, dimension, and content-type checks alone would have accepted them. The CDN cached both for 24h under Cache-Control: public, max-age=86400, so those slugs are not used as evidence.",
-          "diagnosis": "Diagnostic deploy 6ae7a13742402c1143a1acf1 logged every asset fetch: two fresh cold-start slugs rendered text (entropy 0.215 and 0.213), and /wasm/layout.wasm (200 application/wasm, 520763 bytes, head 0061736d), /wasm/resvg.wasm (200 application/wasm, 2478606 bytes, head 0061736d), and /fonts/inter-latin-700-normal.woff (200 application/font-woff, 31320 bytes, head 774f4646) all returned the right bytes. A local Node reproduction of createEdgeOg with the same files renders text on the first call, sequential and concurrent. Most likely a first-deploy propagation race: the same-origin font fetch received non-font bytes while the brand-new site propagated, and Satori drew no glyphs without raising an error. Not reproduced on demand.",
-          "followUp": "A library change that rejects non-font bytes with an error is being made separately. This evidence therefore adds a decoded-content check (sharp stats(): not uniform, entropy > 0) for every certified URL."
+          "cause": "Fixture layout, not the runtime. The card was width 100% and height 100% with padding 64 and alignItems flex-end. Satori sizes boxes as content-box, so the card was 1328x758 and its content ended at y=694 on a 630px canvas. A title that fits on one line (\"hosted · metaplate/edge on Netlify Edge\", \"edge · ...\") was drawn entirely below the canvas, leaving the solid background. Longer titles wrap to two lines and the upper line lands on the canvas, which is why cert-990d8a and cert-d16553 rendered text. Reproduced locally on demand with satori 0.63.2, @resvg/resvg-js 2.6.2, and the fixture's exact style: hosted and edge render a 4418-byte single-colour PNG, while cert-990d8a and cert-d16553 render 19767 and 19452 bytes, matching the certified responses byte for byte.",
+          "withdrawnDiagnosis": "The original record attributed the blank cards to a first-deploy propagation race on the same-origin font fetch. That was wrong: every asset fetch returned the right bytes because nothing was failing, and the cold-start slugs that rendered text were long enough to wrap.",
+          "resolution": "The fixture now sets boxSizing: \"border-box\" (commit c5d9f005703cf1ba1e14c96ebeede0446950df54). Deploy 6ae7ee5478780e9836d6fa03 serves it; the one-line titles e1 and bx-short render text, verified below. The decoded-content check stays on every hosted certification."
         }
       }
     },
