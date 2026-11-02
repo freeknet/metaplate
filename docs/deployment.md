@@ -31,6 +31,7 @@ into an image or asset element; allowlist remote assets or keep them local.
 | Static site/CDN | `render()` or `renderSvg()` in a build script | Node at build time only | `public/og-image.png` or `.jpg` | Supported |
 | Vercel Function | `handler()` / `handlerFrom()` or `response()` | Vercel Node.js runtime | `/api/og` or framework route | Hosted-certified on a dated Vercel production deployment (2026-11-01, Node.js runtime); Next.js 16.4.3 on Vercel likewise |
 | Netlify Function | `handler()` / `handlerFrom()` or `response()` | Netlify Node.js Function | Function path or custom path | Hosted-certified on a dated Netlify production deployment (2026-11-01, Functions Node.js runtime `nodejs24.x`); generated framework functions use project settings |
+| Deno Deploy | `metaplate/edge` or `metaplate/node`, both `fetchableFrom()` | Deno Deploy, built from GitHub | App route | Hosted-certified on a dated Deno Deploy production build (2026-11-01), both renderers |
 | Railway/Render service | `response()` or `render()` + `Buffer.from()` | Long-lived Node.js service | Application route | Locally certified generic Node contract; provider deployment remains a recipe |
 | Next.js native route | `metaplate/next`, or `metaplate/node` in a route handler | Next build/Node runtime | Metadata file or route handler | Static export and `next start` server output locally certified from the packed artifact; hosted Next deployment is separate |
 | Astro on-demand endpoint | `handlerFrom()` as the endpoint `GET` | `@astrojs/node` standalone server | `src/pages/[slug]/og-image.png.ts` | Locally certified from the packed artifact through the built `entry.mjs`; hosted Astro adapters are separate |
@@ -295,6 +296,54 @@ version; it is not a guarantee for later Netlify releases.
 - [Netlify Functions overview](https://docs.netlify.com/build/functions/overview/)
 - [Netlify Functions configuration](https://docs.netlify.com/build/functions/configuration/)
 - [Netlify Express deployment](https://docs.netlify.com/build/frameworks/framework-setup-guides/express/)
+
+## Deno Deploy
+
+One Deno Deploy app runs both renderers: `metaplate/edge` at `/og/:slug`,
+reading `@resvg/resvg-wasm/index_bg.wasm` and `satori/layout.wasm` from its
+`node_modules` with `Deno.readFile`, and `metaplate/node` at `/og-node/:slug`,
+loading the native `@resvg/resvg-js` binding through Deno's Node
+compatibility. Deno Deploy builds the app from the GitHub repository, so a
+deployment is reproducible from a commit:
+
+- The app directory is the fixture directory, and `deno.json`'s `deploy`
+  section sets the build, which Deno Deploy reads on every build.
+- The install step installs the repository root from its lockfile, builds and
+  packs metaplate, installs the app against that tarball, then deletes the
+  root dependencies. With them, the deployment's files reach about 940 MB,
+  near Deno Deploy's documented 1 GB limit, and the build failed while
+  preparing its artifact. Without them the artifact is 26.6 MB.
+- Deno Deploy's builder fetches the newest npm (12), whose `npm pack --json`
+  prints an object keyed by package name rather than an array.
+- Builds and logs are read from the REST API (`https://api.deno.com/v2`) with an
+  organization access token.
+
+Uploading a local directory with `deno deploy` did not work for this
+organization on 2026-11-01. The server never reported which files to upload,
+and every build was cancelled after five minutes in its preparing step, across
+CLI versions, operating systems, and apps
+([denoland/deploy_feedback#954](https://github.com/denoland/deploy_feedback/issues/954)).
+
+### Hosted Deno Deploy evidence
+
+The `deno-deploy-edge` and `deno-deploy-node` routes in
+`deployment-evidence.json` are certified from the production build of `main`
+at `36be0e9` on 2026-11-01, served at
+`https://metaplate-deno-github.metaplate.deno.net` on Deno 2.9.8. Each route
+was checked with a one-line title and a wrapped title: `verify-url`, a plain
+GET for status and headers, distinct bytes per slug, and a decoded check that
+each image is not uniform. The fixture is
+[`examples/hosted/deno-deploy`](https://github.com/lnorton89/metaplate/tree/main/examples/hosted/deno-deploy),
+and the build log, build history, and raw outputs are in
+`.planning/hosted-evidence/deno-deploy-2026-11-01.json`.
+
+The certification covers that dated build, Deno Deploy's runtime at the time,
+and the packed version; it is not a guarantee for later Deno Deploy releases.
+
+- [Deno Deploy builds](https://docs.deno.com/deploy/reference/builds/)
+- [Deno Deploy apps](https://docs.deno.com/deploy/reference/apps/)
+- [Deno Deploy timelines](https://docs.deno.com/deploy/reference/timelines/)
+- [Deno Deploy REST API](https://api.deno.com/v2/docs)
 
 ## Railway, Render, and generic Node services
 
