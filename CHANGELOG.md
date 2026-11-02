@@ -114,8 +114,56 @@ All notable changes to Metaplate are documented in this file. The project uses
   fields and throws for what Next cannot render: a player without `stream`,
   an app `country`, or differing per-platform app names. Summary-card
   metadata and tags are unchanged.
+- `socialImageAdaptiveCard(metadata, options)` builds a Microsoft Teams
+  Adaptive Card (schema `https://adaptivecards.io/schemas/adaptive-card.json`,
+  version 1.6, the highest Teams documents) for bots, Workflows webhooks, and
+  message extensions: an `Image` with `altText`, a title `TextBlock`, an
+  optional description, and an `Action.OpenUrl` to the page. It enforces the
+  documented Teams limits (HTTPS image URL, PNG/JPEG/GIF, at most 1024x1024
+  pixels, image under 1 MB when `fileSize` is given, card within the 28 KB
+  webhook message limit). `SocialTarget` gains `teams` for
+  `socialImageCompatibility` and `--target teams`. The README section "Teams,
+  Slack, and Discord previews" documents what each client reads for an
+  ordinary link, which metaplate options feed it, and when an app is needed.
+- Open Graph video and audio (`og:video`, `og:audio`, https://ogp.me/#structured).
+  `socialImageMetadata` and plate `metadata()` calls accept
+  `media: { videos, audio }` (`OpenGraphVideo`, `OpenGraphAudio`) and carry
+  them on `metadata.openGraph.videos` and `.audio` in Next's descriptor shape,
+  so `openGraph: social.openGraph` passes them to Next's `Metadata`.
+  `socialMetaTags` emits each video's `og:video`, `og:video:secure_url`,
+  `og:video:type`, `og:video:width`, `og:video:height`, then each audio item's
+  `og:audio`, `og:audio:secure_url`, `og:audio:type`, after the `og:image`
+  groups and before the `twitter:*` tags, resolving relative URLs against the
+  canonical `url` and dropping repeated URLs as it does for images. Absolute
+  URLs must be credential-free http(s), `secureUrl` must be absolute https,
+  `type` must be a media type, and video dimensions must be integers from 1 to
+  65535. `metaplate/next` rejects relative video and audio URLs because Next
+  emits them without resolving `metadataBase`. Metadata without `media` is
+  unchanged.
+- `socialImageJsonLd` and `socialImageJsonLdScript` describe a metadata
+  object's Open Graph images as schema.org `ImageObject` JSON-LD, following
+  schema.org's ImageObject definition and Google's image metadata guidance:
+  `contentUrl`, `url`, `caption` (alt text), `encodingFormat`, and `width` and
+  `height` as pixel `QuantitativeValue`s, plus optional `name`, `creditText`,
+  `creator`, `copyrightNotice`, `license`, `acquireLicensePage`, and
+  `representativeOfPage` from options. One image yields a single node and
+  several yield an `@graph`, with a fixed key order. Relative URLs resolve
+  against a canonical `url` validated exactly as for `socialMetaTags`. The
+  script form, and the exported `serializeJsonLd`, escape `<`, `>`, `&`,
+  U+2028, and U+2029 so the payload can never close its `<script>` element.
 
 ### Changed
+
+- Development tooling now resolves `minimatch` 11 through an npm override,
+  clearing the moderate globparts denial-of-service advisory (fixed in
+  11.0.1) that eslint and typescript-eslint pulled in through their 10.x
+  ranges. Development-only; the published package has no dependencies.
+- The `discord` compatibility profile now checks the image formats Discord's
+  published link-preview contract supports (PNG, GIF, JPEG, WebP, and AVIF)
+  instead of reporting an unknown contract. Discord sets no image size limit
+  and accepts root-relative image URLs, so the profile does not require
+  crawler-ready URLs. `socialImageCompatibility` output for `discord` changes
+  accordingly; Instagram is still reported as unknown.
 
 - Every font loader now rejects bytes that are not a TrueType, OpenType, WOFF,
   or WOFF2 file with a `TypeError` naming the font and showing the leading
@@ -230,6 +278,11 @@ All notable changes to Metaplate are documented in this file. The project uses
   certified.
 
 ### Documentation
+
+- Document why image responses are buffered rather than streamed: each
+  response carries `Content-Length` and a strong `ETag` from the final bytes,
+  which CDNs and the verification tools rely on, and cards are too small for
+  streaming to help.
 
 - The support table claims SvelteKit 3 `+server` routes with `adapter-node` 6
   on Node 22.17 or newer. The SvelteKit example now imports from `#lib`,

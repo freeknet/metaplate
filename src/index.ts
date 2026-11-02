@@ -57,3 +57,39 @@ export {
   type XCardOptions,
   type XPlayerCard,
 } from "./x-cards.js";
+
+export {
+  ADAPTIVE_CARD_CONTENT_TYPE,
+  ADAPTIVE_CARD_SCHEMA,
+  ADAPTIVE_CARD_VERSION,
+  ADAPTIVE_CARD_VERSIONS,
+  TEAMS_ADAPTIVE_CARD_LIMITS,
+  socialImageAdaptiveCard,
+  type AdaptiveCardImage,
+  type AdaptiveCardOpenUrlAction,
+  type AdaptiveCardTextBlock,
+  type AdaptiveCardVersion,
+  type SocialImageAdaptiveCard,
+  type SocialImageAdaptiveCardInput,
+  type SocialImageAdaptiveCardOptions,
+} from "./adaptive-card.js";
+export type {
+  OpenGraphAudio,
+  OpenGraphMedia,
+  OpenGraphMediaOptions,
+  OpenGraphVideo,
+  SocialMetaAudioInput,
+  SocialMetaMediaInput,
+  SocialMetaVideoInput,
+} from "./og-media.js";
+export {
+  serializeJsonLd,
+  socialImageJsonLd,
+  socialImageJsonLdScript,
+  type SchemaOrgPixels,
+  type SocialImageCreator,
+  type SocialImageJsonLd,
+  type SocialImageJsonLdInput,
+  type SocialImageJsonLdOptions,
+  type SocialImageObject,
+} from "./json-ld.js";

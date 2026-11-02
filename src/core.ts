@@ -1,4 +1,10 @@
 import { xCardFields, type XAppCard, type XPlayerCard } from "./x-cards.js";
+import {
+  openGraphMedia,
+  type OpenGraphAudio,
+  type OpenGraphMediaOptions,
+  type OpenGraphVideo,
+} from "./og-media.js";
 
 /** The standard 1.91:1 social-card canvas. */
 export const OG_SIZE = Object.freeze({ width: 1200, height: 630 });
@@ -69,7 +75,13 @@ export type XCardMetadata<Card extends XCard = XCard> = Card extends XCard
 export type SocialImageMetadata<
   Card extends XCard = "summary_large_image",
 > = {
-  openGraph: { images: SocialImageDescriptor[] };
+  openGraph: {
+    images: SocialImageDescriptor[];
+    /** `og:video` groups; present only when `media.videos` is non-empty. */
+    videos?: OpenGraphVideo[];
+    /** `og:audio` groups; present only when `media.audio` is non-empty. */
+    audio?: OpenGraphAudio[];
+  };
   twitter: XCardMetadata<Card>;
 };
 
@@ -156,6 +168,12 @@ export type SocialImageOptions<Card extends XCard = XCard> = {
   openGraph?: OpenGraphImageOptions;
   /** Overrides X Card image, card style, and account identity. */
   twitter?: XImageOptions<Card>;
+  /**
+   * Open Graph video and audio, carried onto `metadata.openGraph.videos` and
+   * `metadata.openGraph.audio` and emitted by `socialMetaTags` after the
+   * `og:image` groups. See https://ogp.me/#structured.
+   */
+  media?: OpenGraphMediaOptions;
 };
 
 /** Enforces the image-dimension contract at every public boundary. */
@@ -413,7 +431,7 @@ export function socialImageMetadata<
   const card = twitter?.card ?? "summary_large_image";
   const cardFields = xCardFields({ ...twitter, card, images: [twitterImage] });
   return {
-    openGraph: { images: openGraphImages },
+    openGraph: { images: openGraphImages, ...openGraphMedia(options.media) },
     twitter: {
       card,
       images: [copyDescriptor(twitterImage, "Twitter")],
