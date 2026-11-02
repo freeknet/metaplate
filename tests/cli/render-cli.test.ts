@@ -235,6 +235,8 @@ describe("planImages", () => {
       { plate, pages: [{ route: "/Docs", copy: 1 }] },
       { plate, pages: [{ route: "/docs", copy: 2 }] },
     ], out)).toThrow("both write docs/og-image.png");
+    expect(() => planImages([{ plate, pages: [{ route: "", copy: 1 }, { route: "/", copy: 2 }] }], out))
+      .toThrow('Invalid render module: / and "" both write og-image.png');
   });
 
   it("rejects dot-segment routes through the plate's own path rules", () => {

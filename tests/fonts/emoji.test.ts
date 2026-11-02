@@ -149,6 +149,12 @@ describe("packageEmojiLoader", () => {
     expect(decodeDataUri(await load("❤️"))).toContain("#000006");
   });
 
+  it("names the emoji directory, not a font file, when it leaves its package", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "metaplate-emoji-"));
+    const load = packageEmojiLoader({ package: "escape", directory: "../outside" }, { resolvePackage: () => root });
+    await expect(load("😀")).rejects.toThrow("Emoji directory must stay within its package directory: ../outside");
+  });
+
   it("reads Noto Emoji's emoji_u-prefixed, underscore-joined names", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "metaplate-emoji-"));
     await writeFile(path.join(root, "emoji_u0023_20e3.svg"), square("#000007"));

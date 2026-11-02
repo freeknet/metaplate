@@ -260,7 +260,8 @@ export function planImages(jobs: readonly RenderJob<unknown>[], outDir: string):
       const route = page.route ?? "/";
       for (const view of views) {
         const variant = view.variantName ?? null;
-        const label = `${route}${variant === null ? "" : ` (${variant})`}`;
+        // An empty route would otherwise print as nothing at all.
+        const label = `${route === "" ? '""' : route}${variant === null ? "" : ` (${variant})`}`;
         const { path: relative, target } = outputTarget(outDir, view.sitePath(route));
         const key = relative.toLowerCase();
         const previous = seen.get(key);
