@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import { build } from "esbuild";
 
 /**
- * Bundles `src/cli.ts` (fast, no types) into a temp dir so spawn-based tests
+ * Bundles `src/cli/main.ts` (fast, no types) into a temp dir so spawn-based tests
  * never run a stale build, and the bundle cannot leak into lint or the
  * package tarball.
  */
@@ -13,7 +13,7 @@ export async function bundleCli(): Promise<string> {
   const bundleDir = await mkdtemp(path.join(tmpdir(), "metaplate-cli-bundle-"));
   const bundlePath = path.join(bundleDir, "cli.mjs");
   await build({
-    entryPoints: [path.join(import.meta.dirname, "..", "..", "src", "cli.ts")],
+    entryPoints: [path.join(import.meta.dirname, "..", "..", "src", "cli", "main.ts")],
     bundle: true,
     platform: "node",
     format: "esm",

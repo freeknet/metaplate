@@ -54,7 +54,7 @@ jobs:
           archive=$(npm pack --silent)
           version=$(node -p "require('./package.json').version")
           METAPLATE_PACKAGE_SPEC="$PWD/$archive" \
-            node scripts/verify-published-package.mjs "$version"
+            node scripts/package/verify-published-package.mjs "$version"
       # Development dependencies execute during the build and are part of the
       # release trust chain, so high-severity findings in them block CI too.
       - run: npm audit --audit-level=high
@@ -117,7 +117,7 @@ jobs:
       # The smoke imports metaplate by package name and fails unless every
       # entry resolves into that consumer's node_modules.
       - name: Prepare a consumer from the packed tarball
-        run: node scripts/prepare-runtime-consumer.mjs "$RUNNER_TEMP/runtime-consumer"
+        run: node scripts/package/prepare-runtime-consumer.mjs "$RUNNER_TEMP/runtime-consumer"
       # Control: the same smoke under Node separates a broken script from a
       # runtime that cannot run the package.
       - name: Smoke the packed package under Node

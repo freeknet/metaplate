@@ -152,7 +152,7 @@ on one line). `indent` accepts only spaces and tabs. It does not emit
 escape its own title text.
 
 Next.js `generateMetadata` can carry the tags through `other`, as
-[`examples/social-meta-tags.ts`](../examples/social-meta-tags.ts) shows, but Next
+[`examples/api/social-meta-tags.ts`](../examples/api/social-meta-tags.ts) shows, but Next
 renders every `other` entry with a `name` attribute and groups repeated keys.
 That is faithful for a single Open Graph image only; with several images, use
 Next's `openGraph` and `twitter` fields. For the page-level fields below,
@@ -317,7 +317,7 @@ export const viewport: Viewport = nextPageViewport(page);
   `article`, `book`, `profile`, and the `music.*` and `video.*` types) throws
   here, with `socialMetaTags` as the alternative.
 
-[`examples/page-tags.ts`](../examples/page-tags.ts) shows both paths.
+[`examples/api/page-tags.ts`](../examples/api/page-tags.ts) shows both paths.
 
 ### Video and audio previews
 
@@ -400,7 +400,7 @@ passes them through unchanged, and Next renders the same tag order. Next
 resolves only images against `metadataBase` and documents video and audio URLs
 as "Must be an absolute URL", so `metaplate/next`'s `metadata()` rejects a
 relative video or audio URL instead of emitting one a crawler cannot follow.
-[`examples/og-media.ts`](../examples/og-media.ts) shows both paths.
+[`examples/api/og-media.ts`](../examples/api/og-media.ts) shows both paths.
 
 **Where they render.** Open Graph defines the tags; it does not promise any
 client plays them. Meta's [sharing guide](https://developers.facebook.com/docs/sharing/webmasters)
@@ -474,7 +474,7 @@ og.sitePath("/blog/launch"); // "blog/launch/og-image.png", never versioned
 
 `createNodeOg`, `createEdgeOg`, `createSvgOg`, and `createNextOg` all accept
 `version` and `revision`, and a per-call `{ version }` on `metadata`, `image`,
-and `artifact`. [`examples/versioned-urls.ts`](../examples/versioned-urls.ts)
+and `artifact`. [`examples/api/versioned-urls.ts`](../examples/api/versioned-urls.ts)
 type-checks both forms.
 
 **What carries the token.** Every URL Metaplate builds for the call: the

@@ -44,13 +44,13 @@ and renders real PNG bytes. It then builds and serves Next.js (static export and
 `next start`), Astro (static and `@astrojs/node`), React Router, SvelteKit,
 Express, and an edge fixture from the same tarball, and fetches their images.
 
-CI also runs `scripts/verify-runtime.mjs` on Bun and Deno against the packed
-tarball (`Runtime smoke / bun` and `Runtime smoke / deno`, both required
+CI also runs `scripts/package/verify-runtime.mjs` on Bun and Deno against the
+packed tarball (`Runtime smoke / bun` and `Runtime smoke / deno`, both required
 checks). To run it locally:
 
 ```sh
 npm run build
-node scripts/prepare-runtime-consumer.mjs <consumer-dir>
+node scripts/package/prepare-runtime-consumer.mjs <consumer-dir>
 cd <consumer-dir>
 bun verify-runtime.mjs --expect-runtime=bun --expect-version=<version>
 deno run --allow-all --no-lock verify-runtime.mjs --expect-runtime=deno --expect-version=<version>
@@ -71,6 +71,33 @@ npm run check:workflows
 `npm run check:workflows` requires every GitHub Actions `uses:` reference to
 be pinned to a full commit SHA with a version comment, and every `npm ci` to
 run with `--ignore-scripts`.
+
+## Repository layout
+
+- `src/*.ts` at the top level are the public entry points, one per package
+  export (`index.ts` is `metaplate`, `node.ts` is `metaplate/node`, and so
+  on). They only re-export; `tsup.config.ts` builds each to `dist/<name>.js`.
+- The implementation lives in domain folders under `src/`:
+  - `core/`: social image descriptors, sizes and paths, peer loading, and
+    shared helpers;
+  - `render/`: plates, the Satori and Resvg pipelines, guards, the render
+    cache, and render files;
+  - `metadata/`: meta tags, page tags, X cards, JSON-LD, Adaptive Cards, and
+    image URL versioning and signing;
+  - `fonts/`: font, language-font, and emoji loaders;
+  - `image/`: image inspection, PNG checks, and image assets;
+  - `verify/`: compatibility rules, image and page verification, remote
+    fetching, and crawler checks;
+  - `preview/`: the `metaplate preview` server and page;
+  - `cli/`: the `metaplate` command (`cli/main.ts` builds to `dist/cli.js`).
+- `tests/` mirrors those folders. `tests/repo/` covers the repository tooling,
+  `tests/helpers/` holds shared test code, and `tests/fixtures/` holds data.
+- `scripts/` groups the tooling by purpose: `package/` (tarball and consumer
+  checks), `release/` (release notes, checks, and evidence), `supply-chain/`
+  (dependency inventory, Socket dispositions, and workflow policy), and
+  `lib/` (shared helpers).
+- `examples/api/` holds single-file API examples, and `examples/astro`,
+  `examples/next-app`, and `examples/hosted` are full apps.
 
 ## Design constraints
 

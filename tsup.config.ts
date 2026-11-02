@@ -13,7 +13,7 @@ export default defineConfig({
     png: "src/png.ts",
     image: "src/image.ts",
     assets: "src/assets.ts",
-    cli: "src/cli.ts",
+    cli: "src/cli/main.ts",
   },
   format: ["esm"],
   dts: true,

@@ -1,0 +1,331 @@
+import type { ImageSize } from "../core/social-image.js";
+
+/**
+ * Not an entry point: render guards, shared by `metaplate/render`,
+ * `metaplate/node`, and `metaplate/edge`. Web-platform only, so the edge
+ * bundle can include it unchanged.
+ */
+
+/**
+ * What a guard does when it finds a problem: `"error"` fails the render with a
+ * `RenderGuardError`, `"warn"` reports the problem and returns the image, and
+ * `"off"` (the default) skips the check entirely.
+ */
+export type RenderGuardLevel = "error" | "warn" | "off";
+
+/** Guards every renderer can run, because each works on Satori's layout. */
+export type RenderGuards = {
+  /**
+   * Text Satori had to ask `loadAdditionalAsset` for, because no plate font
+   * covers it, and that came back with no font or image. Satori draws such
+   * text from fonts that lack it: missing-glyph boxes ("tofu") or nothing.
+   */
+  missingGlyphs?: RenderGuardLevel;
+  /**
+   * An element holding text whose laid-out box reaches outside the canvas.
+   * Only text-bearing elements are checked, so decorative shapes and images
+   * may bleed off the edge on purpose.
+   */
+  overflow?: RenderGuardLevel;
+  /**
+   * Receives each problem found by a guard set to `"warn"`. Without it,
+   * warnings go to `console.warn`, so a `"warn"` guard is never silent.
+   */
+  onWarning?: (warning: RenderGuardIssue) => void;
+};
+
+/** Guards for renderers that rasterise, adding a check on the pixels. */
+export type RasterRenderGuards = RenderGuards & {
+  /**
+   * A rasterised image in which every pixel is the same color (fully
+   * transparent pixels count as one color whatever their RGB). Checked on the
+   * raw pixels before encoding, so it costs one pass that stops at the first
+   * differing pixel.
+   */
+  blank?: RenderGuardLevel;
+};
+
+export type RenderGuardName = "missingGlyphs" | "overflow" | "blank";
+
+type IssueBase = Readonly<{
+  /** The variant being rendered; `undefined` for the plate's default size. */
+  variant: string | undefined;
+  size: ImageSize;
+  message: string;
+}>;
+
+/** A laid-out box in canvas pixels, before any CSS `transform`. */
+export type RenderGuardBox = Readonly<{ left: number; top: number; width: number; height: number }>;
+
+/** One problem a guard found in one render. */
+export type RenderGuardIssue =
+  | (IssueBase & Readonly<{
+      guard: "missingGlyphs";
+      /** Satori's language code for the text, such as `ja-JP|zh-CN`, `emoji`, or `unknown`. */
+      languageCode: string;
+      /** The characters left without a font or image. */
+      segment: string;
+    }>)
+  | (IssueBase & Readonly<{
+      guard: "overflow";
+      /** The element's type, such as `div`. */
+      element: string;
+      /** The element's own text. */
+      text: string;
+      box: RenderGuardBox;
+    }>)
+  | (IssueBase & Readonly<{
+      guard: "blank";
+      /** The single color of every pixel, as RGBA bytes. */
+      color: readonly [number, number, number, number];
+    }>);
+
+/** A render that a guard set to `"error"` refused to return. */
+export class RenderGuardError extends Error {
+  /** Every error-level problem found in the render, in the order found. */
+  readonly issues: readonly RenderGuardIssue[];
+
+  constructor(issues: readonly RenderGuardIssue[]) {
+    const [first] = issues;
+    const more = issues.length > 1 ? ` (and ${issues.length - 1} more render guard issue${issues.length > 2 ? "s" : ""})` : "";
+    super(`${first?.message ?? "Render guard failed"}${more}`);
+    this.name = "RenderGuardError";
+    this.issues = Object.freeze([...issues]);
+  }
+}
+
+/** Where a render is happening, for issue reports. */
+export type GuardTarget = Readonly<{ variant: string | undefined; size: ImageSize }>;
+
+type GuardLevels = Readonly<Partial<Record<RenderGuardName, RenderGuardLevel>>> & {
+  onWarning?: ((warning: RenderGuardIssue) => void) | undefined;
+};
+
+const LEVELS = new Set<unknown>(["error", "warn", "off"]);
+const GUARD_NAMES: readonly RenderGuardName[] = ["missingGlyphs", "overflow", "blank"];
+
+/**
+ * Validates a plate's `guards` at definition time, so a typo such as
+ * `"warning"` fails where it was written rather than silently disabling a
+ * check. `allowed` names the guards the renderer can run.
+ */
+export function assertRenderGuards(guards: unknown, allowed: readonly RenderGuardName[], entry: string): void {
+  if (guards === undefined) return;
+  if (guards === null || typeof guards !== "object") {
+    throw new TypeError("guards must be an object");
+  }
+  const record = guards as Record<string, unknown>;
+  for (const name of GUARD_NAMES) {
+    const level = record[name];
+    if (level === undefined) continue;
+    if (!LEVELS.has(level)) {
+      throw new TypeError(`guards.${name} must be "error", "warn", or "off"`);
+    }
+    if (level !== "off" && !allowed.includes(name)) {
+      throw new TypeError(
+        `${entry} cannot run guards.${name}: it never sees the rendered pixels. ` +
+          "Use metaplate/node or metaplate/edge for the blank guard.",
+      );
+    }
+  }
+  if (record.onWarning !== undefined && typeof record.onWarning !== "function") {
+    throw new TypeError("guards.onWarning must be a function");
+  }
+}
+
+export function guardLevel(guards: GuardLevels | undefined, name: RenderGuardName): RenderGuardLevel {
+  return guards?.[name] ?? "off";
+}
+
+/**
+ * Collects the issues of one render, then reports warnings and throws for
+ * errors once the render step has finished, so one error lists everything
+ * that step found rather than only the first problem.
+ */
+export class GuardReport {
+  private readonly errors: RenderGuardIssue[] = [];
+  private readonly warnings: RenderGuardIssue[] = [];
+
+  constructor(private readonly guards: GuardLevels | undefined) {}
+
+  add(issue: RenderGuardIssue): void {
+    const level = guardLevel(this.guards, issue.guard);
+    if (level === "error") this.errors.push(issue);
+    else if (level === "warn") this.warnings.push(issue);
+  }
+
+  settle(): void {
+    const warn = this.guards?.onWarning ?? defaultWarning;
+    for (const warning of this.warnings.splice(0)) warn(warning);
+    const errors = this.errors.splice(0);
+    if (errors.length > 0) throw new RenderGuardError(errors);
+  }
+}
+
+function defaultWarning(warning: RenderGuardIssue): void {
+  console.warn(`metaplate: ${warning.message}`);
+}
+
+function describeTarget(target: GuardTarget): string {
+  const { width, height } = target.size;
+  return target.variant === undefined
+    ? `the ${width}x${height} plate`
+    : `variant "${target.variant}" (${width}x${height})`;
+}
+
+function quote(text: string, limit = 60): string {
+  const single = text.replace(/\s+/g, " ").trim();
+  return JSON.stringify(single.length > limit ? `${single.slice(0, limit - 1)}…` : single);
+}
+
+/** Satori's own asset contract: a string is an image, a list or object is fonts. */
+function isEmptyAsset(asset: unknown): boolean {
+  return asset === undefined || asset === null || asset === "" || (Array.isArray(asset) && asset.length === 0);
+}
+
+/** Removes the graphemes `graphemeImages` draws, which Satori still reports as missing from the fonts. */
+function withoutImages(segment: string, images: Readonly<Record<string, string>> | undefined): string {
+  if (!images) return segment;
+  let rest = segment;
+  for (const [grapheme, image] of Object.entries(images)) {
+    if (grapheme !== "" && image) rest = rest.split(grapheme).join("");
+  }
+  return rest;
+}
+
+type AssetLoader = (languageCode: string, segment: string) => Promise<unknown>;
+
+/**
+ * Wraps the `loadAdditionalAsset` Satori will call. Satori calls it only for
+ * text no supplied font covers (once per language code and segment in a
+ * render); when the whole chain answers with nothing, Satori draws the text
+ * from fonts that lack it, which is exactly what this guard reports.
+ */
+export function guardAssetLoader<Loader extends AssetLoader>(
+  loader: Loader | undefined,
+  report: GuardReport,
+  target: GuardTarget,
+  graphemeImages: Readonly<Record<string, string>> | undefined,
+): Loader {
+  return (async (languageCode: string, segment: string) => {
+    const asset = loader ? await loader(languageCode, segment) : [];
+    const unresolved = withoutImages(segment, graphemeImages);
+    if (isEmptyAsset(asset) && unresolved !== "") {
+      const remedy = languageCode === "emoji"
+        ? "set the plate's emoji option to draw emoji as images"
+        : "add a font that covers it to fonts, or return one from satori.loadAdditionalAsset";
+      report.add({
+        guard: "missingGlyphs",
+        variant: target.variant,
+        size: target.size,
+        languageCode,
+        segment: unresolved,
+        message:
+          `Missing glyphs in ${describeTarget(target)}: no font or image for ${quote(unresolved)} ` +
+          `(Satori language code "${languageCode}"); ${remedy}`,
+      });
+    }
+    return asset;
+  }) as Loader;
+}
+
+/** What Satori's `onNodeDetected` reports for one laid-out element. */
+export type DetectedNode = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  type: string;
+  textContent?: unknown;
+};
+
+/** Sub-pixel slack for layout rounding (for example under `pointScaleFactor`). */
+const OVERFLOW_TOLERANCE = 0.5;
+
+/** The text an element lays out itself: a string, a number, or those inside an array of children. */
+function ownText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (typeof content === "number" || typeof content === "bigint") return String(content);
+  if (Array.isArray(content)) return content.map(ownText).join("");
+  return "";
+}
+
+/**
+ * Reports a text-bearing element whose layout box is not wholly inside the
+ * canvas. Elements without their own text, such as a decorative shape or an
+ * image deliberately bleeding off the edge, are never reported.
+ */
+export function overflowDetector(report: GuardReport, target: GuardTarget) {
+  const { width: canvasWidth, height: canvasHeight } = target.size;
+  return (node: DetectedNode): void => {
+    const text = ownText(node.textContent);
+    if (text.trim() === "") return;
+    const { left, top, width, height } = node;
+    const inside =
+      left >= -OVERFLOW_TOLERANCE &&
+      top >= -OVERFLOW_TOLERANCE &&
+      left + width <= canvasWidth + OVERFLOW_TOLERANCE &&
+      top + height <= canvasHeight + OVERFLOW_TOLERANCE;
+    if (inside) return;
+    const box = Object.freeze({ left, top, width, height });
+    report.add({
+      guard: "overflow",
+      variant: target.variant,
+      size: target.size,
+      element: node.type,
+      text,
+      box,
+      message:
+        `Text ${quote(text)} in a <${node.type}> is laid out at ${round(left)},${round(top)} ` +
+        `${round(width)}x${round(height)}, outside ${describeTarget(target)}; ` +
+        "a root with width/height 100% and padding needs boxSizing: \"border-box\"",
+    });
+  };
+}
+
+function round(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+/**
+ * The single color of an RGBA pixmap, or `undefined` once any pixel differs.
+ * Fully transparent pixels compare equal whatever their color channels hold.
+ */
+export function uniformColor(pixels: Uint8Array): [number, number, number, number] | undefined {
+  if (pixels.length < 4) return undefined;
+  const first = pixel(pixels, 0);
+  const transparent = first[3] === 0;
+  for (let offset = 4; offset + 3 < pixels.length; offset += 4) {
+    const alpha = pixels[offset + 3];
+    if (transparent) {
+      if (alpha !== 0) return undefined;
+    } else if (
+      alpha !== first[3] ||
+      pixels[offset] !== first[0] ||
+      pixels[offset + 1] !== first[1] ||
+      pixels[offset + 2] !== first[2]
+    ) {
+      return undefined;
+    }
+  }
+  return transparent ? [0, 0, 0, 0] : first;
+}
+
+function pixel(pixels: Uint8Array, offset: number): [number, number, number, number] {
+  return [pixels[offset] ?? 0, pixels[offset + 1] ?? 0, pixels[offset + 2] ?? 0, pixels[offset + 3] ?? 0];
+}
+
+/** Reports a rasterised frame in which every pixel is one color. */
+export function checkBlank(pixels: Uint8Array, report: GuardReport, target: GuardTarget): void {
+  const color = uniformColor(pixels);
+  if (!color) return;
+  report.add({
+    guard: "blank",
+    variant: target.variant,
+    size: target.size,
+    color: Object.freeze(color),
+    message:
+      `Blank render: every pixel of ${describeTarget(target)} is rgba(${color.slice(0, 3).join(", ")}, ` +
+      `${round(color[3] / 255)}); check for text drawn off the canvas or fonts that did not load`,
+  });
+}

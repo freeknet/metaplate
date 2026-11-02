@@ -779,5 +779,5 @@ for that route shape). `createSvgOg` has no pixels either, so it rejects
 runs the blank check on PNG files and URLs; see
 [the verification guide](verification.md#require-visible-content).
 
-[`examples/render-guards.ts`](../examples/render-guards.ts) is a type-checked
+[`examples/api/render-guards.ts`](../examples/api/render-guards.ts) is a type-checked
 version of a strict build plate and a lenient live one.

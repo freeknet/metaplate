@@ -59,7 +59,7 @@ Deploy's documented 1 GB limit for a deployment's files. Without them it is
 about 56 MB. The build
 environment fetches the newest npm (12 at the time of writing), whose
 `npm pack --json` prints an object rather than an array;
-`scripts/npm-pack-result.mjs` at the repository root reads both.
+`scripts/package/npm-pack-result.mjs` at the repository root reads both.
 
 ### Why not `deno deploy` from this directory
 
