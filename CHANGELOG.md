@@ -134,6 +134,11 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Changed
 
+- Development tooling now resolves `minimatch` 11 through an npm override,
+  clearing the moderate globparts denial-of-service advisory (fixed in
+  11.0.1) that eslint and typescript-eslint pulled in through their 10.x
+  ranges. Development-only; the published package has no dependencies.
+
 - Every font loader now rejects bytes that are not a TrueType, OpenType, WOFF,
   or WOFF2 file with a `TypeError` naming the font and showing the leading
   bytes it received. Satori renders text in an unreadable font as nothing, so
