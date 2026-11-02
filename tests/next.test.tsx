@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import { createNextOg } from "../src/next.js";
+import { socialImageVersion } from "../src/index.js";
 import { verifyPng } from "../src/png.js";
 
 type HandlerCopy = { title: string; alt: string };
@@ -101,4 +102,25 @@ it("advertises an origin URL when one is configured", () => {
     "https://example.com/docs/og-image",
   );
   expect(plate.metadata("/docs", {}).openGraph.images[0]?.type).toBe("image/png");
+});
+
+it("versions Next metadata image URLs while the route stays a plain path", () => {
+  const plate = createNextOg<HandlerCopy>({
+    alt: (copy) => copy.alt,
+    imagePath: "opengraph-image",
+    version: "copy",
+    revision: "2",
+    component: (copy) => <div style={{ display: "flex" }}>{copy.title}</div>,
+  });
+  const copy = { title: "Launch", alt: "Launch card" };
+  const v = socialImageVersion(copy, "2");
+  const metadata = plate.metadata("/blog/launch", copy);
+
+  // Next joins a relative image URL onto metadataBase's path and parses the
+  // result as a URL, which keeps the query; the route still serves the path.
+  expect(metadata.openGraph.images[0]!.url).toBe(`/blog/launch/opengraph-image?v=${v}`);
+  expect(metadata.twitter.images[0]!.url).toBe(`/blog/launch/opengraph-image?v=${v}`);
+  expect(new URL(metadata.openGraph.images[0]!.url, "https://example.com").href)
+    .toBe(`https://example.com/blog/launch/opengraph-image?v=${v}`);
+  expect(plate.sitePath("/blog/launch")).toBe("blog/launch/opengraph-image");
 });
