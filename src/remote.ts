@@ -61,7 +61,8 @@ export type RemoteImageErrorCode =
   | "byte-limit"
   | "timeout"
   | "network"
-  | "content-type";
+  | "content-type"
+  | "origin";
 
 /** A refused or failed remote fetch, with a stable machine-readable code. */
 export class RemoteImageError extends Error {
@@ -252,6 +253,11 @@ function settingsFrom(options: RemoteFetchOptions): Settings {
     ),
     resolve: options.resolve ?? ((hostname) => lookup(hostname, { all: true })),
   };
+}
+
+/** Validates fetch options once, where a long-lived caller is defined. */
+export function assertRemoteFetchOptions(options: RemoteFetchOptions): void {
+  settingsFrom(options);
 }
 
 function defaultPort(url: URL): number {
@@ -508,13 +514,16 @@ export function fetchRemoteImageVia(
 /**
  * The one hardened fetch loop behind every remote check. Only the `Accept`
  * header varies by caller; every scheme, credential, port, address,
- * redirect, byte, and time limit is applied identically.
+ * redirect, byte, and time limit is applied identically. `checkHop` adds a
+ * caller policy (such as an origin allowlist) to every hop, redirects
+ * included, after the built-in URL checks and before any DNS lookup.
  */
 export async function fetchRemoteResourceVia(
   input: string | URL,
   options: RemoteFetchOptions,
   dial: RemoteDialer,
   accept: string,
+  checkHop?: (url: URL, label: string) => void,
 ): Promise<RemoteImage> {
   const settings = settingsFrom(options);
   const requested = parseUrl(String(input), undefined, "URL");
@@ -524,7 +533,9 @@ export async function fetchRemoteResourceVia(
     const redirects: string[] = [];
     let current = requested;
     for (;;) {
-      checkUrl(current, settings, redirects.length === 0 ? "URL" : "Redirect to");
+      const label = redirects.length === 0 ? "URL" : "Redirect to";
+      checkUrl(current, settings, label);
+      checkHop?.(current, label);
       const address = await vetAddress(current, settings, controller.signal);
       const result = await exchange(current, dial(address), settings, controller.signal, accept);
       if (result.kind === "body") {

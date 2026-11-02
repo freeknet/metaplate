@@ -567,6 +567,48 @@ try {
     `,
     consumer,
   );
+  // metaplate/image embeds image bytes for edge plates too, so imageAsset is
+  // held to the same no-Node-built-ins rule; metaplate/assets is its Node
+  // reader and must work without loading a renderer peer.
+  const portableImageSource = readFileSync(
+    join(consumer, "node_modules", manifest.name, manifest.exports["./image"].import),
+    "utf8",
+  );
+  if (/\bnode:/.test(portableImageSource)) {
+    throw new Error("metaplate/image unexpectedly imports a Node built-in.");
+  }
+  writeFileSync(
+    join(consumer, "logo.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 20"><rect width="40" height="20"/></svg>',
+  );
+  runModule(
+    `
+      const { imageAsset, imageAssetLoader } = await import(${JSON.stringify(`${manifest.name}/image`)});
+      const { fileImageLoader, remoteImageLoader } = await import(${JSON.stringify(`${manifest.name}/assets`)});
+      const svg = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="4"/>');
+      const asset = imageAsset(svg);
+      if (asset.width !== 8 || asset.height !== 4 || !asset.src.startsWith("data:image/svg+xml;base64,")) {
+        throw new Error("The portable imageAsset did not embed an SVG.");
+      }
+      let calls = 0;
+      const memoized = imageAssetLoader(() => { calls += 1; return svg; });
+      if ((await memoized()) !== (await memoized()) || calls !== 1) {
+        throw new Error("The portable image asset loader did not memoize.");
+      }
+      const logo = fileImageLoader("logo.svg");
+      const read = await logo();
+      if (read !== (await logo()) || read.width !== 40 || read.height !== 20) {
+        throw new Error("metaplate/assets did not read and memoize a project image.");
+      }
+      try {
+        remoteImageLoader({ origins: [] });
+        throw new Error("remoteImageLoader accepted an empty origins allowlist.");
+      } catch (error) {
+        if (!(error instanceof TypeError)) throw error;
+      }
+    `,
+    consumer,
+  );
   (await import("./package-fixtures-edge.mjs")).verifyEdgeFixture({ archive, consumer, temporary, manifest, lockfile, install, runModule, linkLockedDependency });
 
   // The Next adapter must work in an actual static export, not merely in a

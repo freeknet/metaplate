@@ -1,6 +1,12 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
+/** A decodable 1x1 red GIF89a, small enough to inline. */
+export const RED_GIF = Uint8Array.from(
+  atob("R0lGODlhAQABAIAAAP8AAP///ywAAAAAAQABAAACAkQBADs="),
+  (character) => character.charCodeAt(0),
+);
+
 /** Real encoder output checked into tests/fixtures. */
 export function fixture(name: string) {
   return readFileSync(path.join(import.meta.dirname, "..", "fixtures", name));

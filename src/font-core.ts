@@ -1,3 +1,5 @@
+import { memoizeLoad } from "./bytes.js";
+
 export type FontWeight =
   | 100
   | 200
@@ -90,14 +92,7 @@ export function loadedFont(font: FontFace, data: FontBytes): LoadedFont {
 }
 
 export function memoizedFontLoader(load: () => Promise<LoadedFont[]>) {
-  let loaded: Promise<LoadedFont[]> | undefined;
-  return () => {
-    loaded ??= load().catch((error: unknown) => {
-      loaded = undefined;
-      throw error;
-    });
-    return loaded;
-  };
+  return memoizeLoad(load);
 }
 
 /** Normalizes existing application/framework font bytes for Satori and Next. */

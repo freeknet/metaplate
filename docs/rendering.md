@@ -292,6 +292,220 @@ types because Next itself is intrinsic to it.
 Use `createSvgOg` from `metaplate/render` when the consumer only needs SVG. It
 does not load or execute Resvg's native Node binding.
 
+## Images and assets
+
+A plate can draw logos, photos, and per-page images such as avatars or
+covers. Metaplate embeds each one as a `data:` URI before Satori runs, so
+nothing is fetched during layout, and checks the bytes first, so a broken
+image fails the render with a reason instead of leaving an empty box.
+
+### Async components
+
+`component` may be `async` in every adapter (`createSvgOg`, `createNodeOg`,
+`createEdgeOg`, and `createNextOg`), so it can load what a page needs before
+returning the element tree:
+
+```tsx
+import { fileImageLoader, remoteImageLoader } from "metaplate/assets";
+import { fontsourceFontLoader } from "metaplate/fonts";
+import { createNodeOg } from "metaplate/node";
+
+const logo = fileImageLoader("public/logo.svg");
+const avatars = remoteImageLoader({ origins: ["https://avatars.example.com"] });
+
+export const og = createNodeOg<{ title: string; avatar: string }>({
+  alt: (copy) => copy.title,
+  fonts: fontsourceFontLoader([{ font: "inter", weight: 700 }]),
+  component: async (copy) => {
+    const [mark, avatar] = await Promise.all([logo(), avatars(copy.avatar)]);
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 48, fontFamily: "Inter" }}>
+        <img src={avatar.src} width={160} height={160} style={{ borderRadius: 80 }} />
+        <img src={mark.src} width={mark.width} height={mark.height} />
+        {copy.title}
+      </div>
+    );
+  },
+});
+```
+
+A synchronous component works as before and is not awaited. The component
+runs after the fonts load. A component that throws or rejects fails the
+render with that error. Define loaders once, at module scope, like the font
+loaders: each one reads or fetches on first use, shares the result with every
+later render, and retries after a failure instead of caching it.
+
+### Embedding bytes with `imageAsset`
+
+`imageAsset(bytes, options?)` from `metaplate/image` turns image bytes into
+what `<img>` needs. It takes an `ArrayBuffer` or any view, including a Node
+`Buffer`, and needs no peers and no Node built-ins, so it works on every
+runtime:
+
+```ts
+import { imageAsset } from "metaplate/image";
+
+const logo = imageAsset(bytes);
+// { src: "data:image/png;base64,…", width: 512, height: 128,
+//   format: "png", contentType: "image/png", byteLength: 20480 }
+```
+
+`width` and `height` are the image's intrinsic size, which Satori uses when
+`<img>` sets neither. Setting them explicitly is clearer, and
+`width={logo.width}` keeps the aspect ratio. The format comes from the bytes,
+not the file name or `Content-Type`. Raster formats are walked by the same
+structural detector as `imageDimensions`, so a truncated download or an HTML
+error page served with status 200 throws. That detector is strict: it also
+rejects a JPEG with bytes after its end marker, which some cameras write.
+Re-encode such a file before embedding it.
+
+An SVG needs a size Satori can use: pixel `width` and `height` attributes, or
+a `viewBox`. A logo exported with only `viewBox="0 0 48 24"` is 48x24, and a
+lone pixel `width` or `height` is scaled by the `viewBox` aspect ratio,
+matching Satori's own sizing. DOCTYPE and entity declarations are refused,
+as in `imageDimensions`.
+
+Sources larger than `maxBytes` (default 4 MiB) are refused before decoding.
+Every embedded image grows the SVG Satori produces by a third more than its
+size, and the SVG is rendered on every request, so resize large photos before
+embedding them.
+
+`imageAssetLoader(source, options?)` memoizes one asset in any runtime. The
+source is bytes, a `Response`, or a function returning either. A
+`Response` that is not `ok` rejects, and a failed load is retried on the next
+render rather than cached.
+
+### Supported formats
+
+Satori's `<img>` embeds PNG, JPEG, GIF, WebP, and SVG, and rejects anything
+else, AVIF included.
+The raster card is then drawn by Resvg, which does not decode every format
+Satori embeds. An image Resvg cannot decode is drawn as nothing, and the
+card keeps its size and format, so nothing reports the loss. `imageAsset`
+accepts only the formats every Metaplate renderer draws unless you opt in:
+
+| Format | `metaplate/node` and `metaplate/edge` (Resvg 2.6) | `metaplate/next` (`next/og`) | `imageAsset` |
+| --- | --- | --- | --- |
+| PNG, JPEG, SVG | Drawn | Drawn | Accepted |
+| GIF | First frame drawn | Not drawn | Only with `formats: [..., "gif"]` |
+| WebP | Not drawn | Not drawn | Only with `formats: [..., "webp"]` |
+| AVIF, HEIC, JPEG XL, TIFF, BMP, ICO | Rejected by Satori | Rejected by Satori | Rejected, with the format named |
+
+This was observed with Satori 0.63.2, `@resvg/resvg-js` 2.6.2,
+`@resvg/resvg-wasm` 2.6.2, and Next.js 16.4.3. The test suite renders each
+format and fails if a renderer starts drawing GIF or WebP, so the defaults
+can be revisited then. Opt into `"gif"` only for plates rendered with
+`metaplate/node` or `metaplate/edge`. Opt into `"webp"` only for
+`createSvgOg` output that a browser displays. Otherwise, convert to PNG or
+JPEG. `formats` also restricts: `formats: ["png"]` refuses everything else.
+
+### Project files with `metaplate/assets`
+
+`metaplate/assets` holds the Node readers. It loads no renderer peers, so a
+Next.js route, an Astro endpoint, or a build script can import it without
+loading Satori or Resvg.
+
+```ts
+import { fileImageLoader, readImageAsset } from "metaplate/assets";
+
+const logo = fileImageLoader("public/logo.svg"); // memoized: () => Promise<ImageAsset>
+const photo = await readImageAsset(new URL("./cover.jpg", import.meta.url));
+```
+
+Relative paths resolve against `cwd` (default `process.cwd()`), and a
+`file:` URL is read as is. The file's size is checked against `maxBytes`
+before it is read. Format and size errors name the file. On a serverless
+host, include the file in the function bundle, as for
+[fonts](fonts.md).
+
+This replaces the boilerplate in Next's
+[`opengraph-image` docs](https://nextjs.org/docs/app/api-reference/file-conventions/metadata/opengraph-image#using-nodejs-runtime-with-local-assets),
+which reads a file, base64-encodes it, and hard-codes its media type.
+Passing an `ArrayBuffer` as `src` also works at run time, but React's types
+reject it ([satori#606](https://github.com/vercel/satori/issues/606)), and
+it is not checked before Resvg sees it.
+
+### Remote images with an origin allowlist
+
+Given an `http(s)` URL as `<img src>`, Satori fetches it during layout,
+with no origin allowlist, byte cap, or timeout of your choosing. A URL from
+request data therefore lets the image route reach whatever the server can
+reach, which the [support matrix](support.md) warns against.
+`remoteImageLoader` fetches instead, under an explicit policy:
+
+```ts
+import { remoteImageLoader } from "metaplate/assets";
+
+const avatars = remoteImageLoader({
+  origins: ["https://avatars.example.com", "https://cdn.example.com"],
+});
+
+const avatar = await avatars(`https://avatars.example.com/u/${user.id}.png`);
+```
+
+- **Only allowlisted origins.** `origins` is required, and entries are bare
+  origins: a path, query, or credentials in an entry throws rather than
+  being ignored. Every request and every redirect must stay on one of them;
+  a URL or redirect elsewhere rejects with `RemoteImageError` code
+  `"origin"` before any connection is made.
+- **The `verify-url` fetcher.** Requests go through the same hardened fetcher
+  as `fetchRemoteImage`. It fetches only `http:` and `https:` on default
+  ports (others need `allowedPorts`). It refuses URLs with credentials,
+  checks every resolved address and dials the checked one, so DNS rebinding
+  cannot move a request. Loopback, private, link-local, and other non-public
+  addresses are refused unless `allowPrivate` is set for local development.
+  Each redirect (at most `maxRedirects`, default 3) is checked again. It
+  sends a fixed identity with no cookies or credentials, and enforces
+  `timeoutMs` and `connectionTimeoutMs` (10 s each by default).
+- **A byte cap.** `maxBytes` (default 4 MiB) caps the body while it streams
+  and is passed to `imageAsset`. The bytes must pass `imageAsset` and its
+  `formats`, and errors name the URL.
+- **A bounded cache.** Each loader memoizes up to `cacheSize` images by URL
+  (default 64), evicting the oldest first, as the emoji loader does, and
+  shares one request between concurrent renders. `cacheSize: 0` turns the
+  cache off. Failures are never cached. Cached entries do not expire, so
+  give a changed image a new URL (`/u/42.png?v=3`), or create a new loader
+  to start empty.
+
+### Edge runtimes
+
+`metaplate/assets` needs Node. On an edge runtime, serve the image as a
+static file of the same site and fetch it from your own origin, the pattern
+the [edge guide](edge.md#edge-runtimes-with-metaplateedge) uses for fonts and
+Wasm:
+
+```ts
+import { createEdgeOg } from "metaplate/edge";
+import { imageAssetLoader } from "metaplate/image";
+
+let origin = "";
+const logo = imageAssetLoader(() => fetch(new URL("/images/logo.png", origin)));
+
+const og = createEdgeOg({
+  // fonts, resvg, and layout as in the edge guide
+  component: async (copy: { title: string }) => {
+    const { src, width, height } = await logo();
+    return {
+      type: "div",
+      props: {
+        style: { display: "flex", alignItems: "center", gap: 32 },
+        children: [{ type: "img", props: { src, width, height } }, copy.title],
+      },
+    };
+  },
+});
+
+const route = og.fetchableFrom((request: Request) => {
+  origin ||= new URL(request.url).origin;
+  return { title: new URL(request.url).pathname.slice(1, 81) };
+});
+```
+
+The fetch goes to the deployment's own origin, never to a URL from request
+data. To show per-page images from another host on the edge, fetch them from
+that host with the runtime's `fetch` under your own allowlist, or render the
+cards at build time with `metaplate/node`.
+
 ## Plate constraints
 
 A plate is a Satori layout that rasterises to an image, not a DOM tree. Six
