@@ -31,11 +31,13 @@ export type {
   PlateContext,
   PlateElement,
   PlateMetadataOptions,
+  PlateRouteOptions,
   PlateUrlOptions,
   PlateVariant,
   PlateVariants,
   PlateVersioning,
   PlateView,
+  SignedRouteOptions,
 } from "./plate.js";
 
 /** The render-module contract `metaplate render` loads; see docs/render-cli.md. */

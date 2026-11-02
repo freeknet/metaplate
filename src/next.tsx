@@ -3,6 +3,7 @@ import type { ReactElement } from "react";
 import { OG_CONTENT_TYPE, type ImageSize, type XCardMetadata } from "./core.js";
 import { assertAbsoluteMedia } from "./og-media.js";
 import { optionalPeer } from "./optional-peer.js";
+import type { ImageSigningKeys } from "./signing.js";
 import { pageFields, type SocialMetaOptions } from "./page-tags.js";
 import { nextTwitterShape } from "./x-cards.js";
 import {
@@ -21,11 +22,13 @@ export type {
   PlateContext,
   PlateElement,
   PlateMetadataOptions,
+  PlateRouteOptions,
   PlateUrlOptions,
   PlateVariant,
   PlateVariants,
   PlateVersioning,
   PlateView,
+  SignedRouteOptions,
 } from "./plate.js";
 
 type ImageResponseConstructor = typeof import("next/og").ImageResponse;
@@ -119,6 +122,16 @@ export function createNextOg<Copy, Variant extends string = string>(
         const metadata = view.metadata(route, copy, options);
         assertAbsoluteMedia(metadata.openGraph, "metaplate/next");
         return metadata;
+      },
+      /** `metadata` with every image URL signed for a `signed` route handler. */
+      signedMetadata: async (
+        route: string,
+        copy: Copy,
+        keys: ImageSigningKeys,
+        options?: PlateMetadataOptions<Variant>,
+      ) => {
+        assertAbsoluteMedia(view.metadata(route, copy, options).openGraph, "metaplate/next");
+        return view.signedMetadata(route, copy, keys, options);
       },
       /** The image path relative to the deployment root, without `basePath` or `origin`. */
       sitePath: view.sitePath,
