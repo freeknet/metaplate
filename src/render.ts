@@ -1,10 +1,20 @@
 import type { ImageSize } from "./core.js";
 import type { EmojiLoader } from "./emoji.js";
-import type { PlateContext, PlateElement, PlateVariants } from "./plate.js";
+import { assertRenderGuards, type RenderGuards } from "./guards.js";
+import type { PlateContext, PlateElement, PlateVariants, PlateVersioning } from "./plate.js";
 import { loadSatori } from "./peers.js";
 import { createSvgPlate } from "./svg-plate.js";
 
 export { SVG_CONTENT_TYPE } from "./svg-plate.js";
+
+export {
+  RenderGuardError,
+  type RenderGuardBox,
+  type RenderGuardIssue,
+  type RenderGuardLevel,
+  type RenderGuardName,
+  type RenderGuards,
+} from "./guards.js";
 
 /**
  * A font face the standalone renderer passes through to Satori. Declared
@@ -93,8 +103,10 @@ export type {
   PlateContext,
   PlateElement,
   PlateMetadataOptions,
+  PlateUrlOptions,
   PlateVariant,
   PlateVariants,
+  PlateVersioning,
   PlateView,
 } from "./plate.js";
 
@@ -131,11 +143,19 @@ export type SvgOgDefinition<Copy, Variant extends string = string> = {
    * receives every other script and any emoji the loader has no image for.
    */
   emoji?: EmojiLoader;
-};
+  /**
+   * Opt-in checks that fail (`"error"`) or report (`"warn"`) a render that
+   * would ship a broken card instead of returning it. Every guard is off by
+   * default. `metaplate/node` and `metaplate/edge` add a `blank` guard on the
+   * rasterised pixels; see docs/rendering.md#render-guards.
+   */
+  guards?: RenderGuards;
+} & PlateVersioning;
 
 /** Defines a framework-neutral social image renderer that emits SVG text. */
 export function createSvgOg<Copy, Variant extends string = string>(
   definition: SvgOgDefinition<Copy, Variant>,
 ) {
+  assertRenderGuards(definition.guards, ["missingGlyphs", "overflow"], "metaplate/render");
   return createSvgPlate(definition, loadSatori);
 }

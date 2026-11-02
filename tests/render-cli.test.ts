@@ -12,6 +12,7 @@ import {
 } from "../src/cli-args.js";
 import { fontsourceFontLoader } from "../src/fonts.js";
 import { verifyImage } from "../src/image.js";
+import { socialImageVersion } from "../src/index.js";
 import { createNodeOg } from "../src/node.js";
 import { createSvgOg } from "../src/render.js";
 import {
@@ -52,7 +53,7 @@ function card(copy: Copy) {
   };
 }
 
-function nodePlate(options: { basePath?: string; origin?: string } = {}) {
+function nodePlate(options: { basePath?: string; origin?: string; version?: "copy" } = {}) {
   return createNodeOg<Copy, "square">({
     alt: (copy) => copy.title,
     fonts: inter,
@@ -161,6 +162,17 @@ describe("render module contract", () => {
     [{ plate: { ...fakePlate(), variants: "square" }, pages: [page] }, "job.plate.variants must be an array"],
   ])("rejects %j", async (exported, message) => {
     await expect(resolveRenderJobs(exported)).rejects.toThrow(`Invalid render module: ${message}`);
+  });
+
+  it("keeps a page's version and refuses one that is not a valid token", async () => {
+    const [job] = await resolveRenderJobs({ plate: fakePlate(), pages: [{ route: "/a", copy: {}, version: "r2" }] });
+    expect(job!.pages).toEqual([{ route: "/a", copy: {}, version: "r2" }]);
+    await expect(resolveRenderJobs({ plate: fakePlate(), pages: [{ copy: {}, version: "a&b" }] })).rejects.toThrow(
+      "Invalid render module: job.pages[0].version: Invalid version",
+    );
+    await expect(resolveRenderJobs({ plate: fakePlate(), pages: [{ copy: {}, version: 2 }] })).rejects.toThrow(
+      "Invalid render module: job.pages[0].version: Invalid version",
+    );
   });
 
   it("names the plate factories when given a plate that cannot produce artifacts", async () => {
@@ -287,6 +299,24 @@ describe("renderFiles", { timeout: 30_000 }, () => {
         "path", "url", "route", "variant", "size", "format", "contentType", "bytes", "sha256", "verified",
       ]);
     }
+  });
+
+  it("publishes versioned URLs in the manifest while writing unversioned paths", async () => {
+    const out = await temporary("versioned");
+    const plate = nodePlate({ basePath: "/project", version: "copy" }).variant("square");
+    const home = { title: "Home" };
+    const images = planImages([{
+      plate: plate as RenderablePlate<Copy> as RenderablePlate<unknown>,
+      pages: [{ copy: home }, { route: "/posts/hello", copy: { title: "Hello" }, version: "release-2" }],
+    }], out);
+    const outcomes = await renderFiles(images, { outDir: out, concurrency: 2 });
+
+    expect(outcomes.every((outcome) => outcome.valid)).toBe(true);
+    expect(renderManifest(outcomes as ManifestImage[]).images.map(({ path: file, url }) => ({ file, url }))).toEqual([
+      { file: "og-image-square.png", url: `/project/og-image-square.png?v=${socialImageVersion(home)}` },
+      { file: "posts/hello/og-image-square.png", url: "/project/posts/hello/og-image-square.png?v=release-2" },
+    ]);
+    expect(existsSync(path.join(out, "posts", "hello", "og-image-square.png"))).toBe(true);
   });
 
   it("writes an encoder's bytes and records an unrecognizable format as unverified", async () => {
@@ -558,7 +588,7 @@ export default {
 
     const usage = runCli(bundlePath, ["render"], cwd);
     expect(usage.status).toBe(1);
-    expect(usage.stderr).toBe(`${RENDER_USAGE}\n${RENDER_USAGE}\n`);
+    expect(usage.stderr).toBe(`${RENDER_USAGE}\n`);
   });
 
   it("explains how to load JSX instead of failing on the extension", async () => {

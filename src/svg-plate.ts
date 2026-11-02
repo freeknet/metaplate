@@ -4,6 +4,13 @@ import {
   isPendingElement,
   type PlateContext,
 } from "./plate.js";
+import {
+  GuardReport,
+  guardAssetLoader,
+  guardLevel,
+  overflowDetector,
+  type GuardTarget,
+} from "./guards.js";
 import type { SatoriOptions, SvgOgDefinition } from "./render.js";
 
 export const SVG_CONTENT_TYPE = "image/svg+xml" as const;
@@ -56,15 +63,21 @@ async function renderSvg<Copy, Variant extends string>(
   // type surface free of React and of Node's Buffer global (which is also
   // why `definition.satori` is cast across the Satori boundary rather than
   // typed against it).
-  return satori(
+  const report = new GuardReport(definition.guards);
+  const target: GuardTarget = { variant: context.variant, size: context.size };
+  const svg = await satori(
     element as Parameters<typeof satori>[0],
     {
-      ...(satoriOptions(definition) as unknown as Parameters<typeof satori>[1]),
+      ...(satoriOptions(definition, report, target) as unknown as Parameters<typeof satori>[1]),
       width: context.size.width,
       height: context.size.height,
       fonts: [...fonts],
     } as unknown as Parameters<typeof satori>[1],
   );
+  // Warnings are reported, and error-level issues thrown, only once Satori
+  // has finished, so one RenderGuardError lists every issue in the layout.
+  report.settle();
+  return svg;
 }
 
 /**
@@ -73,20 +86,53 @@ async function renderSvg<Copy, Variant extends string>(
  * caller's own `loadAdditionalAsset` when there is one; otherwise an empty
  * font list tells Satori to draw the segment with the fonts it has.
  */
+function emojiFirst(
+  emoji: NonNullable<SvgOgDefinition<unknown>["emoji"]>,
+  fallback: SatoriOptions["loadAdditionalAsset"],
+): NonNullable<SatoriOptions["loadAdditionalAsset"]> {
+  return async (languageCode, segment) => {
+    if (languageCode === "emoji") {
+      const image = await emoji(segment);
+      if (image !== undefined) return image;
+    }
+    return fallback ? fallback(languageCode, segment) : [];
+  };
+}
+
+/**
+ * The Satori options for one render: the plate's own, with the emoji loader
+ * and any enabled guards composed around the caller's `loadAdditionalAsset`
+ * and `onNodeDetected`. With no emoji loader and every guard off, the plate's
+ * options pass through untouched, so Satori's behavior is unchanged.
+ */
 function satoriOptions<Copy, Variant extends string>(
   definition: SvgOgDefinition<Copy, Variant>,
+  report: GuardReport,
+  target: GuardTarget,
 ): SatoriOptions | undefined {
-  const { emoji, satori } = definition;
-  if (!emoji) return satori;
-  const fallback = satori?.loadAdditionalAsset;
+  const { emoji, satori, guards } = definition;
+  let loadAdditionalAsset = satori?.loadAdditionalAsset;
+  if (emoji) loadAdditionalAsset = emojiFirst(emoji, loadAdditionalAsset);
+  if (guardLevel(guards, "missingGlyphs") !== "off") {
+    loadAdditionalAsset = guardAssetLoader(loadAdditionalAsset, report, target, satori?.graphemeImages);
+  }
+
+  let onNodeDetected = satori?.onNodeDetected;
+  if (guardLevel(guards, "overflow") !== "off") {
+    const detect = overflowDetector(report, target);
+    const callerDetect = onNodeDetected;
+    onNodeDetected = (node) => {
+      detect(node);
+      callerDetect?.(node);
+    };
+  }
+
+  if (loadAdditionalAsset === satori?.loadAdditionalAsset && onNodeDetected === satori?.onNodeDetected) {
+    return satori;
+  }
   return {
     ...satori,
-    loadAdditionalAsset: async (languageCode, segment) => {
-      if (languageCode === "emoji") {
-        const image = await emoji(segment);
-        if (image !== undefined) return image;
-      }
-      return fallback ? fallback(languageCode, segment) : [];
-    },
+    ...(loadAdditionalAsset ? { loadAdditionalAsset } : {}),
+    ...(onNodeDetected ? { onNodeDetected } : {}),
   };
 }

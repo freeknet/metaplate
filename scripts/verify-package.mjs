@@ -14,6 +14,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
+import { builtinModules } from "node:module";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -378,6 +379,47 @@ function metaContent(html, key) {
 }
 
 /**
+ * Page-level fields the Next server fixture maps with `nextPageMetadata` and
+ * `nextPageViewport`, and the tags Next must render for them.
+ */
+const NEXT_PAGE_FIELDS = {
+  locale: "en_US",
+  alternateLocales: ["fr_FR"],
+  article: {
+    publishedTime: "2026-11-01T09:30:00Z",
+    authors: ["https://example.com/authors/ada"],
+    section: "Releases",
+    tags: ["metaplate"],
+  },
+  pubdate: "2026-11-01T09:30:00Z",
+  themeColor: "#0b7285",
+};
+const NEXT_PAGE_TAGS = {
+  "og:type": "article",
+  "og:locale": "en_US",
+  "og:locale:alternate": "fr_FR",
+  "article:published_time": NEXT_PAGE_FIELDS.article.publishedTime,
+  "article:author": NEXT_PAGE_FIELDS.article.authors[0],
+  "article:section": NEXT_PAGE_FIELDS.article.section,
+  "article:tag": NEXT_PAGE_FIELDS.article.tags[0],
+  "og:pubdate": NEXT_PAGE_FIELDS.pubdate,
+  "theme-color": NEXT_PAGE_FIELDS.themeColor,
+};
+
+/** Checks that Next rendered every page-level tag the fixture mapped. */
+async function verifyNextPageTags(base) {
+  const response = await fetch(`${base}/${SERVER_FIXTURE.slugs[0]}`);
+  if (!response.ok) throw new Error(`/${SERVER_FIXTURE.slugs[0]} returned ${response.status}.`);
+  const html = await response.text();
+  for (const [key, expected] of Object.entries(NEXT_PAGE_TAGS)) {
+    const actual = metaContent(html, key);
+    if (actual !== expected) {
+      throw new Error(`Next rendered ${key} as ${actual}; expected ${expected}.`);
+    }
+  }
+}
+
+/**
  * Fetches each fixture slug's page and checks that its Open Graph and X image
  * tags are absolute fixture-origin URLs at the expected per-slug paths.
  */
@@ -521,6 +563,19 @@ try {
     manifest.name,
     manifest.exports["./font-data"].import,
   );
+  // Every built-in import keeps its `node:` prefix. A bare `crypto` or `http`
+  // can be remapped to a userland shim by a bundler, and it would also slip
+  // past the runtime-neutral entries' `node:` checks below.
+  const packedDist = join(consumer, "node_modules", manifest.name, "dist");
+  for (const file of readdirSync(packedDist).filter((name) => name.endsWith(".js"))) {
+    const source = readFileSync(join(packedDist, file), "utf8");
+    for (const [, specifier] of source.matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*)["']([^"']+)["']/g)) {
+      if (!specifier.startsWith("node:") && builtinModules.includes(specifier.split("/")[0])) {
+        throw new Error(`dist/${file} imports the Node built-in "${specifier}" without the node: prefix.`);
+      }
+    }
+  }
+
   const portableFontSource = readFileSync(portableFontEntry, "utf8");
   if (/\bnode:/.test(portableFontSource)) {
     throw new Error("metaplate/font-data unexpectedly imports a Node built-in.");
@@ -800,15 +855,23 @@ export default function Layout({ children }: { children: ReactNode }) {
   writeFileSync(
     join(nextApp, "app", "[slug]", "page.tsx"),
     `import type { Metadata } from "next";
+import { nextPageMetadata, nextPageViewport } from "metaplate/next";
 import { jpegOg } from "../../lib/og";
 
 type Props = { params: Promise<{ slug: string }> };
 
+const page = ${JSON.stringify(NEXT_PAGE_FIELDS)};
+
 export const dynamic = "force-dynamic";
+export const viewport = nextPageViewport(page);
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  return { title: slug, twitter: jpegOg.metadata(\`/${"${slug}"}\`, { title: slug }).twitter };
+  return {
+    title: slug,
+    ...nextPageMetadata(page),
+    twitter: jpegOg.metadata(\`/${"${slug}"}\`, { title: slug }).twitter,
+  };
 }
 
 export default async function Page({ params }: Props) {
@@ -871,6 +934,7 @@ export const GET = jpegOg.handlerFrom(async (_request: Request, { params }: Cont
         ogImageType: "image/png",
         twitterImagePath: `/${slug}/${jpegImagePath}`,
       }));
+      await verifyNextPageTags(base);
       // Next appends a cache-busting query to metadata image URLs; fetch the
       // exact advertised URL rather than reconstructing it.
       const metadataFile = await verifyDynamicImageRoute(
