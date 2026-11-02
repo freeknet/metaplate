@@ -1,8 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { emojiKey, emojiLoader, type EmojiLoader } from "./emoji.js";
 import {
   loadedFont,
   memoizedFontLoader,
@@ -12,6 +13,7 @@ import {
 } from "./font-core.js";
 
 export { fontLoader, loadFonts } from "./font-core.js";
+export type { EmojiLoader } from "./emoji.js";
 export type { DataFont, FontBytes, FontFace, FontWeight, LoadedFont } from "./font-core.js";
 
 export type FileFont = FontFace & {
@@ -301,4 +303,86 @@ export function fontsourceFontLoader(
   options: PackageFontOptions = {},
 ): () => Promise<LoadedFont[]> {
   return memoizedFontLoader(() => loadFontsourceFonts(fonts, options));
+}
+
+/**
+ * An npm package of per-emoji image files named by code point, such as
+ * `1f44b-1f3fd.svg`, `1F44B-1F3FD.svg`, or Noto's `emoji_u1f44b_1f3fd.svg`.
+ * `"twemoji"` reads `@twemoji/svg` and `"openmoji"` reads the color SVGs of
+ * `openmoji`; any other package names the directory, relative to the package,
+ * that holds the files.
+ */
+export type PackageEmojiSet =
+  | "twemoji"
+  | "openmoji"
+  | {
+      package: string;
+      /** Package-relative directory of the image files. Defaults to the package root. */
+      directory?: string;
+    };
+
+const EMOJI_SETS = {
+  twemoji: { package: "@twemoji/svg", directory: "" },
+  openmoji: { package: "openmoji", directory: "color/svg" },
+} as const;
+
+/**
+ * Twemoji (`1f44b-1f3fd.svg`), OpenMoji (`1F44B-1F3FD.svg`), and Noto Emoji
+ * (`emoji_u1f44b_1f3fd.svg`) file names.
+ */
+const EMOJI_FILE = /^(?:emoji_u)?([0-9a-f]{1,6}(?:[-_][0-9a-f]{1,6})*)\.(svg|png)$/i;
+
+function emojiDirectory(set: PackageEmojiSet, options: PackageFontOptions): string {
+  const { package: packageName, directory } = typeof set === "string" ? EMOJI_SETS[set] : set;
+  const root = findPackageDirectory(packageName, options.cwd, options.resolvePackage);
+  return directory ? resolveFontFile(root, directory) : root;
+}
+
+/**
+ * Maps each emoji key to its file. Keys drop U+FE0F, so a set that writes
+ * `2764.svg` and one that writes `2764-FE0F.svg` both answer `"❤"` and
+ * `"❤️"`; SVG wins over PNG when a set ships both.
+ */
+async function emojiIndex(directory: string): Promise<Map<string, string>> {
+  const index = new Map<string, string>();
+  for (const name of await readdir(directory)) {
+    const match = EMOJI_FILE.exec(name);
+    if (!match) continue;
+    const key = emojiKey(match[1]!.split(/[-_]/).map((part) => Number.parseInt(part, 16)));
+    const existing = index.get(key);
+    if (existing === undefined || (/\.png$/i.test(existing) && /\.svg$/i.test(name))) {
+      index.set(key, name);
+    }
+  }
+  return index;
+}
+
+/**
+ * Renders emoji from an installed npm package of SVG files, offline and
+ * deterministically: the directory is listed once, then each emoji is read on
+ * first use and memoized. An emoji the package has no file for resolves to
+ * `undefined`, and Satori draws it with the plate's fonts. Node-compatible
+ * runtimes only; on an edge runtime use `emojiLoader` from `metaplate/emoji`.
+ */
+export function packageEmojiLoader(
+  set: PackageEmojiSet,
+  options: PackageFontOptions = {},
+): EmojiLoader {
+  let indexed: Promise<{ directory: string; index: Map<string, string> }> | undefined;
+  const files = () => {
+    indexed ??= (async () => {
+      const directory = emojiDirectory(set, options);
+      return { directory, index: await emojiIndex(directory) };
+    })().catch((error: unknown) => {
+      indexed = undefined;
+      throw error;
+    });
+    return indexed;
+  };
+
+  return emojiLoader(async ({ codepoints }) => {
+    const { directory, index } = await files();
+    const file = index.get(emojiKey(codepoints));
+    return file === undefined ? undefined : readFile(path.join(directory, file));
+  });
 }
