@@ -44,6 +44,7 @@ It works with plain Node, static build scripts, Next.js, and Node-compatible fra
 - [Deployment routes](#deployment-routes)
 - [Verify generated files](#verify-generated-files)
   - [Verify a deployed URL](#verify-a-deployed-url)
+  - [Verify a page's social preview](#verify-a-pages-social-preview)
 - [Entry points](#entry-points)
 - [Design lineage](#design-lineage)
 - [License](#license)
@@ -1906,6 +1907,20 @@ Options mirror the CLI flags: `allowPrivate`, `allowedPorts`, `maxRedirects`,
 `maxBytes`, `timeoutMs`, plus `connectionTimeoutMs` for the per-connection
 ceiling and `resolve` to replace `dns.lookup` (its answers are still checked).
 
+### Verify a page's social preview
+
+`metaplate verify-page` fetches a page under the same policy, reads its
+`og:image`, `twitter:card`/`twitter:image`, and Schema.org JSON-LD images, and
+verifies every image it names, including declared dimensions and type, alt
+text, http URLs, and `--target` profiles:
+
+```sh
+npx metaplate verify-page --target universal --target x https://example.com/blog/launch
+```
+
+Flags, the JSON report, the `verifyRemotePage` API, and the specifications it
+follows are in [docs/verify-page.md](docs/verify-page.md).
+
 ## Entry points
 
 - `metaplate` — framework-free paths, dimensions, metadata, `<meta>` tag
@@ -1915,8 +1930,9 @@ ceiling and `resolve` to replace `dns.lookup` (its answers are still checked).
   automatically.
 - `metaplate/node` — SVG, PNG, raw pixels, and any format a supplied encoder
   produces, plus Fetch API responses. Satori and Resvg are installed
-  automatically. Also the hardened remote fetcher behind `verify-url`
-  (`fetchRemoteImage`, `verifyRemoteImage`).
+  automatically. Also the hardened remote fetcher behind `verify-url` and
+  `verify-page` (`fetchRemoteImage`, `verifyRemoteImage`, `verifyRemotePage`,
+  `extractPageSocialMetadata`).
 - `metaplate/edge` — PNG, raw pixels, and Fetch API responses through
   `@resvg/resvg-wasm` for Deno-based edges such as Netlify Edge Functions,
   and other runtimes that allow run-time Wasm compilation; not Cloudflare

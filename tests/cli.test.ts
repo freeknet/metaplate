@@ -5,8 +5,10 @@ import { spawn, spawnSync } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   formatVerifyPath,
+  parseVerifyPageInvocation,
   parseVerifyTargets,
   parseVerifyUrlInvocation,
+  VERIFY_PAGE_USAGE,
   VERIFY_URL_USAGE,
   VERIFY_USAGE,
 } from "../src/cli-args.js";
@@ -169,6 +171,7 @@ describe("verify CLI", () => {
     expect(help.stderr).toBe("");
     expect(help.stdout).toContain(VERIFY_USAGE);
     expect(help.stdout).toContain(VERIFY_URL_USAGE);
+    expect(help.stdout).toContain(VERIFY_PAGE_USAGE);
     expect(shortHelp.stdout).toBe(help.stdout);
     expect(version.status).toBe(0);
     expect(version.stderr).toBe("");
@@ -464,5 +467,189 @@ describe("verify-url CLI", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("Invalid timeout.");
     expect(result.stderr).toContain(VERIFY_URL_USAGE);
+  });
+});
+
+describe("parseVerifyPageInvocation", () => {
+  it("parses page URLs, target checks, and every fetch limit", () => {
+    expect(
+      parseVerifyPageInvocation([
+        "verify-page",
+        "--json",
+        "--target",
+        "x",
+        "--target",
+        "x",
+        "--max-file-size",
+        "5000000",
+        "--max-html-bytes",
+        "65536",
+        "--max-images",
+        "3",
+        "--max-bytes",
+        "1000",
+        "--max-redirects",
+        "1",
+        "--timeout",
+        "2500",
+        "--allow-private",
+        "--allow-port",
+        "8080",
+        "http://127.0.0.1:8080/",
+        "http://127.0.0.1:8080/about",
+      ]),
+    ).toEqual({
+      urls: ["http://127.0.0.1:8080/", "http://127.0.0.1:8080/about"],
+      json: true,
+      socialTargets: ["x"],
+      maxFileSize: 5_000_000,
+      fetch: {
+        allowPrivate: true,
+        allowedPorts: [8080],
+        maxHtmlBytes: 65_536,
+        maxImages: 3,
+        maxBytes: 1000,
+        maxRedirects: 1,
+        timeoutMs: 2500,
+      },
+    });
+  });
+
+  it("defaults to the strict policy", () => {
+    expect(parseVerifyPageInvocation(["verify-page", "https://example.com/"])).toEqual({
+      urls: ["https://example.com/"],
+      json: false,
+      socialTargets: [],
+      fetch: { allowPrivate: false, allowedPorts: [] },
+    });
+  });
+
+  it.each([
+    { args: ["verify-page"] },
+    { args: ["verify-url", "https://example.com/"] },
+    { args: ["verify-page", "--size", "1200x630", "https://example.com/"] },
+    { args: ["verify-page", "--format", "png", "https://example.com/"] },
+    { args: ["verify-page", "--alt", "Card", "https://example.com/"] },
+    { args: ["verify-page", "--max-images", "0", "https://example.com/"] },
+    { args: ["verify-page", "--max-images", "101", "https://example.com/"] },
+    { args: ["verify-page", "--max-html-bytes", "0", "https://example.com/"] },
+    { args: ["verify-page", "--target", "myspace", "https://example.com/"] },
+    { args: ["verify-page", "--bogus", "https://example.com/"] },
+  ] satisfies { args: string[] }[])("rejects invalid arguments: $args", ({ args }) => {
+    expect(() => parseVerifyPageInvocation(args)).toThrow(VERIFY_PAGE_USAGE);
+  });
+});
+
+describe("verify-page CLI", () => {
+  afterEach(closeLocalServers);
+
+  const card = completePng(1200, 630);
+  const head = `
+    <meta property="og:image" content="/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Card">
+    <meta name="twitter:card" content="summary_large_image">
+  `;
+
+  async function pageServer() {
+    const html = (markup: string) => serveBytes(new TextEncoder().encode(`<html><head>${markup}</head></html>`), "text/html");
+    const server = await localServer(routes({
+      "/": html(head),
+      "/moved": redirectTo("/", 302),
+      "/wrong-size": html(head.replace('content="630"', 'content="600"')),
+      "/og.png": serveBytes(card, "image/png"),
+    }));
+    return { ...server, local: ["--allow-private", "--allow-port", String(server.port)] };
+  }
+
+  it("prints a readable audit and exits zero when nothing fails", async () => {
+    const server = await pageServer();
+    const result = await runAsync(["verify-page", ...server.local, `${server.origin}/moved`]);
+
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+    expect(result.stdout.split("\n")).toEqual([
+      `✓ ${server.origin}/moved (1 image reference, final URL ${server.origin}/)`,
+      `  ✓ og:image[0] ${server.origin}/og.png 1200x630 png (${card.byteLength} bytes)`,
+      `  ! og:image[0]: "/og.png" is relative and was resolved to ${server.origin}/og.png; Open Graph and X Card URLs should be absolute.`,
+      `  ! og:image[0]: ${server.origin}/og.png is served over http; crawlers that require https will not load it.`,
+      "",
+    ]);
+  });
+
+  it("sends errors to stderr and exits non-zero", async () => {
+    const server = await pageServer();
+    const result = await runAsync(["verify-page", ...server.local, `${server.origin}/wrong-size`, `${server.origin}/`]);
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain(`✗ ${server.origin}/wrong-size (1 image reference)`);
+    expect(result.stdout).toContain(`  ✗ og:image[0] ${server.origin}/og.png`);
+    expect(result.stdout).toContain(`✓ ${server.origin}/ (1 image reference)`);
+    expect(result.stderr).toContain(
+      `✗ ${server.origin}/wrong-size og:image[0]: Metadata advertises 1200x600, but image bytes are 1200x630.`,
+    );
+    expect(result.stderr).toContain("1 of 2 pages failed verification");
+  });
+
+  it("emits one stable JSON report per page", async () => {
+    const server = await pageServer();
+    const result = await runAsync([
+      "verify-page", "--json", ...server.local, "--target", "universal", `${server.origin}/`, "ftp://example.com/",
+    ]);
+    const report = JSON.parse(result.stdout) as { schemaVersion: number; pages: unknown[] };
+
+    // The relative, http og:image is not crawler-ready for the universal profile.
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe("");
+    expect(report.schemaVersion).toBe(1);
+    expect(report.pages[0]).toMatchObject({
+      url: `${server.origin}/`,
+      finalUrl: `${server.origin}/`,
+      redirects: [],
+      contentType: "text/html",
+      baseUrl: `${server.origin}/`,
+      valid: true,
+      metadata: { twitter: { card: "summary_large_image" } },
+      globalIssues: [],
+      targets: { universal: { compatible: false, issues: [] } },
+      images: [{
+        source: "og:image",
+        index: 0,
+        declared: { url: "/og.png", width: "1200", height: "630", alt: "Card" },
+        url: `${server.origin}/og.png`,
+        finalUrl: `${server.origin}/og.png`,
+        redirects: [],
+        contentType: "image/png",
+        bytes: card.byteLength,
+        valid: true,
+        image: { format: "png", width: 1200, height: 630, bytes: card.byteLength },
+        targets: { universal: { compatible: false, issues: expect.arrayContaining([expect.objectContaining({ code: "url" })]) } },
+      }],
+    });
+    expect(report.pages[1]).toEqual({
+      url: "ftp://example.com/",
+      valid: false,
+      globalIssues: [expect.objectContaining({ severity: "error", code: "scheme" })],
+      targets: {},
+      images: [],
+    });
+  });
+
+  it("refuses a loopback page without --allow-private", async () => {
+    const server = await pageServer();
+    const result = await runAsync(["verify-page", "--allow-port", String(server.port), `${server.origin}/`]);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(`✗ ${server.origin}/ verification failed: Refusing`);
+    expect(result.stderr).toContain("1 of 1 pages failed verification");
+    expect(server.requests).toHaveLength(0);
+  });
+
+  it("prints the verify-page usage for argument errors", async () => {
+    const result = await runAsync(["verify-page", "--size", "1x1", "https://example.com/"]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("--size is not accepted here.");
+    expect(result.stderr).toContain(VERIFY_PAGE_USAGE);
   });
 });
