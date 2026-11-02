@@ -329,7 +329,7 @@ export function parseVerifyTargets(args: string[]): VerifyTarget[] {
 }
 
 export const RENDER_USAGE =
-  "Usage: metaplate render [--json] [--out DIR] [--manifest FILE] [--concurrency N] <module>";
+  "Usage: metaplate render [--json] [--incremental] [--out DIR] [--manifest FILE] [--concurrency N] <module>";
 
 export const MANIFEST_FILENAME = "metaplate-manifest.json";
 
@@ -343,6 +343,8 @@ export type RenderInvocation = {
   manifest: string;
   concurrency: number;
   json: boolean;
+  /** Reuse files whose input hash matches the previous manifest. */
+  incremental: boolean;
 };
 
 /** Parses `render`: one module path plus output, manifest, and pool options. */
@@ -353,6 +355,7 @@ export function parseRenderInvocation(args: string[]): RenderInvocation {
   let manifest: string | undefined;
   let concurrency = DEFAULT_RENDER_CONCURRENCY;
   let json = false;
+  let incremental = false;
   let module: string | undefined;
 
   for (let index = 1; index < args.length; index += 1) {
@@ -360,6 +363,8 @@ export function parseRenderInvocation(args: string[]): RenderInvocation {
     const value = args[index + 1];
     if (argument === "--json") {
       json = true;
+    } else if (argument === "--incremental") {
+      incremental = true;
     } else if (argument === "--out" || argument === "--manifest") {
       if (!value || value.startsWith("--")) throw new Error(`Invalid ${argument.slice(2)} path. ${usage}`);
       if (argument === "--out") outDir = value;
@@ -382,6 +387,7 @@ export function parseRenderInvocation(args: string[]): RenderInvocation {
     manifest: manifest ?? path.join(outDir, MANIFEST_FILENAME),
     concurrency,
     json,
+    incremental,
   };
 }
 

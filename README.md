@@ -135,7 +135,9 @@ Each guide below is a summary; the linked page has the full reference.
 `render` returns PNG by default, and an `output` encoder produces JPEG, WebP,
 or anything else from the same raw pixels. `handler` and `handlerFrom` plug
 into Fetch-based routes in Next.js, Astro, React Router, and SvelteKit, and
-`render` feeds Express or a build script. Plates are Satori layouts, not DOM,
+`render` feeds Express or a build script. `plate.cached()` renders each
+distinct copy once, keyed by the plate's design and the copy, and answers
+`If-None-Match` with `304 Not Modified`. Plates are Satori layouts, not DOM,
 so read the plate constraints before designing one. Opt-in render `guards`
 fail or report a card with text no font covers, text laid out off the canvas,
 or (Node and edge) a single-color image, instead of shipping it; they are off
@@ -147,7 +149,8 @@ by default and unavailable through `metaplate/next`.
 `metaplate render` renders a whole site's cards for static hosting. It loads a
 module whose default export is `{ plate, pages: [{ route, copy }] }`, writes
 every page at every size to the path its metadata URL names, verifies each
-file, and records them in a checksummed manifest.
+file, and records them in a checksummed manifest. `--incremental` re-renders
+only the pages whose copy, plate, or installed renderer changed.
 
 ```sh
 npx metaplate render og.render.mjs --out public

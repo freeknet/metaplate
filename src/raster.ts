@@ -9,8 +9,11 @@ import {
 import { detectFormat, imageContentType, type ImageFormat, type OutputFormat } from "./image.js";
 import { isMediaType } from "./og-media.js";
 import { createPlateSocial, type PlateUrlOptions } from "./plate.js";
+import { createRenderCache, type RenderCacheOptions } from "./render-cache.js";
 import type { SvgOgDefinition } from "./render.js";
+import { taggedSerialize } from "./stable-hash.js";
 import { createSvgPlate, type SatoriRender } from "./svg-plate.js";
+import { METAPLATE_VERSION } from "./version.js";
 
 /**
  * Not an entry point: the renderer-independent half of `metaplate/node` and
@@ -117,8 +120,10 @@ export type RasterBackend = {
    * memory is released, so a backend that frees its frame stays safe.
    */
   rasterize: <T>(source: () => Promise<string>, read: (image: RasterImage) => T) => Promise<T>;
-  /** Strong ETag over the final encoded bytes. */
-  etag: (bytes: Uint8Array) => string | Promise<string>;
+  /** Lowercase hex SHA-256 of `bytes`: the ETag, fingerprint, and cache-key digest. */
+  sha256: (bytes: Uint8Array) => string | Promise<string>;
+  /** Names the renderer in the plate fingerprint, since each rasterizes differently. */
+  renderer: "node" | "edge";
 };
 
 export type RasterPlateDefinition<Copy, Variant extends string = string> = SvgOgDefinition<Copy, Variant> & {
@@ -243,8 +248,57 @@ export function createRasterPlate<Copy, Variant extends string = string>(
   assertMediaType(contentType);
   const social = createPlateSocial(definition, contentType, svg.size);
 
+  async function strongEtag(bytes: Uint8Array): Promise<string> {
+    return `"${await backend.sha256(bytes)}"`;
+  }
+
   async function etagFor(bytes: Uint8Array): Promise<string | undefined> {
-    return definition.etag ? backend.etag(bytes) : undefined;
+    return definition.etag ? strongEtag(bytes) : undefined;
+  }
+
+  const encoder = new TextEncoder();
+  const digestText = (text: string) => backend.sha256(encoder.encode(text));
+  let plateFingerprint: Promise<string> | undefined;
+
+  /**
+   * Everything the definition feeds the renderer, shared by every size and
+   * computed once: font bytes are hashed rather than serialized, functions
+   * contribute their source text, and Wasm modules (fixed by the peer
+   * versions) are left out. A failed font load is not memoized.
+   */
+  function definitionFingerprint(): Promise<string> {
+    plateFingerprint ??= (async () => {
+      const fonts = await definition.fonts();
+      const fontFacts = await Promise.all(fonts.map(async (font) => ({
+        name: font.name,
+        weight: font.weight,
+        style: font.style,
+        lang: font.lang,
+        data: await backend.sha256(
+          font.data instanceof Uint8Array ? font.data : new Uint8Array(font.data),
+        ),
+      })));
+      return digestText(taggedSerialize({
+        plate: "metaplate-plate/1",
+        metaplate: METAPLATE_VERSION,
+        renderer: backend.renderer,
+        revision: definition.revision ?? null,
+        component: definition.component,
+        fonts: fontFacts,
+        satori: definition.satori,
+        emoji: definition.emoji,
+        languageFonts: definition.languageFonts,
+        resvg: definition.resvg,
+        output: definition.output,
+        // Guard levels decide which renders succeed, so a stricter guard
+        // must not let --incremental reuse a card it would now refuse.
+        guards: definition.guards,
+      }, "plate"));
+    })().catch((error: unknown) => {
+      plateFingerprint = undefined;
+      throw error;
+    });
+    return plateFingerprint;
   }
 
   function view(name: Variant | undefined) {
@@ -325,6 +379,41 @@ export function createRasterPlate<Copy, Variant extends string = string>(
       return new Response(body, { headers });
     }
 
+    let viewFingerprint: Promise<string> | undefined;
+
+    /**
+     * Lowercase hex SHA-256 identifying what this size renders, independent
+     * of copy: the Metaplate version, renderer, `revision`, variant, size,
+     * format, font bytes, and the source text of `component` and the other
+     * functions it is given. Code the component imports or closes over is not
+     * seen; change `revision` when it changes.
+     */
+    function fingerprint(): Promise<string> {
+      viewFingerprint ??= definitionFingerprint().then((plate) => digestText(taggedSerialize({
+        plate,
+        variant: name ?? null,
+        size: { width: size.width, height: size.height },
+        contentType,
+      }))).catch((error: unknown) => {
+        viewFingerprint = undefined;
+        throw error;
+      });
+      return viewFingerprint;
+    }
+
+    /** This size with a render cache in front; see `RenderCacheOptions`. */
+    function cached(options?: RenderCacheOptions) {
+      return createRenderCache<Copy>({
+        contentType,
+        render,
+        fingerprint,
+        sha256: backend.sha256,
+        identity: fingerprint,
+        headers: (byteLength, etag) =>
+          createResponseHeaders(definition.headers, contentType, byteLength, etag),
+      }, options);
+    }
+
     return {
       size,
       image: socialView.image,
@@ -339,6 +428,8 @@ export function createRasterPlate<Copy, Variant extends string = string>(
       renderPixels,
       artifact,
       response,
+      fingerprint,
+      cached,
     };
   }
 

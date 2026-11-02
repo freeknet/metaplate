@@ -451,7 +451,11 @@ const social = socialImageMetadata("/blog/launch", "Launch card", {
 
 A plate does the same per page with `version: "copy"`. Its `revision` string
 is folded into every token, so bump it when the component, fonts, or colors
-change what unchanged copy looks like:
+change what unchanged copy looks like. `revision` is also valid without
+`version`: on `metaplate/node` and `metaplate/edge` plates it is part of
+`fingerprint()`, which keys [`cached()`](rendering.md#caching-renders) and
+[`metaplate render --incremental`](render-cli.md#incremental-builds), and on
+its own it leaves URLs unversioned:
 
 ```ts
 const og = createNodeOg<Copy>({
@@ -460,7 +464,7 @@ const og = createNodeOg<Copy>({
   component: Card,
   imagePath: "og-image.png",
   version: "copy",
-  revision: "2", // requires version: "copy"
+  revision: "2", // folded into each token, and into fingerprint()
 });
 
 og.metadata("/blog/launch", copy); // .../blog/launch/og-image.png?v=<token>
@@ -524,8 +528,8 @@ counts, `alt` text included.
   parameter or fragment. Anything else throws `Invalid version`.
 - `route`, `basePath`, and `imagePath` still reject any query or fragment,
   with or without `version`.
-- A plate's `version` must be `"copy"`; `revision` must be a non-empty string
-  and requires `version: "copy"`. Both are checked when the plate is created.
+- A plate's `version` must be `"copy"`; `revision` must be a non-empty string.
+  Both are checked when the plate is created.
 - Versioning is opt-in. Without `version`, every URL is exactly what it was.
 
 `metaplate verify-page` and `metaplate verify-url` fetch the versioned URL as

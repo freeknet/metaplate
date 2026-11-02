@@ -40,6 +40,17 @@ export type {
   SignedRouteOptions,
 } from "./plate.js";
 
+export {
+  MEMORY_RENDER_CACHE_DEFAULTS,
+  memoryRenderCache,
+  type CachedPlate,
+  type MemoryRenderCache,
+  type MemoryRenderCacheOptions,
+  type RenderCacheEntry,
+  type RenderCacheOptions,
+  type RenderCacheStore,
+} from "./render-cache.js";
+
 /** The render-module contract `metaplate render` loads; see docs/render-cli.md. */
 export type {
   RenderablePlate,
@@ -65,8 +76,8 @@ export type NodeOgDefinition<Copy, Variant extends string = string> = SvgOgDefin
   guards?: RasterRenderGuards;
 };
 
-function strongEtag(bytes: Uint8Array): string {
-  return `"${createHash("sha256").update(bytes).digest("hex")}"`;
+function sha256(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex");
 }
 
 /**
@@ -84,7 +95,8 @@ export function createNodeOg<Copy, Variant extends string = string>(
       const [, Resvg] = await loadPeerPair(loadSatori, loadResvg, "metaplate/node");
       return read(new Resvg(await source(), definition.resvg).render());
     },
-    etag: strongEtag,
+    sha256,
+    renderer: "node",
   });
 
   return createPlateViews(raster.variants, (name) => {
