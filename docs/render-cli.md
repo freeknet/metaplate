@@ -94,7 +94,7 @@ const posts = { plate: og, pages } satisfies RenderJob<Copy>;
 export default [posts] satisfies RenderModule;
 ```
 
-[`examples/api/render-module.ts`](../examples/api/render-module.ts) type-checks a
+[`examples/api/render-module.ts`](https://github.com/lnorton89/metaplate/blob/main/examples/api/render-module.ts) type-checks a
 complete module against the sources.
 
 ## Where files go
@@ -236,8 +236,9 @@ print as each one finishes.
 | `0` | Every image rendered, was written inside `--out`, matched its hash and dimensions on disk, and the manifest was written. |
 | `1` | Anything else: an argument error (printed with the usage line), a module that cannot be loaded or breaks the contract, a refused path or collision (nothing is rendered), or at least one image that failed to render, write, or verify. |
 
-These match `metaplate verify` and `verify-url`, which also exit `1` for every
-failure. When some images fail, the rest are still rendered and written, every
+These match `metaplate verify`, `verify-url`, and `verify-page`, which also
+exit `1` for every failure. When some images fail, the rest are still rendered
+and written, every
 failure is reported, and **no manifest is left behind**, so a deploy step that
 publishes only when the manifest exists never publishes half a build. That
 includes the manifest of an earlier run: once the module loads and every path
@@ -258,7 +259,7 @@ unwritten.
 ### Manifest
 
 One entry of the manifest written for
-[`examples/api/render-module.ts`](../examples/api/render-module.ts):
+[`examples/api/render-module.ts`](https://github.com/lnorton89/metaplate/blob/main/examples/api/render-module.ts):
 
 ```json
 {
@@ -272,9 +273,10 @@ One entry of the manifest written for
       "size": { "width": 1080, "height": 1080 },
       "format": "png",
       "contentType": "image/png",
-      "bytes": 8587,
-      "sha256": "dd3c394252be391c568ec98a84ebf025f3a10e35a759924537db936b8beaafaa",
-      "verified": true
+      "bytes": 14853,
+      "sha256": "9c30c52b62d368f585ef08665d49a9a3c6c3ab8791c731b1d8e178f514bdaf3a",
+      "verified": true,
+      "inputHash": "7eed8a15e1d9154e163bde353b53893b7aead494f9d12ab83db8f9d4acdeb282"
     }
   ]
 }
@@ -419,7 +421,7 @@ must use only erasable syntax:
 - **No `.tsx` or `.jsx`.** Node does not transform JSX in any version.
 
 So a TypeScript module authors its plate with plain `{ type, props }`
-objects, as [`examples/api/render-module.ts`](../examples/api/render-module.ts) does
+objects, as [`examples/api/render-module.ts`](https://github.com/lnorton89/metaplate/blob/main/examples/api/render-module.ts) does
 (see also
 [Authoring without a JSX toolchain](rendering.md#authoring-without-a-jsx-toolchain)).
 For a plate written in JSX, either compile the module first (with `tsc`, your

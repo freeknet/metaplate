@@ -40,7 +40,7 @@ export const plate = createNodeOg({
 
 The option works the same way in `createSvgOg` (`metaplate/render`),
 `createNodeOg` (`metaplate/node`), and `createEdgeOg` (`metaplate/edge`).
-[`examples/api/emoji.ts`](../examples/api/emoji.ts) is a type-checked version of both
+[`examples/api/emoji.ts`](https://github.com/lnorton89/metaplate/blob/main/examples/api/emoji.ts) is a type-checked version of both
 the Node and edge setups.
 
 ## Choosing a set

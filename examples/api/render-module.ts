@@ -24,6 +24,9 @@ export const og = createNodeOg<Copy, "square">({
     type: "div",
     props: {
       style: {
+        // Padding inside a full-size root needs border-box, or the card
+        // overflows and is clipped.
+        boxSizing: "border-box",
         width: "100%",
         height: "100%",
         display: "flex",

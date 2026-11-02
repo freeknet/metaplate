@@ -32,7 +32,8 @@ URLs your pages emitted.
 
 | Deployment shape | API | Runtime | Recommended output | Support status |
 | --- | --- | --- | --- | --- |
-| Static site/CDN | [`metaplate render`](render-cli.md), or `render()` / `renderSvg()` in a build script | Node at build time only | `public/og-image.png` or `.jpg` | Supported |
+| Static site/CDN | [`metaplate render`](render-cli.md), or `render()` / `renderSvg()` in a build script | Node at build time only | `public/og-image.png` or `.jpg` | Documented: the build runs on Node, which is certified, and `metaplate render` verifies every file it writes; no particular host is certified |
+| GitHub Pages | The static build above, published by a GitHub Actions workflow | Static files | `public/og-image.png` under the project's base path | Documented recipe (see [GitHub Pages](#github-pages)) |
 | Vercel Function | `handler()` / `handlerFrom()` or `response()` | Vercel Node.js runtime | `/api/og` or framework route | Hosted-certified on a dated Vercel production deployment (2026-11-01, Node.js runtime); Next.js 16.4.3 on Vercel likewise |
 | Netlify Function | `handler()` / `handlerFrom()` or `response()` | Netlify Node.js Function | Function path or custom path | Hosted-certified on a dated Netlify production deployment (2026-11-01, Functions Node.js runtime `nodejs24.x`); generated framework functions use project settings |
 | Deno Deploy | `metaplate/edge` or `metaplate/node`, both `fetchableFrom()` | Deno Deploy, built from GitHub | App route | Hosted-certified on a dated Deno Deploy production build (2026-11-01), both renderers |
@@ -211,7 +212,7 @@ certified from real production deployments made on 2026-11-01 from the packed
 0.8.0 tarball, each to a new Vercel project. The deployed sources are in
 [`examples/hosted/vercel`](https://github.com/lnorton89/metaplate/tree/main/examples/hosted/vercel) and the raw
 `verify-url` output, response headers, build logs, and deployment IDs are in
-`.planning/hosted-evidence/vercel-2026-11-01.json`.
+[`.planning/hosted-evidence/vercel-2026-11-01.json`](https://github.com/lnorton89/metaplate/blob/main/.planning/hosted-evidence/vercel-2026-11-01.json).
 
 - **Vercel Function, Node.js runtime.** `api/og/[slug].mjs` exports
   `GET = og.handlerFrom(...)` and reads the slug from the request path. Vercel's
@@ -222,7 +223,8 @@ certified from real production deployments made on 2026-11-01 from the packed
   `s-maxage` and forwards the rest of the plate's `Cache-Control`.
 - **Next.js 16.4.3 on Vercel.** A dynamic `[slug]/opengraph-image.tsx` through
   `createNextOg` and an `[slug]/og-image.jpg/route.ts` through `createNodeOg`
-  with a sharp JPEG encoder, configured as in the README with
+  with a sharp JPEG encoder, configured as in
+  [JPEG or WebP cards in Next.js](nextjs.md#jpeg-or-webp-cards-in-nextjs) with
   `serverExternalPackages: ["@resvg/resvg-js", "satori"]`. The font needs
   `outputFileTracingIncludes`, whose keys are picomatch globs over route paths:
   `"/*/og-image.jpg"` matches, a literal `"/[slug]/og-image.jpg"` does not.
@@ -233,8 +235,9 @@ certified from real production deployments made on 2026-11-01 from the packed
   (`@resvg/resvg-wasm/index_bg.wasm?module` as `resvg.wasm`,
   `satori/layout.wasm?module` as `layout.wasm`). The build accepted them, but
   the deploy was rejected: the function is 2.13 MB after gzip and the Hobby
-  plan's Edge limit is 1 MB. The Resvg Wasm alone is 0.95 MB gzip, and the
-  bundle also carries Satori's default build beside `satori/standalone`. A
+  plan's Edge limit is 1 MB. The Resvg Wasm alone is 0.95 MB gzip, and that
+  bundle also carried Satori's default build beside `satori/standalone`
+  (`createEdgeOg` no longer pulls it in). A
   smaller bundle would not help: Vercel documents that `WebAssembly.instantiate`
   on the Edge runtime "requires the Wasm source code to be provided using the
   import statement", and Satori's bundled HarfBuzz compiles its Wasm from
@@ -289,7 +292,8 @@ tarball, each to a new Netlify site, with the Netlify CLI
 (`netlify deploy --prod --no-build`). The deployed sources are in
 [`examples/hosted/netlify`](https://github.com/lnorton89/metaplate/tree/main/examples/hosted/netlify)
 and the raw `verify-url` output, response headers, content checks, and
-deployment IDs are in `.planning/hosted-evidence/netlify-2026-11-01.json`.
+deployment IDs are in
+[`.planning/hosted-evidence/netlify-2026-11-01.json`](https://github.com/lnorton89/metaplate/blob/main/.planning/hosted-evidence/netlify-2026-11-01.json).
 
 - **Netlify Functions, Node.js runtime.** `netlify/functions/og.mjs`
   default-exports `og.handlerFrom((_request, context) => ...)` with
@@ -367,7 +371,7 @@ GET for status and headers, distinct bytes per slug, and a decoded check that
 each image is not uniform. The fixture is
 [`examples/hosted/deno-deploy`](https://github.com/lnorton89/metaplate/tree/main/examples/hosted/deno-deploy),
 and the build log, build history, and raw outputs are in
-`.planning/hosted-evidence/deno-deploy-2026-11-01.json`.
+[`.planning/hosted-evidence/deno-deploy-2026-11-01.json`](https://github.com/lnorton89/metaplate/blob/main/.planning/hosted-evidence/deno-deploy-2026-11-01.json).
 
 The certification covers that dated build, Deno Deploy's runtime at the time,
 and the packed version; it is not a guarantee for later Deno Deploy releases.
@@ -433,8 +437,7 @@ against the Wasm renderer and from the packed tarball, and hosted-certified on
 Netlify Edge Functions (see [Hosted Netlify evidence](#hosted-netlify-evidence)).
 A minimal edge function is about 1.6 MB gzip, mostly the two Wasm modules; the
 certified Netlify Edge bundle was 462 KB gzip against a 20 MB limit. See the
-README section
-[Edge runtimes with `metaplate/edge`](edge.md).
+[Edge runtimes with `metaplate/edge`](edge.md#edge-runtimes-with-metaplateedge).
 
 **Cloudflare Workers are not supported.** Satori shapes text with a HarfBuzz
 build bundled into `satori/standalone`. In a worker-shaped isolate it reads

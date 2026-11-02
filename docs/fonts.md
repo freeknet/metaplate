@@ -3,8 +3,11 @@
 Loading font bytes for Satori from project files, Fontsource, npm packages, or your own bytes.
 
 [Satori](https://github.com/vercel/satori#fonts) needs the actual bytes of every
-rendered face and accepts TTF, OTF, and WOFF, but not WOFF2. This is separate
-from a framework's CSS font setup:
+rendered face. It reads TTF, OTF, and WOFF, and from
+[Satori 0.55.0](https://github.com/vercel/satori/releases/tag/0.55.0) (the
+audited 0.63.2 included) also WOFF2; older releases in Metaplate's `satori`
+peer range do not, so the Fontsource loaders read the WOFF files, which every
+supported release parses. This is separate from a framework's CSS font setup:
 [`next/font`](https://nextjs.org/docs/app/getting-started/fonts), for example,
 self-hosts and exposes class names but does not expose its transformed font
 bytes to `ImageResponse`. Reuse the same source file or npm package for the
@@ -35,7 +38,8 @@ const fonts = fontsourceFontLoader([
 
 Install the corresponding package once (`npm install @fontsource/inter`). This
 uses [Fontsource's official npm self-hosting model](https://fontsource.org/docs/getting-started/introduction)
-while selecting WOFF instead of the WOFF2 normally used by browser CSS.
+while selecting WOFF instead of the WOFF2 normally used by browser CSS, so the
+same plate works with every Satori release Metaplate supports.
 
 For a font already checked into the project, point at it directly in a
 Node-compatible renderer:
@@ -80,7 +84,7 @@ gives the server a fetchable URL or bytes.
 
 `packageFontLoader` remains the escape hatch for other npm font packages. It
 resolves through the active runtime first (npm, Yarn classic, pnpm, and hoisted
-workspaces), then falls back to an upward `node_modules` walk:
+workspaces), then falls back to an upward `node_modules` walk.
 
 Install layouts without a physical `node_modules` — Yarn Plug'n'Play — cannot
 be read by path at all. Supply a `resolvePackage` hook that maps a package
@@ -98,6 +102,27 @@ const fonts = packageFontLoader([
 ```
 
 Return `undefined` to fall back to the default resolution.
+
+### Font loader reference
+
+Every face is a `FontFace`: `name` (the CSS `fontFamily` the plate uses),
+`weight` (100 to 900 in steps of 100), and optional `style` (`"normal"` or
+`"italic"`, default `"normal"`) and `lang` (a BCP 47 tag passed to Satori's
+font selection). Each `*FontLoader` returns a memoized `() => Promise<LoadedFont[]>`
+for a plate's `fonts` option; each `load*` function reads once and returns
+the `LoadedFont[]` directly.
+
+| Loader | Reads | Entry |
+| --- | --- | --- |
+| `fontLoader(fonts)` / `loadFonts(fonts)` | `DataFont`s: a `FontFace` plus `data`, the bytes or a function returning them | `metaplate/fonts`, `metaplate/font-data` |
+| `fileFontLoader(fonts, { cwd })` / `loadFileFonts` | `FileFont`s: a `FontFace` plus `file`, a path relative to `cwd` (default `process.cwd()`) or a `file:` URL | `metaplate/fonts` |
+| `packageFontLoader(fonts, { cwd, resolvePackage })` / `loadPackageFonts` | `PackageFont`s: a `FontFace` plus `package` and `file`, a path inside that package | `metaplate/fonts` |
+| `fontsourceFontLoader(fonts, { cwd, resolvePackage })` / `loadFontsourceFonts` | `FontsourceFont`s: `font` (`inter` or `@fontsource/inter`), and optional `weight` (default 400), `style`, `subset` (default: the package's default subset, normally `latin`), `name` (default: the package's family name), and `lang` | `metaplate/fonts` |
+
+`findPackageDirectory(packageName, cwd, resolvePackage)` returns the directory
+the package loaders read from, resolved in the order above. The package
+loaders reject a `file` that leaves its package directory, and every loader
+rejects bytes that are not a TrueType, OpenType, WOFF, or WOFF2 font.
 
 ## Other scripts
 
@@ -151,7 +176,7 @@ with the first font that has it, so Latin text stays in Inter and only the
 characters Inter lacks fall back. The option works the same way in
 `createSvgOg` (`metaplate/render`), `createNodeOg` (`metaplate/node`), and
 `createEdgeOg` (`metaplate/edge`).
-[`examples/api/language-fonts.ts`](../examples/api/language-fonts.ts) is a
+[`examples/api/language-fonts.ts`](https://github.com/lnorton89/metaplate/blob/main/examples/api/language-fonts.ts) is a
 type-checked version of the Node and edge setups. `metaplate/next` renders
 through `ImageResponse`, which does not take `loadAdditionalAsset`, so the
 option does not apply there; `ImageResponse` loads Google Fonts on its own.
@@ -227,7 +252,8 @@ ranges to download only the slices a page needs
 Metaplate does the same for a segment: it reads `unicode.json` once, picks the
 files that contain the segment's characters (reusing a file already picked
 before adding another), and reads each picked file once per process. It reads
-the WOFF files, not the WOFF2 ones, because Satori does not parse WOFF2. The
+the WOFF files, not the WOFF2 ones, because Satori before 0.55.0 does not
+parse WOFF2. The
 all-in-one `japanese`, `korean`, and `chinese-*` subsets listed in
 `metadata.json` (1.6 MB for one Japanese weight) are not in `unicode.json`
 and are never read.

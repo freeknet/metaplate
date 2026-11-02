@@ -231,8 +231,9 @@ All notable changes to Metaplate are documented in this file. The project uses
   first source supplied wins, a failed initialisation is retried on the next
   render, and a missing module fails with an error naming it. A minimal
   esbuild-bundled consumer is 414 KB gzip of JavaScript plus about 1.17 MB
-  gzip of Wasm, about 1.6 MB in all: within Vercel Pro's 2 MB Edge Function
-  limit, not Vercel Hobby's 1 MB. Output is PNG only: `output` encoders are
+  gzip of Wasm, about 1.6 MB in all. It needs a runtime that compiles Wasm at
+  run time, so Cloudflare Workers and Vercel Edge are not supported whatever
+  the bundle size. Output is PNG only: `output` encoders are
   rejected because `@resvg/resvg-wasm` has no JPEG or WebP encoder. The entry
   is tested in Node against the Wasm renderer and from the packed tarball.
 - `@resvg/resvg-wasm` (`>=2.6.2 <3`) is a new optional peer. `npm install
@@ -245,7 +246,7 @@ All notable changes to Metaplate are documented in this file. The project uses
   `createNextOg` and an `app/[slug]/og-image.jpg/route.ts` route handler
   through `createNodeOg(...).handlerFrom`, encoded as JPEG with sharp and
   configured with `serverExternalPackages: ["@resvg/resvg-js", "satori"]` as
-  the README documents. An Astro `output: "server"` build with
+  [`docs/nextjs.md`](docs/nextjs.md#jpeg-or-webp-cards-in-nextjs) documents. An Astro `output: "server"` build with
   `@astrojs/node` in standalone mode serves a `src/pages/[slug]/og-image.png.ts`
   endpoint whose `GET` is `handlerFrom` and a page emitting
   `socialImageMetadata` tags from the built `dist/server/entry.mjs`. Each
@@ -336,8 +337,8 @@ All notable changes to Metaplate are documented in this file. The project uses
   documented Teams limits (HTTPS image URL, PNG/JPEG/GIF, at most 1024x1024
   pixels, image under 1 MB when `fileSize` is given, card within the 28 KB
   webhook message limit). `SocialTarget` gains `teams` for
-  `socialImageCompatibility` and `--target teams`. The README section "Teams,
-  Slack, and Discord previews" documents what each client reads for an
+  `socialImageCompatibility` and `--target teams`.
+  [`docs/adaptive-cards.md`](docs/adaptive-cards.md) documents what each client reads for an
   ordinary link, which metaplate options feed it, and when an app is needed.
 - Open Graph video and audio (`og:video`, `og:audio`, https://ogp.me/#structured).
   `socialImageMetadata` and plate `metadata()` calls accept
@@ -400,14 +401,14 @@ All notable changes to Metaplate are documented in this file. The project uses
 - `socialImageMetadata` accepts `variants` and `twitter.variant`, and a
   variant plate's `metadata` emits one `og:image` per size, default first.
   `twitter:image` stays the default unless `twitter.variant` selects another.
-  Plates without variants produce byte-for-byte the same metadata as 0.8.0.
+  Plates without variants produce byte-for-byte the same metadata as 0.7.0.
 - `PlateContext`, `PlateVariant`, `PlateVariants`, `PlateView`, and
   `PlateMetadataOptions` types from `metaplate/render`, `metaplate/node`,
   `metaplate/edge`, and `metaplate/next`, and `SocialImageVariantOptions` from
   `metaplate`.
 - Package verification now builds and serves a SvelteKit 3 app from the exact
-  packed artifact. The fixture syncs route types, typechecks the README's
-  `+server` route against the generated `RequestHandler`, builds it with
+  packed artifact. The fixture syncs route types, typechecks the documented
+  `+server` route ([`docs/rendering.md`](docs/rendering.md)) against the generated `RequestHandler`, builds it with
   `adapter-node`, starts the adapter's server on an ephemeral port, checks the
   page's social metadata, and verifies the PNG bytes, dimensions, headers, and
   per-slug output of a dynamic `handlerFrom` `GET` route. The route is recorded
@@ -511,12 +512,6 @@ All notable changes to Metaplate are documented in this file. The project uses
 - `metaplate/node`'s renderer-independent code moved into internal modules
   shared with `metaplate/edge`. Its public API, types, and output are
   unchanged.
-- The README support table no longer groups Deno with edge runtimes. Bun and
-  Deno now have their own row, stating what the smoke proves and that
-  certification is still in progress; the not-supported row is narrowed to
-  Workers and other edge isolates, where the native Resvg binding cannot load.
-  `deployment-evidence.json` records Bun and Deno as `documented`, not
-  certified.
 
 ### Fixed
 
@@ -556,7 +551,9 @@ All notable changes to Metaplate are documented in this file. The project uses
   Next.js, size variants, metadata, X player and app cards, compatibility
   profiles, chat previews, Schema.org JSON-LD, fonts, and verification. Static
   hosts joined the deployment guide. The package now ships the whole `docs/`
-  directory so the README's links resolve offline.
+  directory, so the README's links into `docs/` resolve offline; links to
+  `examples/`, `deployment-evidence.json`, and other repository files point
+  at GitHub.
 - Plate constraints now lead with the `content-box` pitfall: a padded root
   sized to 100% grows past the canvas and can draw a one-line title off the
   image. The README quick start, the size-variants guide, and the Astro,
