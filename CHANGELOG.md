@@ -286,6 +286,19 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Documentation
 
+- The README is now a short overview: install, a quick start, a one-paragraph
+  summary of each guide, and the entry points. The full guides moved verbatim
+  into `docs/`: rendering, framework and runtime support, edge runtimes,
+  Next.js, size variants, metadata, X player and app cards, compatibility
+  profiles, chat previews, Schema.org JSON-LD, fonts, and verification. Static
+  hosts joined the deployment guide. The package now ships the whole `docs/`
+  directory so the README's links resolve offline.
+- Plate constraints now lead with the `content-box` pitfall: a padded root
+  sized to 100% grows past the canvas and can draw a one-line title off the
+  image. The README quick start, the size-variants guide, and the Astro,
+  Next.js, and size-variants examples set `boxSizing: "border-box"`. In the
+  size-variants example the square layout is bottom-aligned, and its title
+  rendered entirely below the 1080px canvas.
 - Correct the Netlify Edge caveat. The blank cards on the edge site's first
   deploy came from the fixture's layout, not from a first-deploy race on the
   font fetch as first recorded. Satori sizes boxes as content-box, so a card
