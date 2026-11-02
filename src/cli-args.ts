@@ -3,6 +3,7 @@ import process from "node:process";
 import { MAX_IMAGE_DIMENSION, type ImageSize } from "./core.js";
 import { SOCIAL_TARGETS, type SocialTarget } from "./compatibility-profiles.js";
 import type { ImageFormat } from "./image.js";
+import { isRobotsProductToken } from "./robots.js";
 
 export const VERIFY_USAGE =
   "Usage: metaplate verify [--json] [--target TARGET] [--url URL] [--alt TEXT] [--max-file-size BYTES] [--format svg|png|jpeg|webp|gif] --size WIDTHxHEIGHT <file> [...] [--size WIDTHxHEIGHT <file> [...]]";
@@ -55,7 +56,7 @@ export type VerifyUrlInvocation = Omit<VerifyInvocation, "targets" | "url"> & {
 };
 
 export const VERIFY_PAGE_USAGE =
-  "Usage: metaplate verify-page [--json] [--target TARGET] [--max-file-size BYTES] [--max-html-bytes BYTES] [--max-images N] [--max-bytes BYTES] [--max-redirects N] [--timeout MS] [--allow-port PORT] [--allow-private] <url> [...]";
+  "Usage: metaplate verify-page [--json] [--target TARGET] [--crawler TOKEN] [--max-file-size BYTES] [--max-html-bytes BYTES] [--max-images N] [--max-bytes BYTES] [--max-redirects N] [--timeout MS] [--allow-port PORT] [--allow-private] <url> [...]";
 
 /** Fetch limits for `verify-page`: the `verify-url` limits plus the page's own. */
 export type VerifyPageFetchOptions = VerifyUrlFetchOptions & {
@@ -67,6 +68,8 @@ export type VerifyPageInvocation = {
   urls: string[];
   json: boolean;
   socialTargets: SocialTarget[];
+  /** robots.txt product tokens from `--crawler`, deduplicated; omitted when none. */
+  crawlers?: string[];
   maxFileSize?: number;
   fetch: VerifyPageFetchOptions;
 };
@@ -274,10 +277,15 @@ export function parseVerifyPageInvocation(args: string[]): VerifyPageInvocation 
   const limits: VerifyPageFetchOptions = { allowPrivate: false, allowedPorts: [] };
   const usage = VERIFY_PAGE_USAGE;
   const shared = fetchLimitFlags(limits, usage);
+  const crawlers: string[] = [];
   const { entries, json, socialTargets, maxFileSize } = parseGroups(args, "verify-page", usage, {
     switches: shared.switches,
     values: {
       ...shared.values,
+      "--crawler": (value) => {
+        if (value === undefined || !isRobotsProductToken(value)) throw new Error(`Invalid crawler token. ${usage}`);
+        if (!crawlers.some((seen) => seen.toLowerCase() === value.toLowerCase())) crawlers.push(value);
+      },
       "--max-html-bytes": (value) => { limits.maxHtmlBytes = parseInteger(value, "max HTML bytes", usage, 1); },
       "--max-images": (value) => { limits.maxImages = parseInteger(value, "max images", usage, 1, 100); },
     },
@@ -286,6 +294,7 @@ export function parseVerifyPageInvocation(args: string[]): VerifyPageInvocation 
     urls: entries.map(({ value }) => value),
     json,
     socialTargets,
+    ...(crawlers.length > 0 ? { crawlers } : {}),
     ...(maxFileSize !== undefined ? { maxFileSize } : {}),
     fetch: { ...limits, allowedPorts: [...new Set(limits.allowedPorts)] },
   };

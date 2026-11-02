@@ -4,6 +4,7 @@ import {
   RemoteImageError,
   fetchRemoteImage,
   fetchRemoteImageVia,
+  fetchRemoteResourceVia,
   nonPublicAddressKind,
   verifyRemoteImage,
   type RemoteAddress,
@@ -355,7 +356,30 @@ describe("fetchRemoteImage limits", () => {
     const server = await localServer(routes({}));
     await expect(fetchRemoteImage(`${server.origin}/missing.png`, local(server.port))).rejects.toMatchObject({
       code: "status",
+      status: 404,
       message: expect.stringContaining("responded 404"),
     });
+  });
+
+  it("keeps the first maxBytes bytes in truncate mode instead of failing", async () => {
+    const body = Uint8Array.from({ length: 2400 }, (_, index) => index % 251);
+    const server = await localServer(routes({
+      "/declared": serveBytes(body, "text/plain"),
+      "/streamed": (_request, response) => {
+        response.writeHead(200, { "Content-Type": "text/plain" });
+        response.write(body.subarray(0, 800));
+        response.write(body.subarray(800, 1600));
+        response.end(body.subarray(1600));
+      },
+      "/small": serveBytes(body.subarray(0, 10), "text/plain"),
+    }));
+    for (const path of ["/declared", "/streamed"]) {
+      const result = await fetchRemoteResourceVia(`${server.origin}${path}`, local(server.port, { maxBytes: 1024 }), (address) => address, "text/plain", true);
+      expect(result).toMatchObject({ truncated: true, byteLength: 1024 });
+      expect([...result.bytes]).toEqual([...body.subarray(0, 1024)]);
+    }
+    const small = await fetchRemoteResourceVia(`${server.origin}/small`, local(server.port, { maxBytes: 1024 }), (address) => address, "text/plain", true);
+    expect(small.truncated).toBeUndefined();
+    expect(small.byteLength).toBe(10);
   });
 });
