@@ -318,6 +318,32 @@ it("offers Fetch-shaped handlers and no copy-bound handler", async () => {
   expect("handler" in plate).toBe(false);
 });
 
+it(
+  "verifies signed paths with Web Crypto before rendering on the edge entry",
+  async () => {
+    const { createEdgeOg } = await edgeEntry();
+    const secret = "edge-secret-0123456789abcdefghijklmno";
+    const component = vi.fn(definition.component);
+    const plate = createEdgeOg({ ...definition, ...wasm, imagePath: "og.png", component });
+    const route = plate.fetchableFrom(
+      (request: Request) => ({ title: new URL(request.url).pathname.split("/")[2] ?? "home" }),
+      { signed: { secret, status: 404 } },
+    );
+    const metadata = await plate.signedMetadata("/og/edge", { title: "edge" }, { secret });
+    const url = new URL(metadata.openGraph.images[0]!.url, "https://edge.example");
+
+    const rejected = await route.fetch(new Request(new URL("/og/other/og.png", url)));
+    expect(rejected.status).toBe(404);
+    expect(component).not.toHaveBeenCalled();
+
+    const response = await route.fetch(new Request(url));
+    expect(response.status).toBe(200);
+    verifyImage(new Uint8Array(await response.arrayBuffer()), plate.size, "png");
+    expect(component).toHaveBeenCalledOnce();
+  },
+  30_000,
+);
+
 it("rejects output encoders and dimension-changing Resvg settings", async () => {
   const { createEdgeOg } = await edgeEntry();
 

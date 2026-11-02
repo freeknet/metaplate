@@ -25,11 +25,13 @@ export type {
   PlateContext,
   PlateElement,
   PlateMetadataOptions,
+  PlateRouteOptions,
   PlateUrlOptions,
   PlateVariant,
   PlateVariants,
   PlateVersioning,
   PlateView,
+  SignedRouteOptions,
 } from "./plate.js";
 
 /**
