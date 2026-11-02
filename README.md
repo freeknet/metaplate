@@ -184,8 +184,8 @@ size itself, and `plate.variant(name)` gives the full plate API for one size.
 
 The root `metaplate` entry builds Open Graph and X metadata with no renderer
 or framework, including per-channel images and Open Graph video and audio.
-`socialMetaTags` and `socialMetaHtml` emit the `<meta>` tags for pages that
-write their own `<head>`.
+`socialMetaTags` and `socialMetaHtml` emit the `<meta>` tags, including
+validated `og:locale`, `article:`, and Discord accent-color and timestamp tags.
 [Metadata guide](docs/metadata.md)
 
 ### X player and app cards
@@ -272,9 +272,9 @@ every route is in [`deployment-evidence.json`](deployment-evidence.json).
   Workers. No Node built-ins. Needs `@resvg/resvg-wasm` and the
   caller-supplied `@resvg/resvg-wasm/index_bg.wasm` and `satori/layout.wasm`
   modules.
-- `metaplate/next` — native Next.js `ImageResponse` adapter, and
-  `nextTwitterMetadata` for X player and app cards in Next metadata. Needs
-  `next`.
+- `metaplate/next` — native Next.js `ImageResponse` adapter,
+  `nextTwitterMetadata` for X player and app cards in Next metadata, and
+  `nextPageMetadata`/`nextPageViewport` for page-level tags. Needs `next`.
 - `metaplate/font-data` — runtime-neutral normalization and memoization for
   application/framework-provided bytes. No peers or Node built-ins.
 - `metaplate/fonts` — project-file, Fontsource, generic npm-package, and
