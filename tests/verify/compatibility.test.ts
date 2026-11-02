@@ -111,7 +111,8 @@ describe("socialImageCompatibility", () => {
       compatible: true,
       issues: [expect.objectContaining({ severity: "warning", code: "dimensions", message: expect.stringMatching(/300x157/) })],
     });
-    expect(x({ type: undefined }).issues).toEqual([
+    const untyped = { url: png.url, width: png.width, height: png.height, alt: "Card" };
+    expect(socialImageCompatibility(untyped, { targets: ["x"] }).issues).toEqual([
       expect.objectContaining({ severity: "warning", code: "format" }),
     ]);
 
