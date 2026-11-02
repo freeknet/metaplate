@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { ResvgRenderOptions as UpstreamResvgRenderOptions } from "@resvg/resvg-js";
 import type { SatoriOptions as UpstreamSatoriOptions } from "satori";
 import type { ReactElement } from "react";
-import { createNextOg, type NextOgDefinition } from "../src/next.js";
+import type { Metadata } from "next";
+import { createNextOg, nextTwitterMetadata, type NextOgDefinition } from "../src/next.js";
 import { createNodeOg, type NodeOgDefinition, type ResvgRenderOptions } from "../src/node.js";
 import {
   createSvgOg,
@@ -18,7 +19,10 @@ import {
   type SocialImageVerificationDescriptor,
   type TwitterCard,
   type TwitterImageOptions,
+  type XAppCard,
+  type XAppStoreListing,
   type XCard,
+  type XCardMetadata,
   type XImageOptions,
 } from "../src/index.js";
 
@@ -113,6 +117,54 @@ export function variantNamesAreChecked() {
   // @ts-expect-error -- the X Card variant must be declared too.
   inferred.metadata("/", { title: "t" }, { twitter: { variant: "story" } });
   explicit.variant("any-name");
+}
+
+// X player and app cards are discriminated by `card`: each requires its own
+// payload, rejects the other's, and keeps its literal in the return type.
+const playerOptions = { url: "https://example.com/embed/1", width: 640, height: 360, stream: "https://example.com/1.mp4" };
+const playerMetadata = socialImageMetadata("/", "card", {
+  twitter: { card: "player", site: "@example", player: playerOptions },
+});
+const playerCard: "player" = playerMetadata.twitter.card;
+const playerUrl: string = playerMetadata.twitter.player.url;
+const appMetadata = socialImageMetadata("/", "card", {
+  twitter: { card: "app", site: "@example", description: "Get the app", app: { googleplay: { id: "com.example" } } },
+});
+const appCard: "app" = appMetadata.twitter.card;
+const appListing: XAppStoreListing | undefined = appMetadata.twitter.app.googleplay;
+const wideCards: XCardMetadata[] = [playerMetadata.twitter, appMetadata.twitter, defaultMetadata.twitter];
+const xPlayerOptions: XImageOptions = { card: "player", siteId: "1", player: playerOptions };
+const appOnlyIpad: XAppCard = { ipad: { id: "123" }, country: "GB" };
+const nextTwitter: Metadata["twitter"] = nextTwitterMetadata(playerMetadata.twitter);
+void [playerCard, playerUrl, appCard, appListing, wideCards, xPlayerOptions, appOnlyIpad, nextTwitter];
+
+// Compile-only: each of these would also throw at runtime.
+export function xCardPayloadsAreChecked() {
+  // @ts-expect-error -- a player card requires `player`.
+  socialImageMetadata("/", "card", { twitter: { card: "player", site: "@e" } });
+  // @ts-expect-error -- `player` requires a width and height.
+  socialImageMetadata("/", "card", { twitter: { card: "player", site: "@e", player: { url: "https://example.com/e" } } });
+  // @ts-expect-error -- an app card requires `app`.
+  socialImageMetadata("/", "card", { twitter: { card: "app", site: "@e" } });
+  // @ts-expect-error -- `app` requires at least one platform listing.
+  socialImageMetadata("/", "card", { twitter: { card: "app", site: "@e", app: { country: "GB" } } });
+  // @ts-expect-error -- a listing requires its app id.
+  socialImageMetadata("/", "card", { twitter: { card: "app", site: "@e", app: { iphone: { name: "Example" } } } });
+  // @ts-expect-error -- a summary card takes no player payload.
+  socialImageMetadata("/", "card", { twitter: { card: "summary", player: playerOptions } });
+  // @ts-expect-error -- an omitted card defaults to `summary_large_image`.
+  socialImageMetadata("/", "card", { twitter: { player: playerOptions } });
+  // @ts-expect-error -- a player card takes no app payload.
+  socialImageMetadata("/", "card", { twitter: { card: "player", site: "@e", player: playerOptions, app: { ipad: { id: "1" } } } });
+  // @ts-expect-error -- `description` belongs to player and app cards.
+  socialImageMetadata("/", "card", { twitter: { card: "summary", description: "d" } });
+  // @ts-expect-error -- X requires `site` or `siteId` on a player card.
+  socialImageMetadata("/", "card", { twitter: { card: "player", player: playerOptions } });
+  // @ts-expect-error -- X requires `site` on an app card.
+  socialImageMetadata("/", "card", { twitter: { card: "app", siteId: "1", app: { ipad: { id: "1" } } } });
+  // @ts-expect-error -- the wide options type is discriminated too.
+  const wide: XImageOptions = { card: "player", site: "@e" };
+  void wide;
 }
 
 describe("React-free type mirror", () => {

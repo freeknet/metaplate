@@ -1,3 +1,4 @@
+import { xCardFields, type XAppCard, type XPlayerCard } from "./x-cards.js";
 import {
   openGraphMedia,
   type OpenGraphAudio,
@@ -39,11 +40,37 @@ export type SocialImageVerificationDescriptor = {
   type?: string;
 };
 
-/** X Card presentation. The emitted HTML protocol still uses `twitter:*`. */
-export type XCard = "summary" | "summary_large_image";
+/**
+ * X Card presentation. The emitted HTML protocol still uses `twitter:*`.
+ * `player` and `app` carry a card-specific payload; see `XImageOptions`.
+ */
+export type XCard = "summary" | "summary_large_image" | "player" | "app";
 
 /** Wire-format alias retained for Next.js and existing consumers. */
 export type TwitterCard = XCard;
+
+/**
+ * The card-specific metadata fields for one card: `player` or `app`, each
+ * with an optional `description`, and none for the summary cards.
+ * Distributes over a union of cards.
+ */
+export type XCardMetadataFields<Card extends XCard> = Card extends "player"
+  ? { player: XPlayerCard; description?: string }
+  : Card extends "app"
+    ? { app: XAppCard; description?: string }
+    : unknown;
+
+/** X Card metadata for one card, discriminated by `card` when `Card` is a union. */
+export type XCardMetadata<Card extends XCard = XCard> = Card extends XCard
+  ? {
+      card: Card;
+      images: SocialImageDescriptor[];
+      site?: string;
+      siteId?: string;
+      creator?: string;
+      creatorId?: string;
+    } & XCardMetadataFields<Card>
+  : never;
 
 export type SocialImageMetadata<
   Card extends XCard = "summary_large_image",
@@ -55,14 +82,7 @@ export type SocialImageMetadata<
     /** `og:audio` groups; present only when `media.audio` is non-empty. */
     audio?: OpenGraphAudio[];
   };
-  twitter: {
-    card: Card;
-    images: SocialImageDescriptor[];
-    site?: string;
-    siteId?: string;
-    creator?: string;
-    creatorId?: string;
-  };
+  twitter: XCardMetadata<Card>;
 };
 
 export type OpenGraphImageOptions = {
@@ -70,8 +90,32 @@ export type OpenGraphImageOptions = {
   images: readonly SocialImageDescriptor[];
 };
 
+/**
+ * Card-specific X options, discriminated by `card`: a summary card (or an
+ * omitted `card`) takes no payload; `card: "player"` requires `player` and
+ * `site` or `siteId`; `card: "app"` requires `app` with at least one platform
+ * listing and `site`. Both accept a `description` of up to 200 characters.
+ */
+export type XCardOptions<Card extends XCard = XCard> = Card extends "player"
+  ? {
+      card: Card;
+      player: XPlayerCard;
+      /** Emitted as `twitter:description`; at most 200 characters. */
+      description?: string;
+      app?: never;
+    } & ({ site: string } | { siteId: string })
+  : Card extends "app"
+    ? {
+        card: Card;
+        app: XAppCard;
+        site: string;
+        /** Emitted as `twitter:description`; at most 200 characters. */
+        description?: string;
+        player?: never;
+      }
+    : { card?: Card; player?: never; app?: never; description?: never };
+
 export type XImageOptions<Card extends XCard = XCard> = {
-  card?: Card;
   /** A channel-specific image. Omit it to reuse the default social image. */
   image?: SocialImageDescriptor;
   /**
@@ -83,7 +127,7 @@ export type XImageOptions<Card extends XCard = XCard> = {
   siteId?: string;
   creator?: string;
   creatorId?: string;
-};
+} & XCardOptions<Card>;
 
 /** Wire-format alias retained for Next.js and existing consumers. */
 export type TwitterImageOptions<Card extends XCard = XCard> =
@@ -350,7 +394,7 @@ function variantImages(
 }
 
 function selectTwitterImage(
-  twitter: XImageOptions | undefined,
+  twitter: XImageOptions<XCard> | undefined,
   defaultImage: SocialImageDescriptor,
   variants: Map<string, SocialImageDescriptor>,
 ): SocialImageDescriptor {
@@ -383,16 +427,19 @@ export function socialImageMetadata<
     ? copyImages(options.openGraph.images, "Open Graph")
     : [image, ...variants.values()].map((entry) => copyDescriptor(entry, "Open Graph"));
   const twitterImage = selectTwitterImage(options.twitter, image, variants);
-  const twitter = options.twitter;
+  const twitter: XImageOptions<XCard> | undefined = options.twitter;
+  const card = twitter?.card ?? "summary_large_image";
+  const cardFields = xCardFields({ ...twitter, card, images: [twitterImage] });
   return {
     openGraph: { images: openGraphImages, ...openGraphMedia(options.media) },
     twitter: {
-      card: (twitter?.card ?? "summary_large_image") as Card,
+      card,
       images: [copyDescriptor(twitterImage, "Twitter")],
       ...(twitter?.site ? { site: twitter.site } : {}),
       ...(twitter?.siteId ? { siteId: twitter.siteId } : {}),
       ...(twitter?.creator ? { creator: twitter.creator } : {}),
       ...(twitter?.creatorId ? { creatorId: twitter.creatorId } : {}),
-    },
+      ...cardFields,
+    } as XCardMetadata<Card>,
   };
 }

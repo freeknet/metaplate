@@ -1,4 +1,5 @@
 import { MAX_IMAGE_DIMENSION, type XCard } from "./core.js";
+import { xCardTags, type XAppCard, type XPlayerCard } from "./x-cards.js";
 import { openGraphMediaTags, type SocialMetaMediaInput } from "./og-media.js";
 
 /**
@@ -40,6 +41,12 @@ export type SocialMetaInput = {
         siteId?: string | undefined;
         creator?: string | undefined;
         creatorId?: string | undefined;
+        /** Required with, and only with, `card: "player"`. */
+        player?: XPlayerCard | undefined;
+        /** Required with, and only with, `card: "app"`. */
+        app?: XAppCard | undefined;
+        /** Player or App Card description, emitted as `twitter:description`. */
+        description?: string | undefined;
       }
     | undefined;
 };
@@ -171,6 +178,7 @@ function twitterTags(
   named("twitter:site:id", twitter.siteId);
   named("twitter:creator", twitter.creator);
   named("twitter:creator:id", twitter.creatorId);
+  tags.push(...xCardTags(twitter));
   return tags;
 }
 
@@ -200,7 +208,13 @@ function pageTags(options: SocialMetaOptions): SocialMetaTag[] {
  *    item (`og:audio`, `og:audio:secure_url`, `og:audio:type`), resolved and
  *    deduplicated by URL like images; see `openGraphMediaTags`.
  * 2. `twitter:card`, `twitter:image`, `twitter:image:alt`, `twitter:site`,
- *    `twitter:site:id`, `twitter:creator`, `twitter:creator:id`.
+ *    `twitter:site:id`, `twitter:creator`, `twitter:creator:id`, then the
+ *    card-specific tags: for `player`, `twitter:description`,
+ *    `twitter:player`, `twitter:player:width`, `twitter:player:height`,
+ *    `twitter:player:stream`; for `app`, `twitter:description`, then
+ *    `twitter:app:name:<p>`, `twitter:app:id:<p>`, `twitter:app:url:<p>` for
+ *    `iphone`, `ipad`, and `googleplay` in that order, then
+ *    `twitter:app:country`.
  * 3. Page-level fields from `options`: `og:title`, `og:description`,
  *    `og:url`, `og:site_name`, `og:type`.
  *
@@ -211,7 +225,9 @@ function pageTags(options: SocialMetaOptions): SocialMetaTag[] {
  *
  * @throws When `options.url` is not an absolute, credential-free http(s) URL,
  *   when an image URL is empty, when a dimension is not an integer from 1
- *   to 65535, or when a video or audio item fails the `openGraphMedia` checks.
+ *   to 65535, when a video or audio item fails the `openGraphMedia` checks,
+ *   or when a player or app payload is missing, mismatched with its card, or
+ *   invalid (see `xCardFields`).
  */
 export function socialMetaTags(
   metadata: SocialMetaInput,
