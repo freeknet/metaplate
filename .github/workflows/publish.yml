@@ -161,7 +161,7 @@ jobs:
     name: Verify published artifact
     needs: [verify, publish]
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -178,19 +178,27 @@ jobs:
       # attestation formats.
       - run: npm install --global npm@latest --ignore-scripts
 
+      # The version and its provenance attestation reach the registry
+      # separately, and either can lag the publish by over a minute (0.8.0's
+      # attestation returned 404 for about two). Wait up to five minutes for
+      # both before verifying.
       - name: Wait for registry propagation
         shell: bash
         env:
           VERSION: ${{ needs.verify.outputs.version }}
         run: |
           set -euo pipefail
-          for attempt in {1..12}; do
-            if published=$(npm view "metaplate@$VERSION" version 2>/dev/null) && [[ "$published" == "$VERSION" ]]; then
+          attestations="https://registry.npmjs.org/-/npm/v1/attestations/metaplate@$VERSION"
+          for attempt in {1..30}; do
+            if published=$(npm view "metaplate@$VERSION" version 2>/dev/null) &&
+              [[ "$published" == "$VERSION" ]] &&
+              curl --silent --fail --output /dev/null "$attestations"; then
+              echo "metaplate@$VERSION and its attestations are visible after $attempt attempt(s)"
               exit 0
             fi
-            sleep 5
+            sleep 10
           done
-          echo "::error::metaplate@$VERSION did not become visible on the npm registry"
+          echo "::error::metaplate@$VERSION or its provenance attestation did not become visible on the npm registry within five minutes"
           exit 1
 
       - name: Verify registry artifact, signatures, and provenance
