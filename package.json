@@ -20,6 +20,7 @@
     "dist",
     "README.md",
     "docs/deployment.md",
+    "docs/render-cli.md",
     "CHANGELOG.md",
     "LICENSE"
   ],

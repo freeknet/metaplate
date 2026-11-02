@@ -22,6 +22,7 @@ It works with plain Node, static build scripts, Next.js, and Node-compatible fra
   - [Other output formats](#other-output-formats)
   - [Fetch-based framework routes](#fetch-based-framework-routes)
   - [Express and build scripts](#express-and-build-scripts)
+  - [Static files with `metaplate render`](#static-files-with-metaplate-render)
   - [Runtime and dynamic-route safety](#runtime-and-dynamic-route-safety)
   - [Edge runtimes with `metaplate/edge`](#edge-runtimes-with-metaplateedge)
   - [Authoring without a JSX toolchain](#authoring-without-a-jsx-toolchain)
@@ -294,6 +295,18 @@ import { writeFile } from "node:fs/promises";
 import { og } from "./og.js";
 
 await writeFile("public/og-image.jpg", await og.render(copy));
+```
+
+### Static files with `metaplate render`
+
+`metaplate render` replaces that script for whole sites: it loads a module
+whose default export is `{ plate, pages: [{ route, copy }] }`, writes every
+page at every size to the path its metadata URL names, verifies each file, and
+records them in a manifest. The [render CLI guide](docs/render-cli.md) covers
+the module contract, flags, manifest, exit codes, and loading TypeScript or JSX.
+
+```sh
+npx metaplate render og.render.mjs --out public
 ```
 
 ### Runtime and dynamic-route safety
@@ -726,7 +739,7 @@ checked only at runtime.
 `og.variant("square")` is the same plate bound to that size. It has the whole
 plate surface (`size`, `render`, `renderSvg`, `renderPixels`, `response`,
 `handler`, `handlerFrom`, `fetchable`, `fetchableFrom`, `artifact`, `image`,
-`metadata`, `contentType`) and renders, encodes with the plate's `output`
+`metadata`, `sitePath`, `contentType`) and renders, encodes with the plate's `output`
 encoder if one is set, and serves only the square size. `og.variants` lists the
 declared names in order, and `variantName` tells a view which size it is.
 
@@ -777,7 +790,9 @@ copy-bound `handler`: serve each size through its view's `fetchable`,
 Next route form above works with the `next/og` renderer too. For Next's
 `opengraph-image` convention, write one metadata file per size and re-export
 the view's `size` and `contentType`; Metaplate does not wrap
-`generateImageMetadata`. A build script writes one file per view:
+`generateImageMetadata`. A build script writes one file per view, or
+[`metaplate render`](#static-files-with-metaplate-render) writes every view of
+every page for you:
 
 ```ts
 for (const view of [og, ...og.variants.map((name) => og.variant(name))]) {

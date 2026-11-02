@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { createHash } from "node:crypto";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
   copyFileSync,
@@ -1665,6 +1666,116 @@ export const GET: RequestHandler = og.handlerFrom(({ params }) => ({
     }
   `;
   runModule(standaloneSmoke, standalone);
+
+  // `metaplate render` end to end from the packed bin: a real plate with a
+  // variant, a basePath that must not reach the file tree, nested routes, and
+  // a manifest whose every hash and size must match the files on disk.
+  const renderCliPath = join(standalone, "node_modules", "metaplate", "dist", "cli.js");
+  const renderPlateSource = `
+    import { fontsourceFontLoader } from "metaplate/fonts";
+    import { createNodeOg } from "metaplate/node";
+
+    export const og = createNodeOg({
+      alt: (copy) => copy.title,
+      fonts: fontsourceFontLoader([${fontsourceFontSource}]),
+      imagePath: "og-image.png",
+      basePath: "/project",
+      origin: "https://example.com",
+      variants: { square: { size: { width: 1080, height: 1080 } } },
+      component: (copy) => ({
+        type: "div",
+        props: {
+          style: { width: "100%", height: "100%", display: "flex", fontFamily: "Inter", fontSize: 64 },
+          children: copy.title,
+        },
+      }),
+    });
+  `;
+  writeFileSync(join(standalone, "og-plate.mjs"), renderPlateSource);
+  writeFileSync(
+    join(standalone, "og.render.mjs"),
+    `import { og } from "./og-plate.mjs";
+    export default async () => [
+      { plate: og, pages: [{ copy: { title: "Home" } }, { route: "/posts/caf%C3%A9", copy: { title: "Cafe" } }] },
+    ];`,
+  );
+  const expectedRenderImages = [
+    ["og-image.png", "https://example.com/project/og-image.png", cardSize],
+    ["og-image-square.png", "https://example.com/project/og-image-square.png", { width: 1080, height: 1080 }],
+    ["posts/café/og-image.png", "https://example.com/project/posts/caf%C3%A9/og-image.png", cardSize],
+    ["posts/café/og-image-square.png", "https://example.com/project/posts/caf%C3%A9/og-image-square.png", { width: 1080, height: 1080 }],
+  ];
+  const { verifyImage: packedVerifyImage } = await import(
+    pathToFileURL(join(standalone, "node_modules", "metaplate", "dist", "image.js")).href
+  );
+
+  function verifyRenderedSite(label, module, extraArgs = []) {
+    const out = join(standalone, `site-${label}`);
+    const rendered = spawnSync(
+      process.execPath,
+      [renderCliPath, "render", "--json", "--out", out, "--concurrency", "2", ...extraArgs, module],
+      { cwd: standalone, encoding: "utf8" },
+    );
+    if (rendered.status !== 0) {
+      throw new Error(`Packed metaplate render (${label}) failed: ${rendered.stdout}${rendered.stderr}`);
+    }
+    const report = JSON.parse(rendered.stdout);
+    const manifest = JSON.parse(readFileSync(join(out, "metaplate-manifest.json"), "utf8"));
+    if (report.schemaVersion !== 1 || manifest.schemaVersion !== 1 || manifest.images.length !== expectedRenderImages.length) {
+      throw new Error(`Packed metaplate render (${label}) reported an unexpected image set: ${rendered.stdout}`);
+    }
+    expectedRenderImages.forEach(([path, url, size], index) => {
+      const entry = manifest.images[index];
+      const bytes = readFileSync(join(out, ...path.split("/")));
+      const image = packedVerifyImage(bytes, size, "png");
+      const sha256 = createHash("sha256").update(bytes).digest("hex");
+      if (
+        entry.path !== path ||
+        entry.url !== url ||
+        entry.format !== "png" ||
+        entry.verified !== true ||
+        entry.bytes !== bytes.byteLength ||
+        entry.sha256 !== sha256 ||
+        entry.size.width !== image.width ||
+        entry.size.height !== image.height ||
+        report.images[index]?.valid !== true
+      ) {
+        throw new Error(`Packed metaplate render (${label}) manifest disagrees with ${path}: ${JSON.stringify(entry)}`);
+      }
+    });
+    if (existsSync(join(out, "project"))) {
+      throw new Error(`Packed metaplate render (${label}) wrote the basePath into the file tree.`);
+    }
+  }
+  verifyRenderedSite("mjs", "og.render.mjs");
+
+  // Node strips types by default on every version the full gate runs (22.18+),
+  // so the packed CLI must load a TypeScript module with no compiler at all.
+  if (process.features.typescript) {
+    writeFileSync(
+      join(standalone, "og.render.ts"),
+      `import type { RenderJob } from "metaplate/node";
+      import { og } from "./og-plate.mjs";
+      type Copy = { title: string };
+      const pages: RenderJob<Copy>["pages"] = [{ copy: { title: "Home" } }, { route: "/posts/caf%C3%A9", copy: { title: "Cafe" } }];
+      export default { plate: og, pages };`,
+    );
+    verifyRenderedSite("ts", "og.render.ts");
+  }
+
+  writeFileSync(
+    join(standalone, "escape.render.mjs"),
+    `import { og } from "./og-plate.mjs";
+    export default { plate: og, pages: [{ route: "/posts/%2e%2e%2F..%2Fescape", copy: { title: "Escape" } }] };`,
+  );
+  const escaped = spawnSync(
+    process.execPath,
+    [renderCliPath, "render", "--out", join(standalone, "site-escape"), "escape.render.mjs"],
+    { cwd: standalone, encoding: "utf8" },
+  );
+  if (escaped.status !== 1 || !escaped.stderr.includes("not a portable file name") || existsSync(join(standalone, "escape"))) {
+    throw new Error(`Packed metaplate render did not refuse a path outside --out: ${escaped.stdout}${escaped.stderr}`);
+  }
 
   // Plain-object authoring still has no React type dependency even though the
   // batteries-included install now supplies the React runtime for JSX users.

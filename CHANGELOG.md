@@ -7,6 +7,23 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Added
 
+- `metaplate render <module>` renders static social images as a build step.
+  The module's default export is `{ plate, pages: [{ route?, copy }] }`, an
+  array of those, or a function returning either; a `createNodeOg` or
+  `createEdgeOg` plate renders every page at its default size and every
+  variant (a `plate.variant(name)` view renders one size), in the plate's own
+  output format. Each image is written into `--out` (default `public`) at the
+  new `plate.sitePath(route)` (the route plus `imagePath`, without `basePath`
+  or `origin`), with percent-escapes decoded, paths that would leave `--out`
+  (including through a symbolic link) or collide refused before or during the
+  write, and every file read back, hashed, and checked with `verifyImage`. A
+  schema-versioned `metaplate-manifest.json` lists each file's path, URL,
+  route, variant, size, format, bytes, and SHA-256, and is written only when
+  every image succeeded; any failure exits `1`. `--json` prints one report,
+  `--concurrency` bounds renders in flight (default 4), and `.ts` modules load
+  wherever Node strips types (22.18+ and 23.6+ by default). `RenderJob`,
+  `RenderPage`, and `RenderModule` types come from `metaplate/node`. See
+  [`docs/render-cli.md`](docs/render-cli.md).
 - `metaplate/edge` renders plates to PNG through `@resvg/resvg-wasm` on
   Deno-based edges such as Netlify Edge Functions (hosted-certified on
   2026-11-01), and on other Fetch-shaped runtimes that allow WebAssembly to be
