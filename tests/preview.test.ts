@@ -231,7 +231,9 @@ describe("startPreviewServer", () => {
     expect(html).toContain("Card for /posts/a&amp;b&#39;s");
     expect(html).toContain("<strong>linkedin</strong> incompatible");
     expect(html).toContain("LinkedIn full-size previews require at least 1200x627 pixels.");
-    expect(html).not.toMatch(/<script>|style="/);
+    // No inline script or style: the only script is the external preview.js.
+    expect(html.match(/<script\b[^>]*>/gi)).toEqual(['<script src="/assets/preview.js" defer>']);
+    expect(html).not.toMatch(/<style\b|\sstyle\s*=/i);
 
     const image = await fetch(new URL("/image/3", server.url));
     expect(image.headers.get("content-type")).toBe("image/png");
