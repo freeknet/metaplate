@@ -7,6 +7,20 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Added
 
+- `socialMetaTags` and `socialMetaHtml` accept validated page-level fields:
+  `locale` and `alternateLocales` (`og:locale`, `og:locale:alternate`, in
+  `language_TERRITORY` form), `article` (`article:published_time`,
+  `modified_time`, and `expiration_time` as calendar dates, RFC 3339
+  date-times with an offset, or `Date`s, plus `article:author`,
+  `article:section`, and `article:tag`; `og:type` then defaults to
+  `article`), `pubdate` (Discord's `og:pubdate`, a full RFC 3339 timestamp),
+  and `themeColor` (`<meta name="theme-color">`, `#RRGGBB` or `#RRGGBBAA`, the
+  accent color Discord reads). They follow the existing page tags, so output
+  without them is unchanged; the `socialMetaHtml` key allowlist now admits
+  `article:` keys and exactly `theme-color`. `metaplate/next` adds
+  `nextPageMetadata` (Next `openGraph` fields plus `og:pubdate` through
+  `other`), `nextPageViewport` (`themeColor` for Next's `viewport` export),
+  and `NEXT_OPEN_GRAPH_TYPES`. See `docs/metadata.md#page-level-tags`.
 - `metaplate render <module>` renders static social images as a build step.
   The module's default export is `{ plate, pages: [{ route?, copy }] }`, an
   array of those, or a function returning either; a `createNodeOg` or

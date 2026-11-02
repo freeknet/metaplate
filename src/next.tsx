@@ -1,8 +1,9 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import type { ReactElement } from "react";
 import { OG_CONTENT_TYPE, type ImageSize, type XCardMetadata } from "./core.js";
 import { assertAbsoluteMedia } from "./og-media.js";
 import { optionalPeer } from "./optional-peer.js";
+import { pageFields, type SocialMetaOptions } from "./page-tags.js";
 import { nextTwitterShape } from "./x-cards.js";
 import {
   createPlateHandlers,
@@ -118,4 +119,81 @@ export function nextTwitterMetadata(
   twitter: XCardMetadata,
 ): NonNullable<Metadata["twitter"]> {
   return nextTwitterShape(twitter);
+}
+
+type NextOpenGraph = NonNullable<Metadata["openGraph"]>;
+
+/** The `og:type` values Next's `openGraph.type` accepts. */
+export type NextOpenGraphType = Extract<NextOpenGraph, { type: string }>["type"];
+
+/**
+ * Next renders `og:type` from a closed switch and throws "Invalid OpenGraph
+ * type" for anything else, so only these values can be mapped.
+ */
+export const NEXT_OPEN_GRAPH_TYPES = [
+  "website",
+  "article",
+  "book",
+  "profile",
+  "music.song",
+  "music.album",
+  "music.playlist",
+  "music.radio_station",
+  "video.movie",
+  "video.episode",
+  "video.tv_show",
+  "video.other",
+] as const satisfies readonly NextOpenGraphType[];
+
+function isNextOpenGraphType(type: string): type is NextOpenGraphType {
+  return (NEXT_OPEN_GRAPH_TYPES as readonly string[]).includes(type);
+}
+
+/**
+ * Maps the page-level fields `socialMetaTags` accepts onto Next's `Metadata`,
+ * validated by the same rules: `title`, `description`, `url`, `siteName`,
+ * `type`, `locale`, `alternateLocales` (as `alternateLocale`), and the
+ * `article` fields go to `openGraph` under Next's names, and `pubdate`, which
+ * Next has no field for, goes to `other` as `og:pubdate` (Next renders it with
+ * a `name` attribute, which Discord reads). `openGraph` is omitted when no
+ * field is set, so spreading the result never replaces a layout's
+ * `openGraph` with an empty one. `themeColor` belongs to Next's `viewport`
+ * export; see `nextPageViewport`.
+ *
+ * Next shallow-merges `openGraph`, so combine the result with the images in
+ * one object: `openGraph: { ...page.openGraph, images: social.openGraph.images }`.
+ *
+ * @throws For the same inputs as `socialMetaTags`, or when `type` is not one
+ *   of `NEXT_OPEN_GRAPH_TYPES`.
+ */
+export function nextPageMetadata(page: SocialMetaOptions): Pick<Metadata, "openGraph" | "other"> {
+  const fields = pageFields(page);
+  const { type, pubdate, alternateLocales } = fields;
+  if (type !== undefined && !isNextOpenGraphType(type)) {
+    throw new Error(
+      `Next.js renders og:type only for ${NEXT_OPEN_GRAPH_TYPES.join(", ")}; received ${type}. Emit the tags with socialMetaTags instead.`,
+    );
+  }
+  const openGraph: Record<string, unknown> = {};
+  for (const key of ["title", "description", "url", "siteName", "type", "locale"] as const) {
+    if (fields[key] !== undefined) openGraph[key] = fields[key];
+  }
+  if (alternateLocales !== undefined) openGraph.alternateLocale = alternateLocales;
+  Object.assign(openGraph, fields.article);
+  return {
+    ...(Object.keys(openGraph).length > 0 ? { openGraph: openGraph as NextOpenGraph } : {}),
+    ...(pubdate === undefined ? {} : { other: { "og:pubdate": pubdate } }),
+  };
+}
+
+/**
+ * Maps `themeColor` onto Next's `viewport` export, where Next 14 and later
+ * expect it (`metadata.themeColor` is deprecated). Export the result as
+ * `viewport`, or spread it into `generateViewport`'s return value.
+ *
+ * @throws For the same inputs as `socialMetaTags`.
+ */
+export function nextPageViewport(page: SocialMetaOptions): Pick<Viewport, "themeColor"> {
+  const { themeColor } = pageFields(page);
+  return themeColor === undefined ? {} : { themeColor };
 }
