@@ -81,8 +81,6 @@ export function dimension(value: number, axis: string): string {
   return String(value);
 }
 
-}
-
 export function imageUrl(image: SocialMetaImageInput, base: URL | undefined, label: string): string {
   if (!image.url) throw new Error(`${label} image URL must not be empty`);
   if (!base || isAbsoluteUrl(image.url)) return image.url;
