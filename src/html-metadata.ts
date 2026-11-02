@@ -8,7 +8,8 @@
  *
  * It follows the parts of the HTML tokenizer that decide what a crawler sees
  * in `<head>`: comments, doctypes, and raw-text elements (`<script>`,
- * `<style>`, `<title>`, ...) are skipped; attribute names are
+ * `<style>`, `<title>`, `<noscript>`, ...) are skipped; the head ends where
+ * the tree builder would end it; attribute names are
  * ASCII-lowercased; values may be double-quoted, single-quoted, or unquoted;
  * the first of two same-named attributes wins; and character references in
  * attribute values are decoded. It is not a full HTML tree builder.
@@ -190,10 +191,18 @@ export function decodeAttributeValue(value: string): string {
 
 type Tag =
   | { kind: "start"; name: string; attributes: ReadonlyMap<string, string>; text?: string }
-  | { kind: "end"; name: string };
+  | { kind: "end"; name: string }
+  /** Character data between `start` and `end`; the consumer inspects it only when it matters. */
+  | { kind: "text"; start: number; end: number };
 
-/** Elements whose content the tokenizer reads as text up to their end tag. */
-const RAW_TEXT_ELEMENTS = new Set(["script", "style", "title", "textarea", "xmp", "iframe", "noembed", "noframes"]);
+/**
+ * Elements whose content the tokenizer reads as text up to their end tag.
+ * `noscript` is raw text because browsers and crawlers that render parse
+ * with scripting enabled; a `<noscript><img></noscript>` in the head (as in
+ * analytics pixel snippets) therefore neither ends the head nor hides the
+ * tags after it.
+ */
+const RAW_TEXT_ELEMENTS = new Set(["script", "style", "title", "textarea", "xmp", "iframe", "noembed", "noframes", "noscript"]);
 
 function tagNameEnd(html: string, from: number): number {
   let index = from;
@@ -203,6 +212,22 @@ function tagNameEnd(html: string, from: number): number {
     index += 1;
   }
   return index;
+}
+
+/** Strips leading and trailing ASCII whitespace only, never U+00A0 or other spaces. */
+function asciiTrim(value: string): string {
+  let start = 0;
+  let end = value.length;
+  while (start < end && isHtmlWhitespace(value.charCodeAt(start))) start += 1;
+  while (end > start && isHtmlWhitespace(value.charCodeAt(end - 1))) end -= 1;
+  return start === 0 && end === value.length ? value : value.slice(start, end);
+}
+
+function hasNonWhitespace(html: string, start: number, end: number): boolean {
+  for (let index = start; index < end; index += 1) {
+    if (!isHtmlWhitespace(html.charCodeAt(index))) return true;
+  }
+  return false;
 }
 
 function skipWhitespace(html: string, from: number): number {
@@ -282,15 +307,33 @@ function rawTextEnd(html: string, from: number, name: string): { textEnd: number
   return { textEnd: html.length, resume: html.length };
 }
 
-/** Yields start and end tags in document order. */
+/**
+ * Where a comment that opens at `from` (just after `<!--`) ends. As in the
+ * tokenizer, `<!-->` and `<!--->` are complete (empty) comments, and both
+ * `-->` and `--!>` close one; an unclosed comment runs to the end of input.
+ */
+function commentEnd(html: string, from: number): number {
+  if (html.charCodeAt(from) === 0x3e) return from + 1;
+  if (html.startsWith("->", from)) return from + 2;
+  let dashes = html.indexOf("--", from);
+  while (dashes !== -1) {
+    if (html.charCodeAt(dashes + 2) === 0x3e) return dashes + 3;
+    if (html.startsWith("!>", dashes + 2)) return dashes + 4;
+    dashes = html.indexOf("--", dashes + 1);
+  }
+  return html.length;
+}
+
+/** Yields start tags, end tags, and the text between them, in document order. */
 function* tags(html: string): Generator<Tag> {
   let index = html.indexOf("<");
+  if (index !== 0) yield { kind: "text", start: 0, end: index === -1 ? html.length : index };
   while (index !== -1 && index < html.length) {
     const next = html.charCodeAt(index + 1);
     let resume: number;
+    let textFrom: number | undefined;
     if (html.startsWith("<!--", index)) {
-      const close = html.indexOf("-->", index + 4);
-      resume = close === -1 ? html.length : close + 3;
+      resume = commentEnd(html, index + 4);
     } else if (next === 0x21 || next === 0x3f || (next === 0x2f && !isAsciiAlpha(html.charCodeAt(index + 2)))) {
       // Doctype, processing instruction, or bogus comment: skip to ">".
       const close = html.indexOf(">", index + 2);
@@ -313,9 +356,13 @@ function* tags(html: string): Generator<Tag> {
         yield { kind: "start", name: tag.name, attributes: tag.attributes };
       }
     } else {
+      // A "<" that starts no markup is text.
       resume = index + 1;
+      textFrom = index;
     }
     index = html.indexOf("<", resume);
+    const textEnd = index === -1 ? html.length : index;
+    if (textEnd > (textFrom ?? resume)) yield { kind: "text", start: textFrom ?? resume, end: textEnd };
   }
 }
 
@@ -333,12 +380,40 @@ function charsetParameter(contentType: string): string | undefined {
   return undefined;
 }
 
-function decoderFor(label: string | undefined): TextDecoder | undefined {
+type HtmlDecoder = { decode(bytes: Uint8Array): string };
+
+/** What windows-1252 maps bytes 0x80-0x9F to; five bytes map to themselves. */
+const WINDOWS_1252_HIGH =
+  "€‚ƒ„…†‡ˆ‰Š‹ŒŽ" +
+  "‘’“”•–—˜™š›œžŸ";
+
+/**
+ * Node 20 decodes windows-1252 as ISO-8859-1, leaving bytes 0x80-0x9F as C1
+ * controls; this maps them as the Encoding Standard does. A correct decoder
+ * is returned unchanged.
+ */
+function windows1252(decoder: TextDecoder): HtmlDecoder {
+  if (decoder.decode(Uint8Array.of(0x80)) === "€") return decoder;
+  return {
+    decode: (bytes) =>
+      decoder.decode(bytes).replace(/[-]/g, (c) => WINDOWS_1252_HIGH[c.charCodeAt(0) - 0x80]!),
+  };
+}
+
+function decoderFor(label: string | undefined, fromMeta = false): HtmlDecoder | undefined {
   if (label === undefined) return undefined;
   try {
+    // The <meta> prescan cannot have read a UTF-16 document as ASCII, so a
+    // UTF-16 label found there means UTF-8, and x-user-defined means
+    // windows-1252. A transport-layer (Content-Type) label is used as given.
+    // x-user-defined is matched by its one label, before construction,
+    // because Node releases before 24 reject it.
+    if (fromMeta && label.trim().toLowerCase() === "x-user-defined") {
+      return windows1252(new TextDecoder("windows-1252"));
+    }
     const decoder = new TextDecoder(label);
-    // A UTF-16 label outside a byte order mark means UTF-8 (HTML encoding sniffing).
-    return decoder.encoding.startsWith("utf-16") ? new TextDecoder("utf-8") : decoder;
+    if (fromMeta && decoder.encoding.startsWith("utf-16")) return new TextDecoder("utf-8");
+    return decoder.encoding === "windows-1252" ? windows1252(decoder) : decoder;
   } catch {
     return undefined;
   }
@@ -370,7 +445,7 @@ export function decodeHtmlBytes(bytes: Uint8Array, contentType: string | undefin
   if (bytes[0] === 0xff && bytes[1] === 0xfe) return new TextDecoder("utf-16le").decode(bytes);
   const decoder =
     decoderFor(contentType === undefined ? undefined : charsetParameter(contentType)) ??
-    decoderFor(prescanCharset(bytes)) ??
+    decoderFor(prescanCharset(bytes), true) ??
     new TextDecoder("utf-8");
   return decoder.decode(bytes);
 }
@@ -418,6 +493,8 @@ function pixels(value: unknown): number | undefined {
 
 type JsonLdCollector = {
   images: PageJsonLdImage[];
+  /** Position of each URL in `images`, so a repeat merges in constant time. */
+  positions: Map<string, number>;
   nodes: number;
   truncated: boolean;
   /** Script elements seen so far. */
@@ -427,8 +504,9 @@ type JsonLdCollector = {
 };
 
 function addJsonLdImage(collector: JsonLdCollector, image: PageJsonLdImage): void {
-  const existing = collector.images.findIndex((entry) => entry.url === image.url);
-  if (existing === -1) {
+  const existing = collector.positions.get(image.url);
+  if (existing === undefined) {
+    collector.positions.set(image.url, collector.images.length);
     collector.images.push(Object.freeze(image));
     return;
   }
@@ -489,10 +567,25 @@ function isJsonLdScript(attributes: ReadonlyMap<string, string>): boolean {
 // ---------------------------------------------------------------------------
 // Extraction
 
-/** Elements that may appear in `<head>`; any other start tag ends it. */
+/**
+ * Start tags the "in head" insertion mode keeps in the head. `html` and
+ * `head` change nothing there; any other start tag ends the head.
+ */
 const HEAD_ELEMENTS = new Set([
-  "html", "head", "meta", "link", "title", "base", "script", "style", "noscript", "template", "basefont", "bgsound",
+  "html", "head", "meta", "link", "title", "base", "script", "style", "noscript", "noframes", "template", "basefont", "bgsound",
 ]);
+
+/**
+ * Start tags the "after head" insertion mode (after `</head>`, before the
+ * body) still processes with the "in head" rules; `html` and `head` change
+ * nothing; anything else starts the body.
+ */
+const AFTER_HEAD_ELEMENTS = new Set([
+  "html", "head", "base", "basefont", "bgsound", "link", "meta", "noframes", "script", "style", "template", "title",
+]);
+
+/** End tags that, before the body, start it ("anything else" in the after-head mode). */
+const BODY_STARTING_END_TAGS = new Set(["body", "html", "br"]);
 
 type MutableImage = { -readonly [Key in keyof PageOpenGraphImage]: PageOpenGraphImage[Key] };
 type TwitterFields = { -readonly [Key in keyof PageSocialMetadata["twitter"]]: PageSocialMetadata["twitter"][Key] };
@@ -569,10 +662,68 @@ function frozenBaseUrl(href: string, fallback: URL): URL {
 function metaKeys(attributes: ReadonlyMap<string, string>): string[] {
   const keys = new Set<string>();
   for (const attribute of ["property", "name"]) {
-    const key = attributes.get(attribute)?.trim().toLowerCase();
+    const value = attributes.get(attribute);
+    const key = value === undefined ? undefined : asciiTrim(value).toLowerCase();
     if (key && (key.startsWith("og:") || key.startsWith("twitter:"))) keys.add(key);
   }
   return [...keys];
+}
+
+type InsertionMode = "head" | "after-head" | "body";
+
+/** What one pass over a document found, including where its head ended. */
+export type PageScan = {
+  metadata: PageSocialMetadata;
+  /** The head ended (`</head>`, `<body>`, or body content) within the input. */
+  headEnded: boolean;
+};
+
+/**
+ * Tracks the HTML tree builder's head/body decision closely enough to say
+ * whether a `<meta>` lands in the head: "in head" until `</head>` (then
+ * "after head", where head-only elements still go to the head) or until
+ * body content: another start tag, a body-starting end tag, or text that is
+ * not whitespace. `<template>` contents are inert and skipped.
+ */
+class HeadTracker {
+  mode: InsertionMode = "head";
+  private templateDepth = 0;
+
+  /** Whether the token is inert template content, which is never read. */
+  inert(tag: Tag): boolean {
+    if (tag.kind !== "text" && tag.name === "template") {
+      if (tag.kind === "start") {
+        this.templateDepth += 1;
+        // The template element itself is head content where it opens.
+        return this.templateDepth > 1;
+      }
+      if (this.templateDepth > 0) {
+        this.templateDepth -= 1;
+        return true;
+      }
+    }
+    return this.templateDepth > 0;
+  }
+
+  /** Advances the insertion mode for one token; returns whether a start tag lands in the head. */
+  advance(tag: Tag, html: string): boolean {
+    if (this.mode === "body") return false;
+    if (tag.kind === "text") {
+      if (hasNonWhitespace(html, tag.start, tag.end)) this.mode = "body";
+      return false;
+    }
+    if (tag.kind === "end") {
+      if (tag.name === "head" && this.mode === "head") this.mode = "after-head";
+      else if (BODY_STARTING_END_TAGS.has(tag.name)) this.mode = "body";
+      return false;
+    }
+    const allowed = this.mode === "head" ? HEAD_ELEMENTS : AFTER_HEAD_ELEMENTS;
+    if (!allowed.has(tag.name)) {
+      this.mode = "body";
+      return false;
+    }
+    return true;
+  }
 }
 
 /**
@@ -583,27 +734,30 @@ function metaKeys(attributes: ReadonlyMap<string, string>): string[] {
  * written, with character references decoded and ASCII whitespace trimmed.
  */
 export function extractPageSocialMetadata(html: string, documentUrl: string | URL): PageSocialMetadata {
+  return scanPageSocialMetadata(html, documentUrl).metadata;
+}
+
+/** `extractPageSocialMetadata`, also reporting whether the head ended. */
+export function scanPageSocialMetadata(html: string, documentUrl: string | URL): PageScan {
   const documentBase = new URL(String(documentUrl));
   const openGraph = new OpenGraphReader();
   const twitter: TwitterFields = {};
   const issues: PageMetadataIssue[] = [];
   const outsideHead: string[] = [];
-  const jsonLd: JsonLdCollector = { images: [], nodes: 0, truncated: false, scripts: 0, current: 0 };
+  const jsonLd: JsonLdCollector = { images: [], positions: new Map(), nodes: 0, truncated: false, scripts: 0, current: 0 };
   let baseHref: string | undefined;
-  let inHead = true;
+  const head = new HeadTracker();
 
   for (const tag of tags(html)) {
-    if (tag.kind === "end") {
-      if (tag.name === "head") inHead = false;
-      continue;
-    }
-    if (!HEAD_ELEMENTS.has(tag.name)) inHead = false;
+    if (head.inert(tag)) continue;
+    const inHead = head.advance(tag, html);
+    if (tag.kind !== "start") continue;
     if (tag.name === "base" && baseHref === undefined && tag.attributes.has("href")) {
       baseHref = tag.attributes.get("href");
     } else if (tag.name === "script" && isJsonLdScript(tag.attributes)) {
       readJsonLdScript(tag.text ?? "", jsonLd, issues);
     } else if (tag.name === "meta" && tag.attributes.has("content")) {
-      const content = tag.attributes.get("content")!.trim();
+      const content = asciiTrim(tag.attributes.get("content")!);
       for (const key of metaKeys(tag.attributes)) {
         if (!inHead) outsideHead.push(key);
         else if (isTagKey(TWITTER_PROPERTIES, key)) twitter[TWITTER_PROPERTIES[key]] ??= content;
@@ -632,7 +786,7 @@ export function extractPageSocialMetadata(html: string, documentUrl: string | UR
   }
 
   const base = baseHref === undefined ? documentBase : frozenBaseUrl(baseHref, documentBase);
-  return Object.freeze({
+  const metadata: PageSocialMetadata = Object.freeze({
     documentUrl: documentBase.href,
     baseUrl: base.href,
     ...(baseHref !== undefined ? { baseHref } : {}),
@@ -645,6 +799,7 @@ export function extractPageSocialMetadata(html: string, documentUrl: string | UR
     jsonLd: Object.freeze({ scripts: jsonLd.scripts, images: Object.freeze([...jsonLd.images]) }),
     issues: Object.freeze(issues),
   });
+  return { metadata, headEnded: head.mode !== "head" };
 }
 
 function readJsonLdScript(text: string, collector: JsonLdCollector, issues: PageMetadataIssue[]): void {

@@ -116,6 +116,36 @@ All notable changes to Metaplate are documented in this file. The project uses
   `{ "schemaVersion": 1, "pages": [...] }`. `verifyRemotePage` and
   `extractPageSocialMetadata` are exported from `metaplate/node`; see
   `docs/verify-page.md`.
+- `verify-page` checks crawler access. Each `--target` implies the
+  link-preview crawler its platform documents (`Twitterbot`,
+  `facebookexternalhit`, `LinkedInBot`, `Discordbot`, `WhatsApp`,
+  `Pinterestbot`, `Slackbot-LinkExpanding`), and `--crawler TOKEN` adds any
+  product token. robots.txt is read once per origin of the page, the images,
+  and their redirects, under RFC 9309 (five redirects, 4xx allows, 5xx
+  disallows, 500 KiB parsing limit), and each crawler's rules are evaluated
+  for every URL it would fetch; no request is sent with a crawler's user
+  agent. A disallow is an error for crawlers documented to obey robots.txt
+  and for requested tokens, a warning where the platform does not say, and
+  not reported for Slack, which documents that it ignores robots.txt. The
+  report gains `robots`; `parseRobotsTxt`, `evaluateRobots`, and
+  `SOCIAL_CRAWLERS` are exported from `metaplate/node`.
+- `verify-page` warns (`html-limit`) when Open Graph tags start after the
+  first 1 MB of HTML, which Meta's crawler does not read, and, under
+  `--target whatsapp`, when the `<head>` does not end within 300KB.
+- `verify-page` inspects at most 64 image references per page
+  (`maxImageReferences`), always including the first `og:image`, its
+  `og:image:secure_url`, and `twitter:image`, and parses each fetched image
+  once however many tags name it.
+
+- The `verify-page` extractor now reads `<noscript>` as raw text, as browsers do with
+  scripting enabled, so an analytics pixel's `<noscript><img></noscript>` in
+  the head no longer ends the head and drops every later Open Graph tag. It
+  ends the head where the HTML tree builder does (non-whitespace text,
+  `</body>`, `</html>`, `</br>`), keeps head elements between `</head>` and
+  `<body>`, skips `<template>` contents, closes comments at `--!>`, `<!-->`,
+  and `<!--->`, trims only ASCII whitespace, decodes a UTF-16
+  `Content-Type` charset as UTF-16, and deduplicates JSON-LD images in linear
+  time.
 - `metaplate/edge` renders plates to PNG through `@resvg/resvg-wasm` on
   Deno-based edges such as Netlify Edge Functions (hosted-certified on
   2026-11-01), and on other Fetch-shaped runtimes that allow WebAssembly to be

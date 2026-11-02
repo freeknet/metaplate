@@ -2,11 +2,20 @@ import { SOCIAL_TARGETS, type SocialTarget } from "./compatibility-profiles.js";
 import { MAX_IMAGE_DIMENSION, type SocialImageVerificationDescriptor } from "./core.js";
 import {
   decodeHtmlBytes,
-  extractPageSocialMetadata,
+  scanPageSocialMetadata,
   type PageMetadataIssueCode,
   type PageSocialMetadata,
 } from "./html-metadata.js";
-import type { ImageFormat } from "./image.js";
+import { imageDimensions, type ImageDimensions, type ImageFormat } from "./image.js";
+import {
+  checkCrawlers,
+  requestedCrawlerTokens,
+  resolveCrawlers,
+  type CrawlerUrls,
+  type RemotePageRobotsReport,
+  type RobotsFinding,
+  type RobotsIssueCode,
+} from "./page-crawlers.js";
 import { hasError, integerOption, isAbsoluteUrl, redactUrl } from "./internal.js";
 import {
   assertRemoteContentType,
@@ -18,13 +27,28 @@ import {
   type RemoteImage,
   type RemoteImageErrorCode,
 } from "./remote.js";
-import { verifySocialImage, type SocialImageVerificationIssue } from "./social-verification.js";
+import { verifySocialImageFacts, type SocialImageVerificationIssue } from "./social-verification.js";
 
 /** Defaults for the page-specific limits of `verifyRemotePage`. */
 export const REMOTE_PAGE_DEFAULTS = Object.freeze({
   maxHtmlBytes: 4 * 1024 * 1024,
   maxImages: 8,
+  maxImageReferences: 64,
 });
+
+/**
+ * Documented HTML read limits, in bytes. Meta: "Any Open Graph properties
+ * need to be listed before the first 1 MB of your website or app, or it will
+ * be cutoff." WhatsApp: "The <head> containing the HTML mark-ups must appear
+ * within the first 300KB of the HTML." Both are read as decimal units, the
+ * smaller reading, so a warning is never missed.
+ */
+export const CRAWLER_HTML_LIMITS = Object.freeze({
+  meta: 1_000_000,
+  whatsapp: 300_000,
+});
+
+const META_TARGETS: readonly SocialTarget[] = ["facebook", "instagram", "threads"];
 
 /** The `Accept` header sent for the page itself. */
 export const REMOTE_PAGE_ACCEPT = "text/html,application/xhtml+xml";
@@ -41,6 +65,18 @@ export type RemotePageOptions = RemoteFetchOptions & {
   maxHtmlBytes?: number;
   /** Distinct image URLs fetched; further references are reported, not fetched. Default 8. */
   maxImages?: number;
+  /**
+   * Image references inspected. The first `og:image`, its
+   * `og:image:secure_url`, and `twitter:image` always are; later ones beyond
+   * this count are only counted. Default 64.
+   */
+  maxImageReferences?: number;
+  /**
+   * robots.txt product tokens to evaluate besides the crawlers implied by
+   * `targets`, such as `["Twitterbot", "ExampleBot"]`. Rules are evaluated;
+   * no request is ever sent with a crawler's user agent.
+   */
+  crawlers?: readonly string[];
   /** Compatibility profiles evaluated against the image each consumer would pick. */
   targets?: readonly SocialTarget[];
   /** Application byte ceiling applied to every image. */
@@ -55,6 +91,8 @@ export type RemotePageIssueCode =
   | "twitter-card-unknown"
   | "twitter-image-missing"
   | "image-limit"
+  | "html-limit"
+  | RobotsIssueCode
   | PageMetadataIssueCode;
 
 export type RemotePageImageIssueCode =
@@ -66,6 +104,7 @@ export type RemotePageImageIssueCode =
   | "image"
   | "image-limit"
   | RemoteImageErrorCode
+  | RobotsIssueCode
   | SocialImageVerificationIssue["code"];
 
 export type RemotePageIssue<Code extends string = RemotePageIssueCode | RemotePageImageIssueCode> = Readonly<{
@@ -128,6 +167,11 @@ export type RemotePageVerification = Readonly<{
   /** Per target: page findings, and compatible only when every image checked for it is. */
   targets: Readonly<Partial<Record<SocialTarget, RemotePageTargetReport<RemotePageIssueCode>>>>;
   images: readonly RemotePageImageReport[];
+  /**
+   * robots.txt evaluation, present when at least one crawler was evaluated:
+   * one entry per origin fetched, and per crawler every URL it would fetch.
+   */
+  robots?: RemotePageRobotsReport;
 }>;
 
 type ImageIssue = RemotePageIssue<RemotePageImageIssueCode>;
@@ -258,6 +302,27 @@ function referenceIssues(reference: Reference, resolved: URL, issues: ImageIssue
 
 type Fetcher = (url: string) => Promise<RemoteImage>;
 
+/**
+ * Structural facts per fetched response. Many references may name one URL;
+ * the bytes are parsed once and only the cheap descriptor and profile
+ * comparisons run per reference.
+ */
+const measured = new WeakMap<RemoteImage, { dimensions: ImageDimensions } | { error: unknown }>();
+
+function measure(remote: RemoteImage): ImageDimensions {
+  let entry = measured.get(remote);
+  if (!entry) {
+    try {
+      entry = { dimensions: imageDimensions(remote.bytes) };
+    } catch (error) {
+      entry = { error };
+    }
+    measured.set(remote, entry);
+  }
+  if ("error" in entry) throw entry.error;
+  return entry.dimensions;
+}
+
 /** Verifies fetched bytes against the reference's declarations and targets. */
 function inspectBytes(
   reference: Reference,
@@ -274,7 +339,7 @@ function inspectBytes(
     ...(size ?? {}),
     ...defined("type", reference.declared.type),
   };
-  const report = verifySocialImage(remote.bytes, descriptor, {
+  const report = verifySocialImageFacts(measure(remote), remote.byteLength, descriptor, {
     targets: reference.targets,
     ...defined("maxFileSize", options.maxFileSize),
   });
@@ -386,7 +451,10 @@ function reportMetadata(metadata: PageSocialMetadata, baseUrl: URL): RemotePageV
   });
 }
 
-function pageIssues(metadata: PageSocialMetadata, targets: readonly SocialTarget[], skipped: number, maxImages: number): PageIssue[] {
+type Limits = { skipped: number; maxImages: number; omitted: number; maxImageReferences: number };
+
+function pageIssues(metadata: PageSocialMetadata, targets: readonly SocialTarget[], limits: Limits): PageIssue[] {
+  const { skipped, maxImages, omitted, maxImageReferences } = limits;
   const issues: PageIssue[] = [];
   const { openGraph, twitter } = metadata;
   if (openGraph.images.length === 0) {
@@ -425,7 +493,81 @@ function pageIssues(metadata: PageSocialMetadata, targets: readonly SocialTarget
       `${skipped} image reference${skipped === 1 ? " was" : "s were"} not fetched: only ${maxImages} distinct image URLs are fetched per page.`,
     ));
   }
+  if (omitted > 0) {
+    issues.push(issue(
+      "unknown",
+      "image-limit",
+      `${omitted} further image reference${omitted === 1 ? " was" : "s were"} not inspected or reported: only ${maxImageReferences} references are inspected per page.`,
+    ));
+  }
   return issues;
+}
+
+/** Whether a reference is one a consumer reads first, which the reference cap never drops. */
+function isPrimary(reference: Reference): boolean {
+  return reference.index === 0 && reference.source !== "json-ld";
+}
+
+function sameOpenGraph(a: PageSocialMetadata["openGraph"], b: PageSocialMetadata["openGraph"]): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/**
+ * Re-reads the HTML as a crawler with a read limit would see it, and warns
+ * when that loses Open Graph tags (Meta) or does not reach the end of the
+ * head (WhatsApp).
+ */
+function htmlLimitIssues(
+  bytes: Uint8Array,
+  contentType: string | undefined,
+  documentUrl: string,
+  full: PageSocialMetadata,
+  targets: readonly SocialTarget[],
+): PageIssue[] {
+  const issues: PageIssue[] = [];
+  const prefix = (limit: number) =>
+    scanPageSocialMetadata(decodeHtmlBytes(bytes.subarray(0, limit), contentType), documentUrl);
+  const { meta, whatsapp } = CRAWLER_HTML_LIMITS;
+  if (bytes.byteLength > meta && !sameOpenGraph(prefix(meta).metadata.openGraph, full.openGraph)) {
+    const message = `Open Graph tags appear after the first ${meta.toLocaleString("en-US")} bytes of the HTML; Meta's crawler reads only the first 1 MB, so it does not see them. Move them to the top of <head>.`;
+    const metaTargets = META_TARGETS.filter((target) => targets.includes(target));
+    if (metaTargets.length === 0) issues.push(issue("warning", "html-limit", message));
+    for (const target of metaTargets) issues.push(issue("warning", "html-limit", message, target));
+  }
+  if (targets.includes("whatsapp") && bytes.byteLength > whatsapp && !prefix(whatsapp).headEnded) {
+    issues.push(issue(
+      "warning",
+      "html-limit",
+      `The <head> does not end within the first ${whatsapp.toLocaleString("en-US")} bytes of the HTML; WhatsApp requires the <head> with its tags to appear within the first 300KB.`,
+      "whatsapp",
+    ));
+  }
+  return issues;
+}
+
+/** Image fetch codes that mean the URL was refused by policy, so no crawler would be judged on it. */
+const REFUSED_CODES = new Set<string>(["invalid-url", "scheme", "credentials", "port", "address", "image-limit"]);
+
+/** Rebuilds a frozen image report with robots findings added. */
+function withFindings(image: RemotePageImageReport, findings: readonly RobotsFinding[]): RemotePageImageReport {
+  if (findings.length === 0) return image;
+  const globalIssues = [...image.globalIssues];
+  const targets: Partial<Record<SocialTarget, RemotePageTargetReport<RemotePageImageIssueCode>>> = { ...image.targets };
+  for (const found of findings) {
+    const added = issue(found.severity, found.code, found.message, found.target);
+    if (found.target === undefined) {
+      globalIssues.push(added);
+      continue;
+    }
+    const issues = [...(targets[found.target]?.issues ?? []), added];
+    targets[found.target] = Object.freeze({ compatible: !hasError(issues), issues: Object.freeze(issues) });
+  }
+  return Object.freeze({
+    ...image,
+    valid: !hasError(globalIssues),
+    globalIssues: Object.freeze(globalIssues),
+    targets: Object.freeze(targets),
+  });
 }
 
 /**
@@ -445,6 +587,10 @@ export async function verifyRemotePageVia(
   }
   integerOption("maxFileSize", options.maxFileSize, 0);
 
+  const maxImageReferences =
+    integerOption("maxImageReferences", options.maxImageReferences, 1) ?? REMOTE_PAGE_DEFAULTS.maxImageReferences;
+  const crawlers = resolveCrawlers(targets, requestedCrawlerTokens(options.crawlers));
+
   const page = await fetchRemoteResourceVia(input, { ...options, maxBytes: maxHtmlBytes }, dial, REMOTE_PAGE_ACCEPT);
   const essence = page.contentType?.split(";", 1)[0]!.trim().toLowerCase();
   if (essence === undefined || !HTML_CONTENT_TYPES.has(essence)) {
@@ -454,7 +600,7 @@ export async function verifyRemotePageVia(
       page.finalUrl,
     );
   }
-  const metadata = extractPageSocialMetadata(decodeHtmlBytes(page.bytes, page.contentType), page.finalUrl);
+  const { metadata } = scanPageSocialMetadata(decodeHtmlBytes(page.bytes, page.contentType), page.finalUrl);
   const baseUrl = new URL(metadata.baseUrl);
 
   // One fetch per distinct URL, however many tags name it.
@@ -469,10 +615,15 @@ export async function verifyRemotePageVia(
     }
     return pending;
   };
-  const images: RemotePageImageReport[] = [];
-  const chosen = new Map<SocialTarget, RemotePageImageReport[]>(targets.map((target) => [target, []]));
+  let images: RemotePageImageReport[] = [];
+  const imageTargets: (readonly SocialTarget[])[] = [];
   let skipped = 0;
+  let omitted = 0;
   for (const reference of references(metadata, targets)) {
+    if (images.length >= maxImageReferences && !isPrimary(reference)) {
+      omitted += 1;
+      continue;
+    }
     let key: string | undefined;
     try {
       key = new URL(reference.declared.url, baseUrl).href;
@@ -481,12 +632,43 @@ export async function verifyRemotePageVia(
     }
     const withinLimit = key === undefined || fetches.has(key) || fetches.size < maxImages;
     if (!withinLimit) skipped += 1;
-    const report = await inspect(reference, baseUrl, withinLimit ? fetchImage : undefined, { ...options, maxImages });
-    images.push(report);
-    for (const target of reference.targets) chosen.get(target)!.push(report);
+    images.push(await inspect(reference, baseUrl, withinLimit ? fetchImage : undefined, { ...options, maxImages }));
+    imageTargets.push(reference.targets);
   }
 
-  const globalIssues = pageIssues(metadata, targets, skipped, maxImages);
+  const globalIssues = [
+    ...pageIssues(metadata, targets, { skipped, maxImages, omitted, maxImageReferences }),
+    ...htmlLimitIssues(page.bytes, page.contentType, page.finalUrl, metadata, targets),
+  ];
+
+  let robots: RemotePageRobotsReport | undefined;
+  if (crawlers.length > 0) {
+    const urls: CrawlerUrls = { page: [page.url, ...page.redirects], images: new Map() };
+    const chains = urls.images as Map<string, { chain: readonly string[]; references: string[]; targets: Set<SocialTarget> }>;
+    images.forEach((image, position) => {
+      if (image.url === null || image.globalIssues.some(({ code }) => REFUSED_CODES.has(code))) return;
+      const entry = chains.get(image.url) ?? { chain: [image.url, ...(image.redirects ?? [])], references: [], targets: new Set() };
+      entry.references.push(image.source === "twitter:image" ? image.source : `${image.source}[${image.index}]`);
+      for (const target of imageTargets[position]!) entry.targets.add(target);
+      chains.set(image.url, entry);
+    });
+    const checked = await checkCrawlers(crawlers, urls, options, dial);
+    robots = checked.report;
+    for (const found of checked.findings) {
+      if (found.image === undefined) globalIssues.push(issue(found.severity, found.code, found.message, found.target));
+    }
+    images = images.map((image, position) => withFindings(
+      image,
+      checked.findings.filter((found) =>
+        found.image !== undefined && found.image === image.url &&
+        (found.target === undefined || imageTargets[position]!.includes(found.target))),
+    ));
+  }
+
+  const chosen = new Map<SocialTarget, RemotePageImageReport[]>(targets.map((target) => [target, []]));
+  images.forEach((image, position) => {
+    for (const target of imageTargets[position]!) chosen.get(target)!.push(image);
+  });
   const targetReports: Partial<Record<SocialTarget, RemotePageTargetReport<RemotePageIssueCode>>> = {};
   for (const target of targets) {
     const issues = globalIssues.filter((found) => found.target === target);
@@ -509,6 +691,7 @@ export async function verifyRemotePageVia(
     globalIssues: Object.freeze(untargeted),
     targets: Object.freeze(targetReports),
     images: Object.freeze(images),
+    ...(robots ? { robots } : {}),
   });
 }
 
