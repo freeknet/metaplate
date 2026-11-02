@@ -52,7 +52,11 @@ as a Bearer header, and never print it.
 `deno.json`'s `deploy` section sets the build, and Deno Deploy reads it on
 every build. The install step installs the repository root from its lockfile,
 then runs `npm run setup`, which builds metaplate, packs it as
-`metaplate.tgz`, and installs this app against that tarball. The build
+`metaplate.tgz`, and installs this app against that tarball. It then deletes
+the root `node_modules` and `dist`: they are only needed to build the tarball,
+and with them the deployment reaches about 940 MB on Linux, near Deno
+Deploy's documented 1 GB limit for a deployment's files. Without them it is
+about 56 MB. The build
 environment fetches the newest npm (12 at the time of writing), whose
 `npm pack --json` prints an object rather than an array;
 `scripts/npm-pack-result.mjs` at the repository root reads both.
