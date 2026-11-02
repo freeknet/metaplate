@@ -28,6 +28,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { deployToken } from "./deploy-token.mjs";
 
 const DENO = "deno@2.9.6";
 const DEPLOY_CLI_VERSION = "0.0.9908";
@@ -56,7 +57,9 @@ function deployCli(args, { trace = false, login = false } = {}) {
   const cliDir = mkdtempSync(join(tmpdir(), "metaplate-deploy-cli-"));
   const cliEntry = join(cliDir, "deploy-cli.ts");
   copyFileSync(join(app, "scripts", "deploy-cli.ts"), cliEntry);
+  const token = login ? undefined : deployToken();
   return deno(["deploy", ...args], cliDir, {
+    ...(token ? { DENO_DEPLOY_TOKEN: token } : {}),
     DENO_DEPLOY_CLI_SPECIFIER: pathToFileURL(cliEntry).href,
     METAPLATE_DEPLOY_CLI: DEPLOY_CLI,
     ...(trace ? { METAPLATE_DEPLOY_TRACE: "1" } : {}),

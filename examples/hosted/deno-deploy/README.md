@@ -26,21 +26,36 @@ nothing needs installing globally.
 ## Deploy it
 
 Deno Deploy builds this directory from the GitHub repository, so a deployment
-is reproducible from a commit:
+is reproducible from a commit. One-time setup:
+
+1. Install the Deno Deploy GitHub app (`github.com/apps/deno-deploy`) on the
+   repository.
+2. Create an organization access token in the Deno Deploy console under
+   **Settings > Access Tokens**, and save it as the `DENO_DEPLOY_TOKEN`
+   environment variable. On Windows a user environment variable works even
+   in shells started before it was set.
+3. `npm run create` creates the app named in `deno.json`, built from GitHub,
+   with this directory as the app directory.
+
+After that, every push builds and deploys: the default branch to the
+production timeline, other branches to their own branch timelines
+(`https://<app>--<branch>.<org>.deno.net`).
 
 ```sh
-npm run login    # once: sign in through the browser; saved in the system keyring
-npm run create   # once: create the app, built from GitHub, with this directory as the app directory
+npm run builds                      # latest builds of the app
+npm run build-logs -- <revision>    # one build's log; add a step such as installing
 ```
 
-The org and app names are in `deno.json`. After `create`, every push to the
-repository builds and deploys. The Deno Deploy GitHub app must have access to
-the repository; `create` reports when it does not.
+Both read Deno Deploy's REST API (`https://api.deno.com/v2`) with the token
+as a Bearer header, and never print it.
 
 `deno.json`'s `deploy` section sets the build, and Deno Deploy reads it on
 every build. The install step installs the repository root from its lockfile,
 then runs `npm run setup`, which builds metaplate, packs it as
-`metaplate.tgz`, and installs this app against that tarball.
+`metaplate.tgz`, and installs this app against that tarball. The build
+environment fetches the newest npm (12 at the time of writing), whose
+`npm pack --json` prints an object rather than an array;
+`scripts/npm-pack-result.mjs` at the repository root reads both.
 
 ### Why not `deno deploy` from this directory
 
@@ -51,26 +66,16 @@ five minutes. That held across CLI 0.0.9904 and 0.0.9908, Windows and Linux,
 and a new app. The report is
 [denoland/deploy_feedback#954](https://github.com/denoland/deploy_feedback/issues/954).
 
-### Sign-in and the `deno deploy` wrapper
+### The `deno deploy` wrapper
 
-`npm run login` and `npm run create` run Deno's built-in `deno deploy`, which
-keeps the sign-in in the system keyring (Windows Credential Manager, macOS
-Keychain, or Secret Service). Running the CLI with `deno run jsr:@deno/deploy`
-instead cannot reach the keyring, so it asks for a browser sign-in on every
-run. `DENO_DEPLOY_TOKEN`, when set, is used instead of the keyring.
-
-Two workarounds live in `scripts/deploy-cli.ts`, which `deno deploy` loads
-in place of the CLI through its `DENO_DEPLOY_CLI_SPECIFIER` hook:
-
-- Deno 2.9.6 passes the CLI its arguments twice, and the CLI rejects every
-  repeated option. The wrapper keeps one copy.
-- The CLI has no login command, and its `whoami` gives up before showing a
-  sign-in page. `npm run login` calls the CLI's own sign-in function, and
-  opens a fresh page each time the last one expires.
-
-`npm run create -- --trace` logs each request to Deno Deploy: method, path,
-status, and for the build stream each update's status, steps, and label
-keys. Headers and bodies are never printed.
+`npm run create` runs Deno's built-in `deno deploy`, which reads
+`DENO_DEPLOY_TOKEN` (or, without it, a sign-in kept in the system keyring;
+`npm run login` signs in through the browser once). The built-in command
+loads `scripts/deploy-cli.ts` in place of the CLI through its
+`DENO_DEPLOY_CLI_SPECIFIER` hook, because Deno 2.9.6 passes the CLI its
+arguments twice and the CLI rejects every repeated option. The wrapper keeps
+one copy. `npm run create -- --trace` logs each request to Deno Deploy without
+headers or bodies.
 
 ## Card layout
 
