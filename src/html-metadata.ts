@@ -383,12 +383,16 @@ function charsetParameter(contentType: string): string | undefined {
 function decoderFor(label: string | undefined, fromMeta = false): TextDecoder | undefined {
   if (label === undefined) return undefined;
   try {
-    const decoder = new TextDecoder(label);
     // The <meta> prescan cannot have read a UTF-16 document as ASCII, so a
     // UTF-16 label found there means UTF-8, and x-user-defined means
     // windows-1252. A transport-layer (Content-Type) label is used as given.
+    // x-user-defined is matched by its one label, before construction,
+    // because Node releases before 24 reject it.
+    if (fromMeta && label.trim().toLowerCase() === "x-user-defined") {
+      return new TextDecoder("windows-1252");
+    }
+    const decoder = new TextDecoder(label);
     if (fromMeta && decoder.encoding.startsWith("utf-16")) return new TextDecoder("utf-8");
-    if (fromMeta && decoder.encoding === "x-user-defined") return new TextDecoder("windows-1252");
     return decoder;
   } catch {
     return undefined;
