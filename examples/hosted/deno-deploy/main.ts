@@ -58,8 +58,9 @@ async function guarded(render: () => Promise<Response>): Promise<Response> {
   try {
     return await render();
   } catch (error) {
-    const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-    return new Response(message, { status: 500, headers: { "content-type": "text/plain; charset=utf-8" } });
+    // The details go to the deployment's logs, not to the client.
+    console.error("render failed", error);
+    return new Response("render failed\n", { status: 500, headers: { "content-type": "text/plain; charset=utf-8" } });
   }
 }
 
