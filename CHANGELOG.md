@@ -91,6 +91,19 @@ All notable changes to Metaplate are documented in this file. The project uses
   format and size checks accepted. Raw outputs are in
   `.planning/hosted-evidence/netlify-2026-11-01.json`, and the deployed
   fixtures are in `examples/hosted/netlify/`.
+- Hosted Deno Deploy certification from the production build of `main` on
+  2026-11-01. New `deno-deploy-edge` and `deno-deploy-node` routes are
+  `certified`: one app serves `metaplate/edge`, reading both Wasm modules
+  from its `node_modules`, and `metaplate/node`, loading the native Resvg
+  binding through Deno's Node compatibility. Deno Deploy builds the app from
+  GitHub with `examples/hosted/deno-deploy` as the app directory, packs
+  metaplate from the checkout in its install step, and installs the app
+  against that tarball. Local `deno deploy` uploads stalled on Deno Deploy's
+  side and are not used (denoland/deploy_feedback#954). Raw outputs, the build
+  log, and the build history are in
+  `.planning/hosted-evidence/deno-deploy-2026-11-01.json`.
+- The scripts that read `npm pack --json` accept npm 12's output, an object
+  keyed by package name, as well as the array older npm prints.
 - `verify-deployment-evidence.mjs` now allows a `certified` edge route only
   when its `api` names `metaplate/edge`. The native renderer still cannot be
   certified on an edge runtime.
