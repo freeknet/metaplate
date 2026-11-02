@@ -2,7 +2,7 @@
   "deploy": {
     "org": "metaplate",
     "app": "metaplate-deno-github",
-    "install": "npm ci --prefix ../../.. --ignore-scripts --no-audit --no-fund && npm run setup",
+    "install": "npm ci --prefix ../../.. --ignore-scripts --no-audit --no-fund && npm run setup && rm -rf ../../../node_modules ../../../dist",
     "runtime": {
       "type": "dynamic",
       "entrypoint": "main.ts"

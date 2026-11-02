@@ -3,6 +3,7 @@
 // token (console: Settings > Access Tokens) in DENO_DEPLOY_TOKEN.
 //
 //   node scripts/deploy-api.mjs revisions            this app's latest builds
+//   node scripts/deploy-api.mjs revision <revision>      one build's record
 //   node scripts/deploy-api.mjs logs <revision> [step]   a build's log
 //
 // The token is only ever sent in the Authorization header, never printed.
@@ -34,6 +35,11 @@ if (command === "revisions") {
   for (const item of revisions) {
     process.stdout.write(`${item.id}  ${item.status}  ${item.created_at ?? ""}  ${item.failure_reason ?? ""}\n`);
   }
+} else if (command === "revision" && revision) {
+  // Environment variable values are left out; everything else is build state.
+  const { env_vars: _env, ...record } = await (await api(`/revisions/${revision}`)).json();
+  process.stdout.write(`${JSON.stringify(record, null, 2)}
+`);
 } else if (command === "logs" && revision) {
   const query = step ? `?step=${encodeURIComponent(step)}` : "";
   const response = await api(`/revisions/${revision}/build_logs${query}`, "application/x-ndjson");
