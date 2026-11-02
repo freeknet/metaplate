@@ -370,4 +370,24 @@ describe("rendering other scripts", () => {
     },
     30_000,
   );
+
+  it(
+    "lets the missing-glyph guard report only segments no step resolved",
+    async () => {
+      const japanese = () => squareGlyphFont("JP", "日本");
+      const guarded = (title: string) =>
+        createSvgOg({
+          ...plate(),
+          guards: { missingGlyphs: "error" },
+          languageFonts: languageFontLoader({
+            "ja-JP": { name: "JP", unicodeRanges: { "[0]": "U+65E5,U+672C" }, data: japanese },
+          }),
+        }).renderSvg({ title });
+      // A segment the language font covers is resolved, so the guard is silent.
+      await expect(guarded("日本")).resolves.toContain("<svg");
+      // A script with no configured font still reaches the guard.
+      await expect(guarded("日本 한")).rejects.toThrow(/한/);
+    },
+    30_000,
+  );
 });

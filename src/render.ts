@@ -1,11 +1,21 @@
 import type { ImageSize } from "./core.js";
 import type { EmojiLoader } from "./emoji.js";
+import { assertRenderGuards, type RenderGuards } from "./guards.js";
 import type { LanguageFontLoader } from "./language-fonts.js";
-import type { PlateContext, PlateVariants } from "./plate.js";
+import type { PlateContext, PlateElement, PlateVariants, PlateVersioning } from "./plate.js";
 import { loadSatori } from "./peers.js";
 import { createSvgPlate } from "./svg-plate.js";
 
-export { SVG_CONTENT_TYPE } from "./svg-plate.js";
+export { SVG_CONTENT_TYPE, type SvgRenderOptions } from "./svg-plate.js";
+
+export {
+  RenderGuardError,
+  type RenderGuardBox,
+  type RenderGuardIssue,
+  type RenderGuardLevel,
+  type RenderGuardName,
+  type RenderGuards,
+} from "./guards.js";
 
 /**
  * A font face the standalone renderer passes through to Satori. Declared
@@ -92,9 +102,12 @@ export type SatoriNode =
 
 export type {
   PlateContext,
+  PlateElement,
   PlateMetadataOptions,
+  PlateUrlOptions,
   PlateVariant,
   PlateVariants,
+  PlateVersioning,
   PlateView,
 } from "./plate.js";
 
@@ -102,9 +115,12 @@ export type SvgOgDefinition<Copy, Variant extends string = string> = {
   /**
    * Satori-compatible JSX or a plain `{ type, props }` object tree. The
    * second argument names the variant and size being rendered so the layout
-   * can reflow; a single-argument component ignores it.
+   * can reflow; a single-argument component ignores it. An `async`
+   * component may load per-page data first, such as an avatar through
+   * `remoteImageLoader` from `metaplate/assets`; a synchronous one renders
+   * without an extra await.
    */
-  component: (copy: Copy, context: PlateContext<Variant>) => SatoriNode;
+  component: (copy: Copy, context: PlateContext<Variant>) => PlateElement<SatoriNode>;
   alt: (copy: Copy) => string;
   /** Satori does not bundle a default font, so at least one face is required. */
   fonts: StandaloneFontLoader;
@@ -138,11 +154,19 @@ export type SvgOgDefinition<Copy, Variant extends string = string> = {
    * resolves to `satori.loadAdditionalAsset`.
    */
   languageFonts?: LanguageFontLoader;
-};
+  /**
+   * Opt-in checks that fail (`"error"`) or report (`"warn"`) a render that
+   * would ship a broken card instead of returning it. Every guard is off by
+   * default. `metaplate/node` and `metaplate/edge` add a `blank` guard on the
+   * rasterised pixels; see docs/rendering.md#render-guards.
+   */
+  guards?: RenderGuards;
+} & PlateVersioning;
 
 /** Defines a framework-neutral social image renderer that emits SVG text. */
 export function createSvgOg<Copy, Variant extends string = string>(
   definition: SvgOgDefinition<Copy, Variant>,
 ) {
+  assertRenderGuards(definition.guards, ["missingGlyphs", "overflow"], "metaplate/render");
   return createSvgPlate(definition, loadSatori);
 }

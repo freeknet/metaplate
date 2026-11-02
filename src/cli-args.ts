@@ -3,9 +3,10 @@ import process from "node:process";
 import { MAX_IMAGE_DIMENSION, type ImageSize } from "./core.js";
 import { SOCIAL_TARGETS, type SocialTarget } from "./compatibility-profiles.js";
 import type { ImageFormat } from "./image.js";
+import { isRobotsProductToken } from "./robots.js";
 
 export const VERIFY_USAGE =
-  "Usage: metaplate verify [--json] [--target TARGET] [--url URL] [--alt TEXT] [--max-file-size BYTES] [--format svg|png|jpeg|webp|gif] --size WIDTHxHEIGHT <file> [...] [--size WIDTHxHEIGHT <file> [...]]";
+  "Usage: metaplate verify [--json] [--require-content] [--target TARGET] [--url URL] [--alt TEXT] [--max-file-size BYTES] [--format svg|png|jpeg|webp|gif] --size WIDTHxHEIGHT <file> [...] [--size WIDTHxHEIGHT <file> [...]]";
 
 const FORMATS = new Set<ImageFormat>(["svg", "png", "jpeg", "webp", "gif"]);
 const TARGETS = new Set<SocialTarget>(SOCIAL_TARGETS);
@@ -23,6 +24,8 @@ export type VerifyInvocation = {
   url?: string;
   alt?: string;
   maxFileSize?: number;
+  /** Fail a PNG whose every pixel is one color (`--require-content`). */
+  requireContent?: boolean;
 };
 
 /** Formats a stable, concise path for CLI logs, including duplicate basenames. */
@@ -32,7 +35,7 @@ export function formatVerifyPath(file: string, cwd = process.cwd()): string {
 }
 
 export const VERIFY_URL_USAGE =
-  "Usage: metaplate verify-url [--json] [--target TARGET] [--alt TEXT] [--max-file-size BYTES] [--format svg|png|jpeg|webp|gif] [--max-bytes BYTES] [--max-redirects N] [--timeout MS] [--allow-port PORT] [--allow-private] --size WIDTHxHEIGHT <url> [...] [--size WIDTHxHEIGHT <url> [...]]";
+  "Usage: metaplate verify-url [--json] [--require-content] [--target TARGET] [--alt TEXT] [--max-file-size BYTES] [--format svg|png|jpeg|webp|gif] [--max-bytes BYTES] [--max-redirects N] [--timeout MS] [--allow-port PORT] [--allow-private] --size WIDTHxHEIGHT <url> [...] [--size WIDTHxHEIGHT <url> [...]]";
 
 export type VerifyUrlTarget = {
   url: string;
@@ -55,7 +58,7 @@ export type VerifyUrlInvocation = Omit<VerifyInvocation, "targets" | "url"> & {
 };
 
 export const VERIFY_PAGE_USAGE =
-  "Usage: metaplate verify-page [--json] [--target TARGET] [--max-file-size BYTES] [--max-html-bytes BYTES] [--max-images N] [--max-bytes BYTES] [--max-redirects N] [--timeout MS] [--allow-port PORT] [--allow-private] <url> [...]";
+  "Usage: metaplate verify-page [--json] [--target TARGET] [--crawler TOKEN] [--max-file-size BYTES] [--max-html-bytes BYTES] [--max-images N] [--max-bytes BYTES] [--max-redirects N] [--timeout MS] [--allow-port PORT] [--allow-private] <url> [...]";
 
 /** Fetch limits for `verify-page`: the `verify-url` limits plus the page's own. */
 export type VerifyPageFetchOptions = VerifyUrlFetchOptions & {
@@ -67,6 +70,8 @@ export type VerifyPageInvocation = {
   urls: string[];
   json: boolean;
   socialTargets: SocialTarget[];
+  /** robots.txt product tokens from `--crawler`, deduplicated; omitted when none. */
+  crawlers?: string[];
   maxFileSize?: number;
   fetch: VerifyPageFetchOptions;
 };
@@ -219,7 +224,9 @@ function entryTarget<Key extends string>(key: Key, { value, size, format }: Grou
 /** Parses one or more size-delimited groups of image paths and social checks. */
 export function parseVerifyInvocation(args: string[]): VerifyInvocation {
   let url: string | undefined;
+  const content = requireContentFlag();
   const { entries, ...parsed } = parseGroups(args, "verify", VERIFY_USAGE, {
+    switches: content.switches,
     values: {
       "--url": (value) => {
         if (!value) throw new Error(`Invalid URL. ${VERIFY_USAGE}`);
@@ -237,6 +244,19 @@ export function parseVerifyInvocation(args: string[]): VerifyInvocation {
     targets: entries.map((entry) => entryTarget("file", entry)),
     ...parsed,
     ...(url ? { url } : {}),
+    ...content.option(),
+  };
+}
+
+/**
+ * `--require-content`, shared by `verify` and `verify-url`. The option is
+ * present only when the flag was given, so existing invocations parse as before.
+ */
+function requireContentFlag() {
+  let enabled = false;
+  return {
+    switches: { "--require-content": () => { enabled = true; } },
+    option: (): { requireContent?: true } => (enabled ? { requireContent: true } : {}),
   };
 }
 
@@ -257,7 +277,12 @@ function fetchLimitFlags(limits: VerifyUrlFetchOptions, usage: string) {
 export function parseVerifyUrlInvocation(args: string[]): VerifyUrlInvocation {
   const limits: VerifyUrlFetchOptions = { allowPrivate: false, allowedPorts: [] };
   const usage = VERIFY_URL_USAGE;
-  const { entries, ...parsed } = parseGroups(args, "verify-url", usage, fetchLimitFlags(limits, usage));
+  const shared = fetchLimitFlags(limits, usage);
+  const content = requireContentFlag();
+  const { entries, ...parsed } = parseGroups(args, "verify-url", usage, {
+    values: shared.values,
+    switches: { ...shared.switches, ...content.switches },
+  });
 
   if (parsed.alt !== undefined && parsed.socialTargets.length === 0) {
     throw new Error(`--alt requires at least one --target. ${usage}`);
@@ -265,6 +290,7 @@ export function parseVerifyUrlInvocation(args: string[]): VerifyUrlInvocation {
   return {
     targets: entries.map((entry) => entryTarget("url", entry)),
     ...parsed,
+    ...content.option(),
     fetch: { ...limits, allowedPorts: [...new Set(limits.allowedPorts)] },
   };
 }
@@ -274,10 +300,15 @@ export function parseVerifyPageInvocation(args: string[]): VerifyPageInvocation 
   const limits: VerifyPageFetchOptions = { allowPrivate: false, allowedPorts: [] };
   const usage = VERIFY_PAGE_USAGE;
   const shared = fetchLimitFlags(limits, usage);
+  const crawlers: string[] = [];
   const { entries, json, socialTargets, maxFileSize } = parseGroups(args, "verify-page", usage, {
     switches: shared.switches,
     values: {
       ...shared.values,
+      "--crawler": (value) => {
+        if (value === undefined || !isRobotsProductToken(value)) throw new Error(`Invalid crawler token. ${usage}`);
+        if (!crawlers.some((seen) => seen.toLowerCase() === value.toLowerCase())) crawlers.push(value);
+      },
       "--max-html-bytes": (value) => { limits.maxHtmlBytes = parseInteger(value, "max HTML bytes", usage, 1); },
       "--max-images": (value) => { limits.maxImages = parseInteger(value, "max images", usage, 1, 100); },
     },
@@ -286,6 +317,7 @@ export function parseVerifyPageInvocation(args: string[]): VerifyPageInvocation 
     urls: entries.map(({ value }) => value),
     json,
     socialTargets,
+    ...(crawlers.length > 0 ? { crawlers } : {}),
     ...(maxFileSize !== undefined ? { maxFileSize } : {}),
     fetch: { ...limits, allowedPorts: [...new Set(limits.allowedPorts)] },
   };
@@ -350,5 +382,48 @@ export function parseRenderInvocation(args: string[]): RenderInvocation {
     manifest: manifest ?? path.join(outDir, MANIFEST_FILENAME),
     concurrency,
     json,
+  };
+}
+
+export const PREVIEW_USAGE =
+  "Usage: metaplate preview [--host HOST] [--port N] [--target TARGET] [--max-file-size BYTES] <module>";
+
+/** Loopback only, so the gallery is reachable from this machine alone. */
+export const DEFAULT_PREVIEW_HOST = "127.0.0.1";
+
+/** Clear of the usual dev-server ports (3000, 4321, 5173, 8080), so it runs beside one. */
+export const DEFAULT_PREVIEW_PORT = 4323;
+
+export type PreviewInvocation = {
+  module: string;
+  host: string;
+  /** `0` asks the operating system for any free port. */
+  port: number;
+  socialTargets: SocialTarget[];
+  maxFileSize?: number;
+};
+
+/** Parses `preview`: one module path, the listen address, and target checks. */
+export function parsePreviewInvocation(args: string[]): PreviewInvocation {
+  const usage = PREVIEW_USAGE;
+  let host = DEFAULT_PREVIEW_HOST;
+  let port = DEFAULT_PREVIEW_PORT;
+  const { entries, json, socialTargets, maxFileSize } = parseGroups(args, "preview", usage, {
+    values: {
+      "--host": (value) => {
+        if (!value || value.startsWith("-")) throw new Error(`Invalid host. ${usage}`);
+        host = value;
+      },
+      "--port": (value) => { port = parseInteger(value, "port", usage, 0, 65_535); },
+    },
+  }, false);
+  if (json) throw new Error(`--json is not accepted here. ${usage}`);
+  if (entries.length !== 1) throw new Error(usage);
+  return {
+    module: entries[0]!.value,
+    host,
+    port,
+    socialTargets,
+    ...(maxFileSize !== undefined ? { maxFileSize } : {}),
   };
 }

@@ -12,6 +12,7 @@ export default defineConfig({
     emoji: "src/emoji.ts",
     png: "src/png.ts",
     image: "src/image.ts",
+    assets: "src/assets.ts",
     cli: "src/cli.ts",
   },
   format: ["esm"],
@@ -19,6 +20,9 @@ export default defineConfig({
   clean: true,
   sourcemap: true,
   splitting: false,
+  // Keep `node:` on built-in imports: bundlers can remap a bare `crypto` or
+  // `http` to a userland shim. tsup 9 strips the prefix unless told not to.
+  removeNodeProtocol: false,
   external: [
     "@resvg/resvg-js",
     "@resvg/resvg-wasm",

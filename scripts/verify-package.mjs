@@ -14,6 +14,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
+import { builtinModules } from "node:module";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -378,6 +379,47 @@ function metaContent(html, key) {
 }
 
 /**
+ * Page-level fields the Next server fixture maps with `nextPageMetadata` and
+ * `nextPageViewport`, and the tags Next must render for them.
+ */
+const NEXT_PAGE_FIELDS = {
+  locale: "en_US",
+  alternateLocales: ["fr_FR"],
+  article: {
+    publishedTime: "2026-11-01T09:30:00Z",
+    authors: ["https://example.com/authors/ada"],
+    section: "Releases",
+    tags: ["metaplate"],
+  },
+  pubdate: "2026-11-01T09:30:00Z",
+  themeColor: "#0b7285",
+};
+const NEXT_PAGE_TAGS = {
+  "og:type": "article",
+  "og:locale": "en_US",
+  "og:locale:alternate": "fr_FR",
+  "article:published_time": NEXT_PAGE_FIELDS.article.publishedTime,
+  "article:author": NEXT_PAGE_FIELDS.article.authors[0],
+  "article:section": NEXT_PAGE_FIELDS.article.section,
+  "article:tag": NEXT_PAGE_FIELDS.article.tags[0],
+  "og:pubdate": NEXT_PAGE_FIELDS.pubdate,
+  "theme-color": NEXT_PAGE_FIELDS.themeColor,
+};
+
+/** Checks that Next rendered every page-level tag the fixture mapped. */
+async function verifyNextPageTags(base) {
+  const response = await fetch(`${base}/${SERVER_FIXTURE.slugs[0]}`);
+  if (!response.ok) throw new Error(`/${SERVER_FIXTURE.slugs[0]} returned ${response.status}.`);
+  const html = await response.text();
+  for (const [key, expected] of Object.entries(NEXT_PAGE_TAGS)) {
+    const actual = metaContent(html, key);
+    if (actual !== expected) {
+      throw new Error(`Next rendered ${key} as ${actual}; expected ${expected}.`);
+    }
+  }
+}
+
+/**
  * Fetches each fixture slug's page and checks that its Open Graph and X image
  * tags are absolute fixture-origin URLs at the expected per-slug paths.
  */
@@ -521,6 +563,19 @@ try {
     manifest.name,
     manifest.exports["./font-data"].import,
   );
+  // Every built-in import keeps its `node:` prefix. A bare `crypto` or `http`
+  // can be remapped to a userland shim by a bundler, and it would also slip
+  // past the runtime-neutral entries' `node:` checks below.
+  const packedDist = join(consumer, "node_modules", manifest.name, "dist");
+  for (const file of readdirSync(packedDist).filter((name) => name.endsWith(".js"))) {
+    const source = readFileSync(join(packedDist, file), "utf8");
+    for (const [, specifier] of source.matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*)["']([^"']+)["']/g)) {
+      if (!specifier.startsWith("node:") && builtinModules.includes(specifier.split("/")[0])) {
+        throw new Error(`dist/${file} imports the Node built-in "${specifier}" without the node: prefix.`);
+      }
+    }
+  }
+
   const portableFontSource = readFileSync(portableFontEntry, "utf8");
   if (/\bnode:/.test(portableFontSource)) {
     throw new Error("metaplate/font-data unexpectedly imports a Node built-in.");
@@ -563,6 +618,48 @@ try {
       const second = await emoji("👋🏽");
       if (first !== second || calls !== 1 || !first.startsWith("data:image/svg+xml;base64,")) {
         throw new Error("The portable emoji loader did not encode and memoize an image.");
+      }
+    `,
+    consumer,
+  );
+  // metaplate/image embeds image bytes for edge plates too, so imageAsset is
+  // held to the same no-Node-built-ins rule; metaplate/assets is its Node
+  // reader and must work without loading a renderer peer.
+  const portableImageSource = readFileSync(
+    join(consumer, "node_modules", manifest.name, manifest.exports["./image"].import),
+    "utf8",
+  );
+  if (/\bnode:/.test(portableImageSource)) {
+    throw new Error("metaplate/image unexpectedly imports a Node built-in.");
+  }
+  writeFileSync(
+    join(consumer, "logo.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 20"><rect width="40" height="20"/></svg>',
+  );
+  runModule(
+    `
+      const { imageAsset, imageAssetLoader } = await import(${JSON.stringify(`${manifest.name}/image`)});
+      const { fileImageLoader, remoteImageLoader } = await import(${JSON.stringify(`${manifest.name}/assets`)});
+      const svg = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="4"/>');
+      const asset = imageAsset(svg);
+      if (asset.width !== 8 || asset.height !== 4 || !asset.src.startsWith("data:image/svg+xml;base64,")) {
+        throw new Error("The portable imageAsset did not embed an SVG.");
+      }
+      let calls = 0;
+      const memoized = imageAssetLoader(() => { calls += 1; return svg; });
+      if ((await memoized()) !== (await memoized()) || calls !== 1) {
+        throw new Error("The portable image asset loader did not memoize.");
+      }
+      const logo = fileImageLoader("logo.svg");
+      const read = await logo();
+      if (read !== (await logo()) || read.width !== 40 || read.height !== 20) {
+        throw new Error("metaplate/assets did not read and memoize a project image.");
+      }
+      try {
+        remoteImageLoader({ origins: [] });
+        throw new Error("remoteImageLoader accepted an empty origins allowlist.");
+      } catch (error) {
+        if (!(error instanceof TypeError)) throw error;
       }
     `,
     consumer,
@@ -758,15 +855,23 @@ export default function Layout({ children }: { children: ReactNode }) {
   writeFileSync(
     join(nextApp, "app", "[slug]", "page.tsx"),
     `import type { Metadata } from "next";
+import { nextPageMetadata, nextPageViewport } from "metaplate/next";
 import { jpegOg } from "../../lib/og";
 
 type Props = { params: Promise<{ slug: string }> };
 
+const page = ${JSON.stringify(NEXT_PAGE_FIELDS)};
+
 export const dynamic = "force-dynamic";
+export const viewport = nextPageViewport(page);
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  return { title: slug, twitter: jpegOg.metadata(\`/${"${slug}"}\`, { title: slug }).twitter };
+  return {
+    title: slug,
+    ...nextPageMetadata(page),
+    twitter: jpegOg.metadata(\`/${"${slug}"}\`, { title: slug }).twitter,
+  };
 }
 
 export default async function Page({ params }: Props) {
@@ -829,6 +934,7 @@ export const GET = jpegOg.handlerFrom(async (_request: Request, { params }: Cont
         ogImageType: "image/png",
         twitterImagePath: `/${slug}/${jpegImagePath}`,
       }));
+      await verifyNextPageTags(base);
       // Next appends a cache-busting query to metadata image URLs; fetch the
       // exact advertised URL rather than reconstructing it.
       const metadataFile = await verifyDynamicImageRoute(
@@ -1787,6 +1893,30 @@ export const GET: RequestHandler = og.handlerFrom(({ params }) => ({
     );
     verifyRenderedSite("ts", "og.render.ts");
   }
+
+  // `metaplate preview` from the packed bin serves the same module as a
+  // gallery: every page and size as a card, real PNG bytes per image, and the
+  // Satori debug SVG, all from the installed renderer peers.
+  await withProductionServer({
+    label: "Packed metaplate preview",
+    cwd: standalone,
+    readyPath: "/",
+    start: (port) => ({ args: [renderCliPath, "preview", "--port", String(port), "og.render.mjs"], env: {} }),
+  }, async (base) => {
+    const html = await (await fetch(base)).text();
+    const cards = html.match(/<article class="card"/g) ?? [];
+    if (cards.length !== expectedRenderImages.length || html.includes("module-error")) {
+      throw new Error(`Gallery listed ${cards.length} rendered cards: ${html}`);
+    }
+    const [path, , size] = expectedRenderImages[3];
+    if (!html.includes(`data-key="${path}"`)) throw new Error(`Gallery has no card for ${path}.`);
+    const image = await fetch(`${base}/image/3`);
+    packedVerifyImage(new Uint8Array(await image.arrayBuffer()), size, "png");
+    const debug = await (await fetch(`${base}/debug/3.svg`)).text();
+    if (!debug.startsWith("<svg") || !debug.includes("#ff5757")) {
+      throw new Error("Packed preview debug view did not draw Satori's layout boxes.");
+    }
+  });
 
   writeFileSync(
     join(standalone, "escape.render.mjs"),

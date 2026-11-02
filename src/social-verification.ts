@@ -5,7 +5,8 @@ import {
   type SocialCompatibilityOptions,
   type SocialCompatibilityReport,
 } from "./compatibility.js";
-import { imageContentType, imageDimensions, type ImageFormat } from "./image.js";
+import { imageContentType, imageDimensions, type ImageDimensions, type ImageFormat } from "./image.js";
+import { integerOption } from "./internal.js";
 
 export type SocialImageVerificationOptions = Omit<SocialCompatibilityOptions, "fileSize" | "checkUrl" | "checkAlt"> & {
   /** Optional application-specific byte ceiling, measured from encoded bytes. */
@@ -51,18 +52,26 @@ export function verifySocialImage(
   descriptor: SocialImageVerificationDescriptor,
   options: SocialImageVerificationOptions = {},
 ): SocialImageVerificationReport {
-  const actual = imageDimensions(bytes);
-  const byteLength = bytes.byteLength;
+  return verifySocialImageFacts(imageDimensions(bytes), bytes.byteLength, descriptor, options);
+}
+
+/**
+ * `verifySocialImage` for bytes already measured with `imageDimensions`, so
+ * a caller checking one image against many descriptors parses it once.
+ */
+export function verifySocialImageFacts(
+  actual: ImageDimensions,
+  byteLength: number,
+  descriptor: SocialImageVerificationDescriptor,
+  options: SocialImageVerificationOptions = {},
+): SocialImageVerificationReport {
   if (descriptor.width !== undefined || descriptor.height !== undefined) {
     if (descriptor.width === undefined || descriptor.height === undefined) {
       throw new TypeError("descriptor width and height must be provided together");
     }
     assertImageSize({ width: descriptor.width, height: descriptor.height });
   }
-  if (options.maxFileSize !== undefined &&
-      (!Number.isInteger(options.maxFileSize) || options.maxFileSize < 0)) {
-    throw new Error(`maxFileSize must be a non-negative integer; received ${options.maxFileSize}`);
-  }
+  integerOption("maxFileSize", options.maxFileSize, 0);
 
   const compatibilityDescriptor = {
     ...descriptor,
