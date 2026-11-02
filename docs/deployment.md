@@ -131,6 +131,27 @@ for = "/og-image"
 - [Netlify Functions and configuration](https://docs.netlify.com/build/functions/configuration/)
 - [Netlify build dependencies](https://docs.netlify.com/build/configure-builds/manage-dependencies/)
 
+## Static hosts
+
+Extension-free route-handler output may be served as a generic download by a
+static host. Set the `Content-Type` explicitly for `/og-image` and `/*/og-image`
+— `image/png` by default, or the `plate.contentType` of a custom-output plate
+(`image/jpeg`, `image/webp`, …). For Netlify, a PNG plate:
+
+```toml
+[[headers]]
+for = "/og-image"
+  [headers.values]
+  Content-Type = "image/png"
+
+[[headers]]
+for = "/*/og-image"
+  [headers.values]
+  Content-Type = "image/png"
+```
+
+A JPEG plate uses `Content-Type = "image/jpeg"` for the same two paths.
+
 ## Vercel Node.js Functions
 
 Vercel's Node.js runtime supports standard Node APIs and Web Standard function
@@ -404,7 +425,7 @@ Netlify Edge Functions (see [Hosted Netlify evidence](#hosted-netlify-evidence))
 A minimal edge function is about 1.6 MB gzip, mostly the two Wasm modules; the
 certified Netlify Edge bundle was 462 KB gzip against a 20 MB limit. See the
 README section
-[Edge runtimes with `metaplate/edge`](../README.md#edge-runtimes-with-metaplateedge).
+[Edge runtimes with `metaplate/edge`](edge.md).
 
 **Cloudflare Workers are not supported.** Satori shapes text with a HarfBuzz
 build bundled into `satori/standalone`. In a worker-shaped isolate it reads
