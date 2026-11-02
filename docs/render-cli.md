@@ -12,6 +12,9 @@ lives, verifies every file on disk, and writes a manifest of what it wrote.
 npx metaplate render og.render.mjs --out public
 ```
 
+While designing a plate, [`metaplate preview`](preview.md) serves the same
+module as a live gallery that reloads on every save.
+
 ## A render module
 
 The module's default export names the plates and the pages each one renders:

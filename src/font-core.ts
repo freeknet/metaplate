@@ -91,7 +91,8 @@ export function loadedFont(font: FontFace, data: FontBytes): LoadedFont {
   };
 }
 
-export function memoizedFontLoader(load: () => Promise<LoadedFont[]>) {
+/** Memoizes a successful load; a failed one is discarded so the next call retries. */
+export function memoizedFontLoader<T = LoadedFont[]>(load: () => Promise<T>): () => Promise<T> {
   return memoizeLoad(load);
 }
 

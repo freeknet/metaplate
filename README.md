@@ -24,6 +24,7 @@ It works with plain Node, static build scripts, Next.js, Astro, React Router, Sv
 - [Guides](#guides)
   - [Rendering and routes](#rendering-and-routes)
   - [Static files with `metaplate render`](#static-files-with-metaplate-render)
+  - [Live preview with `metaplate preview`](#live-preview-with-metaplate-preview)
   - [Signed image routes](#signed-image-routes)
   - [Framework and runtime support](#framework-and-runtime-support)
   - [Edge runtimes](#edge-runtimes)
@@ -157,6 +158,19 @@ npx metaplate render og.render.mjs --out public
 
 [Render CLI guide](docs/render-cli.md)
 
+### Live preview with `metaplate preview`
+
+`metaplate preview` serves a local gallery of the same render module: every
+page at every size with its metadata and `--target` checks, a switch for
+Satori's layout debug boxes, and 1.91:1, 2:1, and 1:1 crop overlays. Saving
+the module or a local file it imports reloads every open gallery.
+
+```sh
+npx metaplate preview og.render.mjs
+```
+
+[Preview guide](docs/preview.md)
+
 ### Signed image routes
 
 A dynamic image route can refuse every URL your pages did not emit.
@@ -241,8 +255,11 @@ in JSON-LD, and `socialImageJsonLdScript` serializes it safely for a
 
 Satori needs the bytes of every face it renders. Loaders read them from
 project files, Fontsource, other npm packages, or bytes you supply, and
-memoize one copy for every render.
-[Fonts guide](docs/fonts.md)
+memoize one copy for every render. The `languageFonts` plate option draws
+Japanese, Arabic, Hebrew, and other scripts the plate's fonts lack, offline:
+`fontsourceLanguageFontLoader` reads only the Noto subset files the copy needs
+from installed Fontsource packages.
+[Fonts guide](docs/fonts.md#other-scripts)
 
 ### Emoji
 
@@ -298,10 +315,13 @@ every route is in [`deployment-evidence.json`](deployment-evidence.json).
   `nextTwitterMetadata` for X player and app cards in Next metadata, and
   `nextPageMetadata`/`nextPageViewport` for page-level tags. Needs `next`.
 - `metaplate/font-data` — runtime-neutral normalization and memoization for
-  application/framework-provided bytes. No peers or Node built-ins.
+  application/framework-provided bytes, and `languageFontLoader` for
+  per-language fallback fonts from any byte source. No peers or Node
+  built-ins.
 - `metaplate/fonts` — project-file, Fontsource, generic npm-package, and
-  application-byte font loading, plus installed emoji packages
-  (`packageEmojiLoader`), for Node-compatible runtimes. No peers.
+  application-byte font loading, per-language fallback fonts from installed
+  Fontsource packages (`fontsourceLanguageFontLoader`), plus installed emoji
+  packages (`packageEmojiLoader`), for Node-compatible runtimes. No peers.
 - `metaplate/emoji` — runtime-neutral emoji images for the `emoji` plate
   option (`emojiLoader`, `twemojiName`). No peers or Node built-ins; the
   installed-package reader, `packageEmojiLoader`, is in `metaplate/fonts`.

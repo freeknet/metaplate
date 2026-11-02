@@ -15,6 +15,16 @@ import type { SatoriOptions, SvgOgDefinition } from "./render.js";
 
 export const SVG_CONTENT_TYPE = "image/svg+xml" as const;
 
+/** Per-call controls for `renderSvg`, layered over the plate's `satori` options. */
+export type SvgRenderOptions = {
+  /**
+   * Overrides the plate's `satori.debug` for this call: Satori outlines every
+   * element's layout box in red and every line of text in blue, which is how
+   * `metaplate preview` shows a plate's boxes without editing the plate.
+   */
+  debug?: boolean;
+};
+
 /** The Satori render function, whichever Satori build provides it. */
 export type SatoriRender = typeof import("satori").default;
 
@@ -38,7 +48,8 @@ export function createSvgPlate<Copy, Variant extends string = string>(
       /** The image path relative to the deployment root, without `basePath` or `origin`. */
       sitePath: view.sitePath,
       contentType: SVG_CONTENT_TYPE,
-      renderSvg: (copy: Copy) => renderSvg(definition, loadSatori, copy, view.context),
+      renderSvg: (copy: Copy, options?: SvgRenderOptions) =>
+        renderSvg(definition, loadSatori, copy, view.context, options),
     };
   });
 }
@@ -48,6 +59,7 @@ async function renderSvg<Copy, Variant extends string>(
   loadSatori: () => Promise<SatoriRender>,
   copy: Copy,
   context: PlateContext<Variant>,
+  options: SvgRenderOptions | undefined,
 ) {
   const satori = await loadSatori();
   const fonts = await definition.fonts();
@@ -69,6 +81,7 @@ async function renderSvg<Copy, Variant extends string>(
     element as Parameters<typeof satori>[0],
     {
       ...(satoriOptions(definition, report, target) as unknown as Parameters<typeof satori>[1]),
+      ...(options?.debug === undefined ? {} : { debug: options.debug }),
       width: context.size.width,
       height: context.size.height,
       fonts: [...fonts],
@@ -81,27 +94,38 @@ async function renderSvg<Copy, Variant extends string>(
 }
 
 /**
- * Routes Satori's emoji requests through the plate's emoji loader. Every other
- * language code, and an emoji the loader has no image for, goes to the
- * caller's own `loadAdditionalAsset` when there is one; otherwise an empty
- * font list tells Satori to draw the segment with the fonts it has.
+ * Composes Satori's `loadAdditionalAsset` from the plate's options. Each
+ * request is offered, in this order, to:
+ *
+ * 1. `emoji`, for the `emoji` language code: an image resolves the grapheme;
+ * 2. `languageFonts`, for every other code: a non-empty font list resolves
+ *    the segment;
+ * 3. the caller's own `satori.loadAdditionalAsset`, for anything the steps
+ *    above did not resolve.
+ *
+ * Without a caller loader, an empty font list tells Satori to draw the
+ * segment with the fonts it has.
  */
-function emojiFirst(
-  emoji: NonNullable<SvgOgDefinition<unknown>["emoji"]>,
+function scriptAssets(
+  emoji: SvgOgDefinition<unknown>["emoji"],
+  languageFonts: SvgOgDefinition<unknown>["languageFonts"],
   fallback: SatoriOptions["loadAdditionalAsset"],
 ): NonNullable<SatoriOptions["loadAdditionalAsset"]> {
   return async (languageCode, segment) => {
     if (languageCode === "emoji") {
-      const image = await emoji(segment);
+      const image = await emoji?.(segment);
       if (image !== undefined) return image;
+    } else if (languageFonts) {
+      const fonts = await languageFonts(languageCode, segment);
+      if (fonts.length > 0) return fonts;
     }
     return fallback ? fallback(languageCode, segment) : [];
   };
 }
 
 /**
- * The Satori options for one render: the plate's own, with the emoji loader
- * and any enabled guards composed around the caller's `loadAdditionalAsset`
+ * The Satori options for one render: the plate's own, with the emoji loader,
+ * language fonts, and any enabled guards composed around the caller's `loadAdditionalAsset`
  * and `onNodeDetected`. With no emoji loader and every guard off, the plate's
  * options pass through untouched, so Satori's behavior is unchanged.
  */
@@ -110,9 +134,9 @@ function satoriOptions<Copy, Variant extends string>(
   report: GuardReport,
   target: GuardTarget,
 ): SatoriOptions | undefined {
-  const { emoji, satori, guards } = definition;
+  const { emoji, languageFonts, satori, guards } = definition;
   let loadAdditionalAsset = satori?.loadAdditionalAsset;
-  if (emoji) loadAdditionalAsset = emojiFirst(emoji, loadAdditionalAsset);
+  if (emoji || languageFonts) loadAdditionalAsset = scriptAssets(emoji, languageFonts, loadAdditionalAsset);
   if (guardLevel(guards, "missingGlyphs") !== "off") {
     loadAdditionalAsset = guardAssetLoader(loadAdditionalAsset, report, target, satori?.graphemeImages);
   }

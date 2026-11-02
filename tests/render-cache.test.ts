@@ -355,6 +355,7 @@ describe("plate fingerprint and cached()", { timeout: 30_000 }, () => {
       createNodeOg({ ...definition, size: { width: 1200, height: 600 } }).fingerprint(),
       createNodeOg({ ...definition, component: (copy: Copy) => ({ ...component(copy), key: "changed" }) }).fingerprint(),
       createNodeOg({ ...definition, resvg: { background: "#fff" } }).fingerprint(),
+      createNodeOg({ ...definition, languageFonts: async () => [] }).fingerprint(),
       createNodeOg({
         ...definition,
         fonts: fontLoader([{ name: "Inter", weight: 700 as const, data: installed("@fontsource", "inter", "files", "inter-latin-400-normal.woff") }]),
