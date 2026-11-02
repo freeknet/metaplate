@@ -38,7 +38,6 @@ It works with plain Node, static build scripts, Next.js, Astro, React Router, Sv
   - [Verifying images](#verifying-images)
   - [Deployment routes](#deployment-routes)
 - [Entry points](#entry-points)
-- [Design lineage](#design-lineage)
 - [License](#license)
 
 ## Install
@@ -286,11 +285,6 @@ every route is in [`deployment-evidence.json`](deployment-evidence.json).
 - `metaplate/png` — PNG header inspection and dimension verification. No peers.
 - `metaplate/image` — dimension and structural verification for SVG, PNG,
   JPEG, WebP, and GIF. No peers.
-
-## Design lineage
-
-Metaplate extracts the production patterns used by the GOLC and Cinnabar sites
-and the pre-rendered static-image pattern used by the AntikytheraOS showcase.
 
 ## License
 
