@@ -225,66 +225,87 @@
         },
         {
           "deploymentId": "6ae7a1815a2fc0ea74f6bc1b",
-          "result": "fixture exactly as committed; certified below"
+          "result": "fixture as committed at 4b04f90; certified, then superseded by the border-box redeploy"
+        },
+        {
+          "deploymentId": "6ae7ee5478780e9836d6fa03",
+          "result": "fixture with boxSizing border-box; certified below"
         }
       ],
       "deployment": {
-        "deploymentId": "6ae7a1815a2fc0ea74f6bc1b",
+        "deploymentId": "6ae7ee5478780e9836d6fa03",
         "state": "ready",
         "context": "production",
-        "createdAt": "2026-11-01T20:30:57.494Z",
-        "publishedAt": "2026-11-01T20:30:59.994Z",
-        "deployUrl": "https://6ae7a1815a2fc0ea74f6bc1b--stellular-arithmetic-22095e.netlify.app",
+        "createdAt": "2026-11-02T01:58:44.392Z",
+        "publishedAt": "2026-11-02T01:58:55.332Z",
+        "deployUrl": "https://6ae7ee5478780e9836d6fa03--stellular-arithmetic-22095e.netlify.app",
         "edgeFunctionsPresent": true
       },
       "bundle": {
-        "bundlerVersion": "@netlify/edge-bundler 16.0.3 (from .netlify/edge-functions-dist/manifest.json)",
+        "bundlerVersion": "@netlify/edge-bundler 16.0.4 (from .netlify/edge-functions-dist/manifest.json)",
         "format": "eszip2",
-        "eszipBytes": 3292842,
-        "gzipBytes": 1103580,
+        "eszipBytes": 1548091,
+        "gzipBytes": 462072,
         "limit": "20 MB after compression (https://docs.netlify.com/build/edge-functions/limits/)",
-        "note": "Measured from the local bundle the CLI produced for the final deploy. It vendors Satori's default build beside satori/standalone; the Wasm modules are not inside it."
+        "note": "Measured from the local bundle the CLI produced for this deploy. It is smaller than the first certification's 3292842-byte bundle because createEdgeOg now imports only satori/standalone."
       },
       "runtimeObservation": "X-Metaplate-Runtime is \"deno:\": the Deno global exists in Netlify's edge runtime, but Deno.version.deno is an empty string there",
       "cpuLimit": "Netlify documents 50 ms of CPU per request (https://docs.netlify.com/build/edge-functions/limits/); every observed render, including the first requests after each deploy, returned 200, so the limit did not block them. CPU time per request was not measured",
       "caveat": {
         "observed": "2026-11-01, deploy 6ae7a0b5dd9e780c65a1acf3 (the edge site's first deploy, same fixture sources)",
         "symptom": "/og-edge/hosted and /og-edge/edge returned 200 image/png 1200x630, but both were the same solid #064e3b card with no text: identical ETag (062b3cea...c478) and image entropy 0.000. verify-url's format, dimension, and content-type checks alone would have accepted them. The CDN cached both for 24h under Cache-Control: public, max-age=86400, so those slugs are not used as evidence.",
-        "diagnosis": "Diagnostic deploy 6ae7a13742402c1143a1acf1 logged every asset fetch: two fresh cold-start slugs rendered text (entropy 0.215 and 0.213), and /wasm/layout.wasm (200 application/wasm, 520763 bytes, head 0061736d), /wasm/resvg.wasm (200 application/wasm, 2478606 bytes, head 0061736d), and /fonts/inter-latin-700-normal.woff (200 application/font-woff, 31320 bytes, head 774f4646) all returned the right bytes. A local Node reproduction of createEdgeOg with the same files renders text on the first call, sequential and concurrent. Most likely a first-deploy propagation race: the same-origin font fetch received non-font bytes while the brand-new site propagated, and Satori drew no glyphs without raising an error. Not reproduced on demand.",
-        "followUp": "A library change that rejects non-font bytes with an error is being made separately. This evidence therefore adds a decoded-content check (sharp stats(): not uniform, entropy > 0) for every certified URL."
+        "cause": "Fixture layout, not the runtime. The card was width 100% and height 100% with padding 64 and alignItems flex-end. Satori sizes boxes as content-box, so the card was 1328x758 and its content ended at y=694 on a 630px canvas. A title that fits on one line (\"hosted · metaplate/edge on Netlify Edge\", \"edge · ...\") was drawn entirely below the canvas, leaving the solid background. Longer titles wrap to two lines and the upper line lands on the canvas, which is why cert-990d8a and cert-d16553 rendered text. Reproduced locally on demand with satori 0.63.2, @resvg/resvg-js 2.6.2, and the fixture's exact style: hosted and edge render a 4418-byte single-colour PNG, while cert-990d8a and cert-d16553 render 19767 and 19452 bytes, matching the certified responses byte for byte.",
+        "withdrawnDiagnosis": "The original record attributed the blank cards to a first-deploy propagation race on the same-origin font fetch. That was wrong: every asset fetch returned the right bytes because nothing was failing, and the cold-start slugs that rendered text were long enough to wrap.",
+        "resolution": "The fixture now sets boxSizing: \"border-box\" (commit c5d9f005703cf1ba1e14c96ebeede0446950df54). Deploy 6ae7ee5478780e9836d6fa03 serves it; the one-line titles e1 and bx-short render text, verified below. The decoded-content check stays on every hosted certification."
       },
-      "capturedAt": "2026-11-01T20:31:49.265Z",
+      "capturedAt": "2026-11-02T02:01:00Z",
       "verifyUrlOutput": {
         "schemaVersion": 1,
         "urls": [
           {
-            "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/cert-990d8a",
-            "finalUrl": "https://stellular-arithmetic-22095e.netlify.app/og-edge/cert-990d8a",
+            "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/e1",
+            "finalUrl": "https://stellular-arithmetic-22095e.netlify.app/og-edge/e1",
             "redirects": [],
             "contentType": "image/png",
-            "bytes": 19767,
+            "bytes": 18355,
             "valid": true,
             "image": {
               "format": "png",
               "width": 1200,
               "height": 630,
-              "bytes": 19767
+              "bytes": 18355
             },
             "globalIssues": [],
             "targets": {}
           },
           {
-            "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/cert-d16553",
-            "finalUrl": "https://stellular-arithmetic-22095e.netlify.app/og-edge/cert-d16553",
+            "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/bx-short",
+            "finalUrl": "https://stellular-arithmetic-22095e.netlify.app/og-edge/bx-short",
             "redirects": [],
             "contentType": "image/png",
-            "bytes": 19452,
+            "bytes": 21149,
             "valid": true,
             "image": {
               "format": "png",
               "width": 1200,
               "height": 630,
-              "bytes": 19452
+              "bytes": 21149
+            },
+            "globalIssues": [],
+            "targets": {}
+          },
+          {
+            "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/wrap-check-long-title-7c",
+            "finalUrl": "https://stellular-arithmetic-22095e.netlify.app/og-edge/wrap-check-long-title-7c",
+            "redirects": [],
+            "contentType": "image/png",
+            "bytes": 26862,
+            "valid": true,
+            "image": {
+              "format": "png",
+              "width": 1200,
+              "height": 630,
+              "bytes": 26862
             },
             "globalIssues": [],
             "targets": {}
@@ -293,101 +314,243 @@
       },
       "responses": [
         {
-          "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/cert-990d8a",
+          "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/e1",
           "status": 200,
-          "elapsedMs": 302,
           "contentType": "image/png",
           "cacheControl": "public, max-age=86400",
           "contentLength": null,
-          "etag": "\"025e84897312f43748f462f4b990abc3b60a4ea514a693ed22e071cf20da6350\"",
+          "transferEncoding": "chunked",
+          "etag": "\"092256ed77d23164fe654cacf5737647f8042f2dcf9011d91c3a8f33909ba13c\"",
           "headers": {
             "cache-control": "public, max-age=86400",
             "content-type": "image/png",
-            "date": "Sun, 01 Nov 2026 20:31:49 GMT",
-            "etag": "\"025e84897312f43748f462f4b990abc3b60a4ea514a693ed22e071cf20da6350\"",
+            "date": "Mon, 02 Nov 2026 01:59:14 GMT",
+            "etag": "\"092256ed77d23164fe654cacf5737647f8042f2dcf9011d91c3a8f33909ba13c\"",
             "server": "Netlify",
             "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
-            "transfer-encoding": "chunked",
             "vary": "Accept-Encoding",
             "x-metaplate-runtime": "deno:",
-            "x-nf-request-id": "01M6CCZAXXCNCNJ1R1HAHWEE3T"
+            "x-nf-request-id": "01M6CZPV8PB8VT60ZRAMZC376K",
+            "transfer-encoding": "chunked"
           },
-          "byteLength": 19767,
-          "sha256": "025e84897312f43748f462f4b990abc3b60a4ea514a693ed22e071cf20da6350",
+          "byteLength": 18355,
+          "sha256": "092256ed77d23164fe654cacf5737647f8042f2dcf9011d91c3a8f33909ba13c",
+          "titleLines": "one line",
           "content": {
-            "tool": "sharp stats()",
-            "entropy": 0.245,
-            "uniform": false,
-            "channelRanges": [
-              [
-                6,
-                236
-              ],
-              [
-                78,
-                253
-              ],
-              [
-                59,
-                245
-              ],
-              [
-                255,
-                255
-              ]
-            ],
-            "nonUniform": true
+            "tool": "Pillow 12.3.0: grayscale histogram entropy (bits) and distinct gray levels",
+            "entropy": 0.2256,
+            "distinctGrayLevels": 27,
+            "uniform": false
           }
         },
         {
-          "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/cert-d16553",
+          "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/bx-short",
           "status": 200,
-          "elapsedMs": 99,
           "contentType": "image/png",
           "cacheControl": "public, max-age=86400",
           "contentLength": null,
-          "etag": "\"95d7a5250e4eb134dec9f1c8fa89062faf0352d950b7adff4607d07ed758cd8f\"",
+          "transferEncoding": "chunked",
+          "etag": "\"3e9db7394a5284a7650bf034f799faf9524b33813841c1e6750c9c2d75a26912\"",
           "headers": {
             "cache-control": "public, max-age=86400",
             "content-type": "image/png",
-            "date": "Sun, 01 Nov 2026 20:31:49 GMT",
-            "etag": "\"95d7a5250e4eb134dec9f1c8fa89062faf0352d950b7adff4607d07ed758cd8f\"",
+            "date": "Mon, 02 Nov 2026 01:59:14 GMT",
+            "etag": "\"3e9db7394a5284a7650bf034f799faf9524b33813841c1e6750c9c2d75a26912\"",
             "server": "Netlify",
             "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
-            "transfer-encoding": "chunked",
             "vary": "Accept-Encoding",
             "x-metaplate-runtime": "deno:",
-            "x-nf-request-id": "01M6CCZB4APENKN5WTAT69JBJC"
+            "x-nf-request-id": "01M6CZPVPSNMM9MBB5YSC8XCT9",
+            "transfer-encoding": "chunked"
           },
-          "byteLength": 19452,
-          "sha256": "95d7a5250e4eb134dec9f1c8fa89062faf0352d950b7adff4607d07ed758cd8f",
+          "byteLength": 21149,
+          "sha256": "3e9db7394a5284a7650bf034f799faf9524b33813841c1e6750c9c2d75a26912",
+          "titleLines": "one line",
           "content": {
-            "tool": "sharp stats()",
-            "entropy": 0.243,
-            "uniform": false,
-            "channelRanges": [
-              [
-                6,
-                236
-              ],
-              [
-                78,
-                253
-              ],
-              [
-                59,
-                245
-              ],
-              [
-                255,
-                255
-              ]
-            ],
-            "nonUniform": true
+            "tool": "Pillow 12.3.0: grayscale histogram entropy (bits) and distinct gray levels",
+            "entropy": 0.2575,
+            "distinctGrayLevels": 27,
+            "uniform": false
+          }
+        },
+        {
+          "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/wrap-check-long-title-7c",
+          "status": 200,
+          "contentType": "image/png",
+          "cacheControl": "public, max-age=86400",
+          "contentLength": null,
+          "transferEncoding": "chunked",
+          "etag": "\"c3ed056469534d7dbfe96e70b5450c1a244758e1a7db88b3c98cb33ccd263c5f\"",
+          "headers": {
+            "cache-control": "public, max-age=86400",
+            "content-type": "image/png",
+            "date": "Mon, 02 Nov 2026 01:59:14 GMT",
+            "etag": "\"c3ed056469534d7dbfe96e70b5450c1a244758e1a7db88b3c98cb33ccd263c5f\"",
+            "server": "Netlify",
+            "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+            "vary": "Accept-Encoding",
+            "x-metaplate-runtime": "deno:",
+            "x-nf-request-id": "01M6CZPW66X2DMV2CG8C9KK4ZX",
+            "transfer-encoding": "chunked"
+          },
+          "byteLength": 26862,
+          "sha256": "c3ed056469534d7dbfe96e70b5450c1a244758e1a7db88b3c98cb33ccd263c5f",
+          "titleLines": "two lines",
+          "content": {
+            "tool": "Pillow 12.3.0: grayscale histogram entropy (bits) and distinct gray levels",
+            "entropy": 0.332,
+            "distinctGrayLevels": 27,
+            "uniform": false
           }
         }
       ],
-      "distinctBytesPerSlug": true
+      "distinctBytesPerSlug": true,
+      "supersededCertification": {
+        "deploymentId": "6ae7a1815a2fc0ea74f6bc1b",
+        "note": "Certified on 2026-11-01 from tarball 4ff95d57... (commit 4b04f90). Its two URLs were valid and rendered text because both titles wrapped to two lines; a one-line title rendered blank on that fixture (see caveat).",
+        "capturedAt": "2026-11-01T20:31:49.265Z",
+        "verifyUrlOutput": {
+          "schemaVersion": 1,
+          "urls": [
+            {
+              "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/cert-990d8a",
+              "finalUrl": "https://stellular-arithmetic-22095e.netlify.app/og-edge/cert-990d8a",
+              "redirects": [],
+              "contentType": "image/png",
+              "bytes": 19767,
+              "valid": true,
+              "image": {
+                "format": "png",
+                "width": 1200,
+                "height": 630,
+                "bytes": 19767
+              },
+              "globalIssues": [],
+              "targets": {}
+            },
+            {
+              "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/cert-d16553",
+              "finalUrl": "https://stellular-arithmetic-22095e.netlify.app/og-edge/cert-d16553",
+              "redirects": [],
+              "contentType": "image/png",
+              "bytes": 19452,
+              "valid": true,
+              "image": {
+                "format": "png",
+                "width": 1200,
+                "height": 630,
+                "bytes": 19452
+              },
+              "globalIssues": [],
+              "targets": {}
+            }
+          ]
+        },
+        "responses": [
+          {
+            "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/cert-990d8a",
+            "status": 200,
+            "elapsedMs": 302,
+            "contentType": "image/png",
+            "cacheControl": "public, max-age=86400",
+            "contentLength": null,
+            "etag": "\"025e84897312f43748f462f4b990abc3b60a4ea514a693ed22e071cf20da6350\"",
+            "headers": {
+              "cache-control": "public, max-age=86400",
+              "content-type": "image/png",
+              "date": "Sun, 01 Nov 2026 20:31:49 GMT",
+              "etag": "\"025e84897312f43748f462f4b990abc3b60a4ea514a693ed22e071cf20da6350\"",
+              "server": "Netlify",
+              "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+              "transfer-encoding": "chunked",
+              "vary": "Accept-Encoding",
+              "x-metaplate-runtime": "deno:",
+              "x-nf-request-id": "01M6CCZAXXCNCNJ1R1HAHWEE3T"
+            },
+            "byteLength": 19767,
+            "sha256": "025e84897312f43748f462f4b990abc3b60a4ea514a693ed22e071cf20da6350",
+            "content": {
+              "tool": "sharp stats()",
+              "entropy": 0.245,
+              "uniform": false,
+              "channelRanges": [
+                [
+                  6,
+                  236
+                ],
+                [
+                  78,
+                  253
+                ],
+                [
+                  59,
+                  245
+                ],
+                [
+                  255,
+                  255
+                ]
+              ],
+              "nonUniform": true
+            }
+          },
+          {
+            "url": "https://stellular-arithmetic-22095e.netlify.app/og-edge/cert-d16553",
+            "status": 200,
+            "elapsedMs": 99,
+            "contentType": "image/png",
+            "cacheControl": "public, max-age=86400",
+            "contentLength": null,
+            "etag": "\"95d7a5250e4eb134dec9f1c8fa89062faf0352d950b7adff4607d07ed758cd8f\"",
+            "headers": {
+              "cache-control": "public, max-age=86400",
+              "content-type": "image/png",
+              "date": "Sun, 01 Nov 2026 20:31:49 GMT",
+              "etag": "\"95d7a5250e4eb134dec9f1c8fa89062faf0352d950b7adff4607d07ed758cd8f\"",
+              "server": "Netlify",
+              "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+              "transfer-encoding": "chunked",
+              "vary": "Accept-Encoding",
+              "x-metaplate-runtime": "deno:",
+              "x-nf-request-id": "01M6CCZB4APENKN5WTAT69JBJC"
+            },
+            "byteLength": 19452,
+            "sha256": "95d7a5250e4eb134dec9f1c8fa89062faf0352d950b7adff4607d07ed758cd8f",
+            "content": {
+              "tool": "sharp stats()",
+              "entropy": 0.243,
+              "uniform": false,
+              "channelRanges": [
+                [
+                  6,
+                  236
+                ],
+                [
+                  78,
+                  253
+                ],
+                [
+                  59,
+                  245
+                ],
+                [
+                  255,
+                  255
+                ]
+              ],
+              "nonUniform": true
+            }
+          }
+        ]
+      },
+      "packedArtifact": {
+        "file": "metaplate-0.8.0.tgz",
+        "command": "npm ci && npm run build && npm pack",
+        "sha256": "114a3c62ac482bd43e33fb94315d0c7f12225c57d60ad27550bd2feb5d29f268",
+        "commit": "697f6f737c2a7eaaec971b7ebc299df6ac3c55be",
+        "note": "Packed from main at 697f6f737c2a7eaaec971b7ebc299df6ac3c55be; the fixture fix c5d9f005703cf1ba1e14c96ebeede0446950df54 changes no packaged file."
+      },
+      "fixtureCommit": "c5d9f005703cf1ba1e14c96ebeede0446950df54"
     }
   }
 }
