@@ -23,6 +23,8 @@ export function createSvgPlate<Copy, Variant extends string = string>(
       size: view.context.size,
       image: view.image,
       metadata: view.metadata,
+      /** The image path relative to the deployment root, without `basePath` or `origin`. */
+      sitePath: view.sitePath,
       contentType: SVG_CONTENT_TYPE,
       renderSvg: (copy: Copy) => renderSvg(definition, loadSatori, copy, view.context),
     };

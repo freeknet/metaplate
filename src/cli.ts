@@ -3,12 +3,15 @@
 import { readFile } from "node:fs/promises";
 import process from "node:process";
 import {
+  DEFAULT_RENDER_CONCURRENCY,
   formatVerifyPath,
   parseVerifyInvocation,
   parseVerifyUrlInvocation,
+  RENDER_USAGE,
   VERIFY_URL_USAGE,
   VERIFY_USAGE,
 } from "./cli-args.js";
+import { ReportedError, runRender } from "./cli-render.js";
 import type { SocialTarget } from "./compatibility-profiles.js";
 import type { ImageSize } from "./core.js";
 import { verifySocialImage } from "./social-verification.js";
@@ -18,10 +21,12 @@ import { METAPLATE_VERSION } from "./version.js";
 
 const CLI_HELP = `${VERIFY_USAGE}
 ${VERIFY_URL_USAGE}
+${RENDER_USAGE}
 
 Commands:
   verify        Verify image dimensions, format, and optional social metadata
   verify-url    Fetch an http(s) image under a hardened policy, then verify it
+  render        Write every page and size a render module declares as verified files
 
 Options:
   -h, --help       Show this help
@@ -38,7 +43,18 @@ verify-url options:
   --timeout MS       Total time budget, including redirects (default 10000)
   --allow-port PORT  Allow a port besides 80/443 (repeatable)
   --allow-private    Allow loopback/private/link-local addresses (local development only)
+
+render options:
+  --out DIR          Directory the site is published from (default public)
+  --manifest FILE    Manifest path (default DIR/metaplate-manifest.json)
+  --concurrency N    Render at most N images at once (default ${DEFAULT_RENDER_CONCURRENCY})
 `;
+
+const USAGES: Readonly<Record<string, string>> = {
+  verify: VERIFY_USAGE,
+  "verify-url": VERIFY_URL_USAGE,
+  render: RENDER_USAGE,
+};
 
 type CliIssue = Readonly<{
   severity?: string;
@@ -256,12 +272,15 @@ async function main(args: string[]) {
     process.stdout.write(`${METAPLATE_VERSION}\n`);
     return;
   }
+  if (args[0] === "render") return runRender(args);
   await (args[0] === "verify-url" ? verifyUrls(args) : verifyFiles(args));
 }
 
 main(process.argv.slice(2)).catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
   process.stderr.write(`${message}\n`);
-  process.stderr.write(`${process.argv[2] === "verify-url" ? VERIFY_URL_USAGE : VERIFY_USAGE}\n`);
+  if (!(error instanceof ReportedError)) {
+    process.stderr.write(`${USAGES[process.argv[2] ?? ""] ?? VERIFY_USAGE}\n`);
+  }
   process.exitCode = 1;
 });
