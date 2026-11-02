@@ -36,11 +36,25 @@ npm run check:package
 inventory and Socket dispositions, verifies the deployment evidence manifest,
 validates the release notes for the current version, type-checks the sources and
 examples, tests, builds, and inspects the npm package contents. `npm run check:package` goes further: it creates the tarball, checks
-that every declared export is present, and installs it into two temporary
+that every declared export is present, and installs it into temporary
 consumers. The lean consumer imports every framework-neutral entry point, proves
 that no optional renderer peer was pulled in, and confirms the install guidance
 a peer-less render reports. The standalone consumer installs the renderer peers
-and renders real PNG bytes.
+and renders real PNG bytes. It then builds and serves Next.js (static export and
+`next start`), Astro (static and `@astrojs/node`), React Router, SvelteKit,
+Express, and an edge fixture from the same tarball, and fetches their images.
+
+CI also runs `scripts/verify-runtime.mjs` on Bun and Deno against the packed
+tarball (`Runtime smoke / bun` and `Runtime smoke / deno`, both required
+checks). To run it locally:
+
+```sh
+npm run build
+node scripts/prepare-runtime-consumer.mjs <consumer-dir>
+cd <consumer-dir>
+bun verify-runtime.mjs --expect-runtime=bun --expect-version=<version>
+deno run --allow-all --no-lock verify-runtime.mjs --expect-runtime=deno --expect-version=<version>
+```
 
 Useful individual commands are:
 
@@ -62,10 +76,12 @@ run with `--ignore-scripts`.
 
 - The root entry point stays framework-neutral. Do not make consumers load
   Next.js, React, Satori, or Resvg merely to construct metadata.
-- `next` is the only optional peer dependency. `react`, `satori`, and
-  `@resvg/resvg-js` are required peers that the standalone renderer still
-  imports on first use, so a lean install stays importable. Test behavior both
-  with and without the renderer peers when changing package boundaries.
+- `next` and `@resvg/resvg-wasm` are the optional peer dependencies: only
+  `metaplate/next` needs Next, and only `metaplate/edge` needs the Wasm
+  renderer. `react`, `satori`, and `@resvg/resvg-js` are required peers that
+  the standalone renderer still imports on first use, so a lean install stays
+  importable. Test behavior both with and without the renderer peers when
+  changing package boundaries.
 - Public APIs need type coverage, behavior tests, and README documentation.
 - `examples/` is documentation that compiles. It type-checks against `src/`
   through `tsconfig.examples.json`, so renaming or resigning a public export
@@ -74,6 +90,17 @@ run with `--ignore-scripts`.
   package archives.
 - Keep Node.js 20 compatibility. CI also exercises current LTS lines and the
   platform-specific Resvg package on Linux, macOS, and Windows.
+
+## Hosted deployment evidence
+
+`deployment-evidence.json` records every deployment route and its status, and
+`npm run check:deployment` validates it. A route is `certified` only from a
+real, dated deployment of the packed tarball: the fixture under
+`examples/hosted/` must be the exact source deployed, and the raw outputs go in
+`.planning/hosted-evidence/`. Check each deployed image with
+`metaplate verify-url`, record the response headers, and decode the image to
+confirm it is not uniform, using at least one title short enough to fit on one
+line. Each fixture's README explains how to redeploy it.
 
 ## Dependencies and supply chain
 
