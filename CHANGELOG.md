@@ -7,6 +7,41 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Added
 
+- The `languageFonts` plate option (`createSvgOg`, `createNodeOg`,
+  `createEdgeOg`) draws scripts the plate's fonts lack, such as Japanese,
+  Korean, Chinese, Arabic, Hebrew, Thai, and Devanagari, with fallback fonts
+  instead of missing-glyph boxes, offline. `fontsourceLanguageFontLoader`
+  from `metaplate/fonts` maps Satori's language codes (`"ja-JP"`,
+  `"ar-AR"`, ...) to installed Fontsource packages, reads each package's
+  `unicode.json` on first use, and reads only the subset files covering the
+  requested characters, each once (a Japanese title reads about 100 KB of an
+  84 MB package); several weights per language are supported, failures are
+  not memoized, and package resolution uses the same `cwd` and
+  `resolvePackage` options and path guards as `fontsourceFontLoader`.
+  `languageFontLoader` from the runtime-neutral `metaplate/font-data` takes a
+  byte source per language (and optional `unicodeRanges`) for edge runtimes.
+  Han characters, which Satori offers to `ja-JP`, `zh-CN`, `zh-TW`, and
+  `zh-HK` at once, fall through the configured languages until each
+  character is covered. Satori's requests are answered in a fixed order:
+  `emoji`, then `languageFonts`, then `satori.loadAdditionalAsset`. See
+  [`docs/fonts.md`](docs/fonts.md#other-scripts).
+- `metaplate preview <module>` serves a live local gallery of a render
+  module: every page at every size, rendered on request and checked with
+  `verifyImage`, with its path, published URL, alt text, size, format, bytes,
+  and any `--target`/`--max-file-size` findings. Each card can switch to
+  Satori's layout debug boxes and to centered 1.91:1 (Open Graph), 2:1 (X
+  `summary_large_image`), and 1:1 (X `summary`) crop overlays. Saving the
+  module reloads open pages over a server-sent event; on Node 22.15 and 23.5
+  or newer a `module.registerHooks` resolve hook reloads the local files it
+  imports too, while `node_modules` packages stay loaded. A failing image
+  fails only its card, and a module that cannot load is shown in the page
+  until it is fixed. It listens on `127.0.0.1:4323` by default (`--host`,
+  `--port`, `--port 0` for any free port), warns before listening on any
+  other address, answers only loopback `Host` headers while on loopback,
+  escapes every module-supplied value, and serves the page under a strict
+  Content Security Policy. See [`docs/preview.md`](docs/preview.md).
+- `renderSvg(copy, { debug: true })` turns on Satori's `debug` option for
+  one render without changing the plate's `satori` options.
 - Signed image routes. `signImagePath` and `verifyImageSignature` (from
   `metaplate`) insert and check an HMAC-SHA-256 signature of the URL's
   pathname as one 43-character base64url path segment before the file name,

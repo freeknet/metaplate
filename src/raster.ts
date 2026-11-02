@@ -287,6 +287,7 @@ export function createRasterPlate<Copy, Variant extends string = string>(
         fonts: fontFacts,
         satori: definition.satori,
         emoji: definition.emoji,
+        languageFonts: definition.languageFonts,
         resvg: definition.resvg,
         output: definition.output,
         // Guard levels decide which renders succeed, so a stricter guard

@@ -10,11 +10,26 @@ import {
   type FontWeight,
   type LoadedFont,
 } from "./font-core.js";
+import {
+  createLanguageFontLoader,
+  languageCodes,
+  parseUnicodeRanges,
+  type LanguageCode,
+  type LanguageFontLoader,
+} from "./language-fonts.js";
 import { projectFilePath } from "./project-path.js";
 
 export { fontLoader, loadFonts } from "./font-core.js";
+export { languageFontLoader } from "./language-fonts.js";
 export type { EmojiLoader } from "./emoji.js";
 export type { DataFont, FontBytes, FontFace, FontWeight, LoadedFont } from "./font-core.js";
+export type {
+  LanguageCode,
+  LanguageFontFace,
+  LanguageFontLoader,
+  LanguageFonts,
+  UnicodeRanges,
+} from "./language-fonts.js";
 
 export type FileFont = FontFace & {
   /** Absolute/relative project path or a co-located `file:` URL. */
@@ -209,6 +224,8 @@ type FontsourceMetadata = {
   id: string;
   family: string;
   defSubset: string;
+  weights?: unknown;
+  styles?: unknown;
 };
 
 function fontsourcePackageName(font: string): string {
@@ -293,6 +310,97 @@ export function fontsourceFontLoader(
   options: PackageFontOptions = {},
 ): () => Promise<LoadedFont[]> {
   return memoizedFontLoader(() => loadFontsourceFonts(fonts, options));
+}
+
+/** A Fontsource family to fall back to for one language. */
+export type FontsourceLanguageFont = Omit<FontsourceFont, "weight" | "subset" | "lang"> & {
+  /**
+   * Defaults to 400. Several weights load one face each (only the subset
+   * files the copy needs), and Satori draws each run with the closest one.
+   */
+  weight?: FontWeight | readonly FontWeight[];
+};
+
+/**
+ * Fontsource families per Satori language code. A string is a Fontsource id
+ * (`"noto-sans-jp"`) or package name, loaded at weight 400.
+ */
+export type FontsourceLanguageFonts = Partial<Record<LanguageCode, string | FontsourceLanguageFont>>;
+
+function assertFontsourceFace(
+  packageName: string,
+  metadata: FontsourceMetadata,
+  weight: FontWeight,
+  style: string,
+): void {
+  const weights = Array.isArray(metadata.weights) ? metadata.weights : undefined;
+  const styles = Array.isArray(metadata.styles) ? metadata.styles : undefined;
+  if ((weights && !weights.includes(weight)) || (styles && !styles.includes(style))) {
+    throw new Error(
+      `${packageName} has no ${weight} ${style} face. ` +
+        `Available weights: ${weights?.join(", ") ?? "unknown"}; styles: ${styles?.join(", ") ?? "unknown"}.`,
+    );
+  }
+}
+
+async function fontsourceUnicodeRanges(directory: string, packageName: string) {
+  let text: string;
+  try {
+    text = await readFile(resolveFontFile(directory, "unicode.json"), "utf8");
+  } catch (error) {
+    throw new Error(
+      `${packageName} has no readable unicode.json, which maps its subset files to the ` +
+        "characters they cover (Fontsource 5 packages ship one).",
+      { cause: error },
+    );
+  }
+  return parseUnicodeRanges(JSON.parse(text) as Record<string, string>);
+}
+
+/**
+ * Falls back to installed Fontsource families for scripts the plate's fonts
+ * do not cover, offline. Pass the result as a plate's `languageFonts` option.
+ * Nothing is read until Satori first asks for a configured language; then
+ * the package's `metadata.json` and `unicode.json` are read once, and only
+ * the subset files covering the requested characters are read, each once.
+ * A missing package or file fails that render and is retried by the next.
+ * Node-compatible runtimes only; on an edge runtime use `languageFontLoader`
+ * from `metaplate/font-data`.
+ */
+export function fontsourceLanguageFontLoader(
+  fonts: FontsourceLanguageFonts,
+  options: PackageFontOptions = {},
+): LanguageFontLoader {
+  const codes = languageCodes(fonts);
+  const families = new Map(
+    codes.map((code) => {
+      const entry = fonts[code]!;
+      const font: FontsourceLanguageFont = typeof entry === "string" ? { font: entry } : entry;
+      // Validate ids now, so a typo fails at definition time.
+      return [code, { font, packageName: fontsourcePackageName(font.font) }] as const;
+    }),
+  );
+
+  return createLanguageFontLoader(codes, async (code) => {
+    const { font, packageName } = families.get(code)!;
+    const directory = findPackageDirectory(packageName, options.cwd, options.resolvePackage);
+    const metadata = fontsourceMetadata(directory, packageName);
+    const subsets = await fontsourceUnicodeRanges(directory, packageName);
+    const style = font.style ?? "normal";
+    const weights: readonly FontWeight[] =
+      font.weight === undefined ? [400] : typeof font.weight === "number" ? [font.weight] : font.weight;
+    return weights.map((weight) => {
+      assertFontsourceFace(packageName, metadata, weight, style);
+      return {
+        name: font.name ?? metadata.family,
+        weight,
+        style,
+        subsets,
+        load: (subset: string | undefined) =>
+          readFile(resolveFontFile(directory, `files/${metadata.id}-${subset ?? metadata.defSubset}-${weight}-${style}.woff`)),
+      };
+    });
+  });
 }
 
 /**
