@@ -195,7 +195,7 @@ To check the files against a platform profile as well, run
 ## Command line
 
 ```text
-metaplate render [--json] [--out DIR] [--manifest FILE] [--concurrency N] <module>
+metaplate render [--json] [--incremental] [--out DIR] [--manifest FILE] [--concurrency N] <module>
 ```
 
 | Option | Meaning |
@@ -204,11 +204,13 @@ metaplate render [--json] [--out DIR] [--manifest FILE] [--concurrency N] <modul
 | `--out DIR` | The directory the site is published from. Default `public`. Created if missing. |
 | `--manifest FILE` | Where to write the manifest. Default `DIR/metaplate-manifest.json`. Pass a path outside `DIR` to keep the manifest out of the published site. |
 | `--concurrency N` | Render at most `N` images at once, 1 to 256. Default 4. |
+| `--incremental` | Reuse each image whose inputs and file are unchanged since the previous manifest; see [Incremental builds](#incremental-builds). |
 | `--json` | Print one JSON report instead of a line per image. |
 
 Without `--json`, each image prints `✓ <path> <width>x<height> <format> (<bytes>
-bytes)` as it is written, each failure prints `✗ <path> render failed:
-<reason>` to stderr, and a summary line follows.
+bytes)` as it is written (`<bytes> bytes, unchanged` when `--incremental`
+reused it), each failure prints `✗ <path> render failed: <reason>` to stderr,
+and a summary line follows.
 
 **Concurrency.** Satori's layout and Resvg's rasterization both run on the
 main JavaScript thread (Metaplate calls Resvg's synchronous `render`), so
@@ -230,9 +232,16 @@ print as each one finishes.
 
 These match `metaplate verify` and `verify-url`, which also exit `1` for every
 failure. When some images fail, the rest are still rendered and written, every
-failure is reported, and **no manifest is written**, so a deploy step that
-publishes only when the manifest exists never publishes half a build. Files
-written before the failure stay in `--out`.
+failure is reported, and **no manifest is left behind**, so a deploy step that
+publishes only when the manifest exists never publishes half a build. That
+includes the manifest of an earlier run: once the module loads and every path
+passes its checks, the existing manifest is deleted before the first image is
+written, because the files it lists are about to change. A run that fails
+before that point (an argument error, a module that cannot load, a refused
+path) touches nothing, so the earlier manifest still describes the earlier
+files. A successful run writes the manifest to a temporary file beside it and
+renames it into place, so no reader ever sees a partial manifest. Files
+written before a failure stay in `--out`.
 
 Format, size, and structure checks cannot tell a blank card from a drawn one.
 Give the module's plate [render guards](rendering.md#render-guards) set to
@@ -277,6 +286,7 @@ One entry of the manifest written for
 | `contentType` | The media type the plate serves the image as. |
 | `bytes`, `sha256` | Length and lowercase hex SHA-256 of the file as read back from disk. |
 | `verified` | Whether `verifyImage` checked the file (`false` only when `format` is `null`). |
+| `inputHash` | Lowercase hex SHA-256 of everything known to determine the bytes (see [Incremental builds](#incremental-builds)), or `null` when the plate has no `fingerprint()` or the copy cannot be serialized. Added within schema version 1. |
 
 Images appear in declaration order: jobs, then pages, then the default size
 before each variant.
@@ -286,8 +296,9 @@ before each variant.
 `--json` prints `{ "schemaVersion": 1, "out", "manifest", "images" }`, where
 `out` and `manifest` are paths relative to the current directory, `manifest` is
 `null` when none was written, and each `images` entry is a manifest entry plus
-`"valid": true` and an empty `issues` array. A failed image has only its
-identity and its issues:
+`"valid": true`, an empty `issues` array, and `"reused"` (`true` when
+`--incremental` kept the existing file). A failed image has only its identity
+and its issues:
 
 ```json
 {
@@ -301,6 +312,56 @@ identity and its issues:
 
 A module that cannot be loaded or breaks the contract prints its error to
 stderr instead of a report.
+
+## Incremental builds
+
+A site with hundreds of pages re-renders every card on every build, though a
+typical change touches a few. `--incremental` renders only what changed. Each
+manifest entry records an `inputHash`: the SHA-256 of
+
+- the Metaplate version, and the installed `satori`, `@resvg/resvg-js`, and
+  `@resvg/resvg-wasm` versions, resolved from the render module's location;
+- the image's path, route, and variant;
+- the plate's `fingerprint()` for that size: its renderer (`node` or `edge`),
+  `revision`, size, output format, guard levels, the bytes of every font `fonts()`
+  returns, the source text of `component` and of the other functions in the
+  definition (such as an `output` encoder), and its `satori`, `emoji`, and
+  `resvg` options;
+- the page's copy, serialized with object keys sorted, so key order is not a
+  change.
+
+With `--incremental`, an image is reused, not rendered, only when its
+`inputHash` equals the one in the previous manifest **and** the file on disk
+still has the byte length and SHA-256 that manifest recorded **and** it still
+passes `verifyImage`. Anything else renders: a new or edited page, a changed
+plate, a file edited or deleted since the last build, an entry from before
+`inputHash` existed, or a manifest that cannot be read (which prints a warning
+and renders everything). A reused entry is recorded with the plate's current
+URL, versioned as the page's `version` or the plate's `version: "copy"`
+says, so changing `origin`, `basePath`, or a version token does not force a
+render. Without the
+flag, every image renders, as before.
+
+What the hash cannot see is the limit. A function's source text does not
+include what it imports or closes over: a component that calls a helper from
+another file, or reads a theme object defined elsewhere, renders differently
+when that helper changes while its own text stays the same. Images fetched at
+render time (an `<img src>` URL, an `emoji` loader's network source) are not
+hashed either. Set the plate's `revision` to name the version of everything
+outside the component, and change it when any of that changes:
+
+```js
+const og = createNodeOg({
+  // Any string works: a release number, or a hash of the plate's files.
+  revision: "2026-11-01",
+  // ...
+});
+```
+
+Copy that is not plain data (a class instance other than `Date`, `URL`, or a
+byte array, a symbol, or a cycle) gets `inputHash: null` and always renders.
+A clean build, without `--incremental` or after deleting `--out`, is the
+reference whenever in doubt; CI release builds should use one.
 
 ## Loading modules
 

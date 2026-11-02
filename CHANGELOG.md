@@ -115,7 +115,8 @@ All notable changes to Metaplate are documented in this file. The project uses
   Graph and X), and so to `socialMetaTags`, JSON-LD, and Adaptive Cards.
   `socialImageVersion(copy, revision?)` derives an eight-hex-digit token from
   a stable serialization of the copy (32-bit FNV-1a, synchronous and
-  runtime-neutral). Plates take `version: "copy"` and a design `revision`, and
+  runtime-neutral). Plates take `version: "copy"` and a design `revision`
+  (valid on its own too, where it feeds `fingerprint()`), and
   `metadata`, `image`, and `artifact` take a per-call `{ version }`; a
   `metaplate render` page may name its own `version`, and the manifest `url`
   carries the token. `socialImagePath`, `sitePath`, and rendered file paths
@@ -138,6 +139,32 @@ All notable changes to Metaplate are documented in this file. The project uses
   wherever Node strips types (22.18+ and 23.6+ by default). `RenderJob`,
   `RenderPage`, and `RenderModule` types come from `metaplate/node`. See
   [`docs/render-cli.md`](docs/render-cli.md).
+  A run that starts writing deletes the previous run's manifest first, so a
+  failed rebuild never leaves a manifest describing files it overwrote, and a
+  successful run replaces the manifest atomically (temporary file, then
+  rename). `--incremental` reuses an image when its `inputHash` (the SHA-256
+  of the Metaplate and renderer peer versions, path, route, variant, the
+  plate's `fingerprint()`, and the key-sorted copy) matches the previous
+  manifest and the file on disk still matches that manifest's length,
+  SHA-256, and `verifyImage`; everything else renders. Manifest entries gain
+  `inputHash`, and `--json` report entries gain `reused`.
+- `plate.cached(options)` on `metaplate/node` and `metaplate/edge` plates and
+  their variant views renders each distinct copy once. Entries are keyed by
+  the SHA-256 of the size's `fingerprint()` and the key-sorted copy, served
+  with a strong SHA-256 `ETag`, and a matching `If-None-Match` (weak
+  comparison, `*` included) is answered `304` for `GET`/`HEAD` and `412`
+  otherwise, keeping the 200's caching headers (RFC 9110 sections 13.1.2 and
+  15.4.5). Concurrent misses share one render. The default store,
+  `memoryRenderCache()`, is an LRU bounded to 32 MiB and 1000 entries; any
+  sync or async `{ get, set }` store works, entries are re-hashed on the way
+  out, a failing store degrades to rendering (`onStoreError`), `ttl` is
+  optional, and two plates with one fingerprint cannot share a store.
+  `plate.fingerprint()` exposes the design hash (Metaplate version,
+  renderer, `revision`, size, format, font bytes, guard levels, and the source
+  text of the definition's functions). The plate `revision` option, which
+  needs no `version: "copy"`, names what the fingerprint cannot see, such as
+  a helper the component imports. See
+  [`docs/rendering.md`](docs/rendering.md#caching-renders).
 - `metaplate verify-page <url>` audits a deployed page's social preview. It
   fetches the HTML with the same hardened fetcher as `verify-url` (its own
   `text/html`/`application/xhtml+xml` check and `--max-html-bytes` cap,

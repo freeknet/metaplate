@@ -76,7 +76,9 @@ describe("plate versioning", () => {
   });
 
   it("validates plate-level versioning at definition", () => {
-    expect(() => plate({ revision: "2" })).toThrow('revision requires version: "copy"');
+    // revision is valid alone: it feeds fingerprint(), and leaves URLs unversioned.
+    expect(plate({ revision: "2" }).metadata("/", copy).openGraph.images[0]!.url).toBe("/site/og-image.png");
+    expect(() => plate({ revision: "" })).toThrow("Invalid revision");
     expect(() => plate({ version: "hash" as "copy" })).toThrow('a plate\'s version must be "copy"');
     expect(() => plate({ version: "copy", revision: "" })).toThrow("Invalid revision");
   });

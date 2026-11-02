@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -16,12 +16,17 @@ import { socialImageVersion } from "../src/index.js";
 import { createNodeOg } from "../src/node.js";
 import { createSvgOg } from "../src/render.js";
 import {
+  inputHash,
   outputTarget,
+  peerVersions,
   planImages,
+  readPreviousManifest,
   renderFiles,
   renderManifest,
   resolveRenderJobs,
+  writeFileAtomic,
   type ManifestImage,
+  type PeerVersions,
   type RenderablePlate,
   type RenderJob,
   type RenderOutcome,
@@ -76,6 +81,10 @@ type FakeOptions = {
   variants?: string[];
   sitePath?: (route: string) => string;
   artifact?: (route: string, copy: unknown) => Promise<Uint8Array>;
+  /** Gives the plate a `fingerprint()` resolving to this value. */
+  fingerprint?: string | undefined;
+  /** Prefixes the URL `image()` and the artifact metadata publish. */
+  base?: string;
 };
 
 /** A structural plate with one `square` variant that returns fixed PNG bytes. */
@@ -84,6 +93,7 @@ function fakePlate(options: FakeOptions = {}, name?: string): RenderablePlate<un
   const file = name === undefined ? "og-image.png" : `og-image-${name}.png`;
   const sitePath = options.sitePath ?? ((route: string) =>
     [route.replace(/^\/+|\/+$/g, ""), file].filter(Boolean).join("/"));
+  const url = (route: string) => `${options.base ?? ""}/${sitePath(route)}`;
   return {
     variantName: name,
     variants: options.variants ?? ["square"],
@@ -94,8 +104,12 @@ function fakePlate(options: FakeOptions = {}, name?: string): RenderablePlate<un
       contentType: "image/png",
       format: "png",
       size,
-      metadata: { openGraph: { images: [{ url: `/${sitePath(route)}` }] } },
+      metadata: { openGraph: { images: [{ url: url(route) }] } },
     }),
+    image: (route: string) => ({ url: url(route) }),
+    ...(options.fingerprint === undefined
+      ? {}
+      : { fingerprint: async () => `${options.fingerprint}:${name ?? "default"}` }),
   };
 }
 
@@ -107,18 +121,21 @@ describe("parseRenderInvocation", () => {
       manifest: path.join("public", "metaplate-manifest.json"),
       concurrency: DEFAULT_RENDER_CONCURRENCY,
       json: false,
+      incremental: false,
     });
   });
 
   it("parses every flag in any order", () => {
     expect(parseRenderInvocation([
       "render", "--json", "--concurrency", "2", "og.ts", "--out", "dist", "--manifest", "build/manifest.json",
+      "--incremental",
     ])).toEqual({
       module: "og.ts",
       outDir: "dist",
       manifest: "build/manifest.json",
       concurrency: 2,
       json: true,
+      incremental: true,
     });
   });
 
@@ -296,8 +313,9 @@ describe("renderFiles", { timeout: 30_000 }, () => {
       });
       expect(verifyImage(bytes, image.size, "png").format).toBe("png");
       expect(Object.keys(image)).toEqual([
-        "path", "url", "route", "variant", "size", "format", "contentType", "bytes", "sha256", "verified",
+        "path", "url", "route", "variant", "size", "format", "contentType", "bytes", "sha256", "verified", "inputHash",
       ]);
+      expect(image.inputHash).toMatch(/^[0-9a-f]{64}$/);
     }
   });
 
@@ -423,14 +441,14 @@ describe("metaplate render CLI", async () => {
   function fakeModule(body: string) {
     return `
 const sizes = { default: [1200, 630, ${JSON.stringify(pngBase64(1200, 630))}], square: [1080, 1080, ${JSON.stringify(pngBase64(1080, 1080))}] };
-export function plate({ sitePath, bytesFor } = {}, name) {
+export function plate({ sitePath, bytesFor, fingerprint } = {}, name) {
   const [width, height, data] = sizes[name ?? "default"];
   const file = name ? "og-image-" + name + ".png" : "og-image.png";
   const pathFor = sitePath ?? ((route) => [route.replace(/^\\/+|\\/+$/g, ""), file].filter(Boolean).join("/"));
   return {
     variantName: name,
     variants: ["square"],
-    variant: (variant) => plate({ sitePath, bytesFor }, variant),
+    variant: (variant) => plate({ sitePath, bytesFor, fingerprint }, variant),
     sitePath: pathFor,
     artifact: async (route) => ({
       bytes: bytesFor?.(route, name) ?? Buffer.from(data, "base64"),
@@ -438,6 +456,10 @@ export function plate({ sitePath, bytesFor } = {}, name) {
       format: "png",
       size: { width, height },
       metadata: { openGraph: { images: [{ url: "/site/" + pathFor(route) }] } },
+    }),
+    ...(fingerprint === undefined ? {} : {
+      fingerprint: async () => fingerprint + ":" + (name ?? "default"),
+      image: (route) => ({ url: "/site/" + pathFor(route) }),
     }),
   };
 }
@@ -505,14 +527,16 @@ ${body}
         bytes: completePng(1080, 1080).byteLength,
         sha256: sha256(completePng(1080, 1080)),
         verified: true,
+        inputHash: null,
         valid: true,
         issues: [],
+        reused: false,
       }],
     });
     const manifest = JSON.parse(await readFile(path.join(cwd, "build", "og.json"), "utf8"));
     expect(manifest).toEqual({
       schemaVersion: 1,
-      images: [Object.fromEntries(Object.entries(report.images[0]).filter(([key]) => key !== "valid" && key !== "issues"))],
+      images: [Object.fromEntries(Object.entries(report.images[0]).filter(([key]) => !["valid", "issues", "reused"].includes(key)))],
     });
     expect(existsSync(path.join(cwd, "public", "metaplate-manifest.json"))).toBe(false);
   });
@@ -598,6 +622,103 @@ export default {
     expect(result.stderr).toContain("Cannot load og.render.tsx: Node does not transform JSX");
   });
 
+  it("removes a previous run's manifest when a later run fails, and replaces it atomically when one succeeds", async () => {
+    const cwd = await project({
+      "good.mjs": fakeModule(`export default { plate: plate(), pages: [{ route: "/bad", copy: {} }] };`),
+      "bad.mjs": fakeModule(`
+export default {
+  plate: plate({ bytesFor: (route, name) => name ? undefined : Buffer.from("not an image") }),
+  pages: [{ route: "/bad", copy: {} }],
+};`),
+    });
+    const manifestFile = path.join(cwd, "public", "metaplate-manifest.json");
+    expect(runCli(bundlePath, ["render", "good.mjs"], cwd).status).toBe(0);
+    const first = await readFile(manifestFile, "utf8");
+    expect(runCli(bundlePath, ["render", "good.mjs"], cwd).status).toBe(0);
+    expect(await readFile(manifestFile, "utf8")).toBe(first);
+    expect((await readdir(path.join(cwd, "public"))).sort()).toEqual(["bad", "metaplate-manifest.json"]);
+
+    // The failed run overwrote bad/og-image.png, so the old manifest no longer
+    // describes the tree and must not survive to be deployed.
+    const failed = runCli(bundlePath, ["render", "--json", "bad.mjs"], cwd);
+    expect(failed.status).toBe(1);
+    expect(JSON.parse(failed.stdout).manifest).toBeNull();
+    expect(existsSync(manifestFile)).toBe(false);
+  });
+
+  it("keeps the previous manifest when the module fails before anything renders", async () => {
+    const cwd = await project({
+      "good.mjs": fakeModule(`export default { plate: plate(), pages: [{ copy: {} }] };`),
+      "broken.mjs": fakeModule(`export default { plate: plate(), pages: [] };`),
+    });
+    expect(runCli(bundlePath, ["render", "good.mjs"], cwd).status).toBe(0);
+    expect(runCli(bundlePath, ["render", "broken.mjs"], cwd).status).toBe(1);
+    expect(existsSync(path.join(cwd, "public", "metaplate-manifest.json"))).toBe(true);
+  });
+
+  it("with --incremental, reuses unchanged images and re-renders changed or damaged ones", async () => {
+    const cwd = await project({
+      "titles.json": JSON.stringify({ a: "A", b: "B" }),
+      "og.render.mjs": fakeModule(`
+import { readFileSync } from "node:fs";
+const titles = JSON.parse(readFileSync("titles.json", "utf8"));
+export default {
+  plate: plate({ fingerprint: readFileSync("revision.txt", "utf8") }),
+  pages: Object.entries(titles).map(([slug, title]) => ({ route: "/" + slug, copy: { title } })),
+};`),
+      "revision.txt": "1",
+    });
+    const run = (...flags: string[]) => {
+      const result = runCli(bundlePath, ["render", "--json", ...flags, "og.render.mjs"], cwd);
+      expect(result.stderr).toBe("");
+      expect(result.status).toBe(0);
+      const report = JSON.parse(result.stdout) as { images: (ManifestImage & { reused: boolean })[] };
+      return Object.fromEntries(report.images.map((image) => [image.path, image.reused]));
+    };
+    const all = (reused: boolean) => ({
+      "a/og-image.png": reused,
+      "a/og-image-square.png": reused,
+      "b/og-image.png": reused,
+      "b/og-image-square.png": reused,
+    });
+
+    // No manifest yet: everything renders.
+    expect(run("--incremental")).toEqual(all(false));
+    expect(run("--incremental")).toEqual(all(true));
+
+    await writeFile(path.join(cwd, "titles.json"), JSON.stringify({ a: "A, edited", b: "B" }));
+    expect(run("--incremental")).toEqual({ ...all(true), "a/og-image.png": false, "a/og-image-square.png": false });
+
+    // A file changed on disk since the manifest was written is rendered again.
+    await writeFile(path.join(cwd, "public", "b", "og-image.png"), completePng(1080, 1080));
+    expect(run("--incremental")).toEqual({ ...all(true), "b/og-image.png": false });
+
+    // A new plate fingerprint (as from a changed revision) invalidates every image.
+    await writeFile(path.join(cwd, "revision.txt"), "2");
+    expect(run("--incremental")).toEqual(all(false));
+
+    // Without the flag, everything renders, as before.
+    expect(run()).toEqual(all(false));
+
+    const human = runCli(bundlePath, ["render", "--incremental", "og.render.mjs"], cwd);
+    expect(human.status).toBe(0);
+    expect(human.stdout).toContain("✓ a/og-image.png 1200x630 png (");
+    expect(human.stdout).toContain(" bytes, unchanged)");
+    expect(human.stdout).toContain("Rendered 0 and reused 4 unchanged of 4 images into public; manifest public/metaplate-manifest.json");
+  });
+
+  it("with --incremental, warns about a manifest it cannot read and renders everything", async () => {
+    const cwd = await project({
+      "og.render.mjs": fakeModule(`export default { plate: plate({ fingerprint: "1" }), pages: [{ copy: {} }] };`),
+    });
+    await mkdir(path.join(cwd, "public"));
+    await writeFile(path.join(cwd, "public", "metaplate-manifest.json"), "not json");
+    const result = runCli(bundlePath, ["render", "--incremental", "og.render.mjs"], cwd);
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain("is not a schemaVersion 1 render manifest; rendering every image");
+    expect(result.stdout).toContain("Rendered 2 images into public");
+  });
+
   // Type stripping is on by default from Node 22.18 and 23.6; Node 20 has none.
   const strips = Boolean((process.features as { typescript?: unknown }).typescript);
   it.runIf(strips)("loads a TypeScript module through Node's type stripping", async () => {
@@ -619,5 +740,172 @@ export default { plate: plate(), pages };
     const enumResult = runCli(bundlePath, ["render", "enum.ts"], cwd);
     expect(enumResult.status).toBe(1);
     expect(enumResult.stderr).toContain("Node strips only erasable TypeScript syntax");
+  });
+});
+
+const NO_PEERS: PeerVersions = { satori: null, "@resvg/resvg-js": null, "@resvg/resvg-wasm": null };
+
+describe("incremental inputs", () => {
+  const out = path.resolve("render-out");
+  const plan = (plate: RenderablePlate<unknown>, copy: unknown, route = "/a") =>
+    planImages([{ plate: plate.variant("square"), pages: [{ route, copy }] }], out)[0]!;
+
+  it("hashes the route, size, plate fingerprint, peers, and copy", async () => {
+    const plate = fakePlate({ fingerprint: "v1" });
+    const base = await inputHash(plan(plate, { title: "A", tags: ["x"] }), NO_PEERS);
+    expect(base).toMatch(/^[0-9a-f]{64}$/);
+    // Key order is not data.
+    expect(await inputHash(plan(plate, { tags: ["x"], title: "A" }), NO_PEERS)).toBe(base);
+    const changed = await Promise.all([
+      inputHash(plan(plate, { title: "B", tags: ["x"] }), NO_PEERS),
+      inputHash(plan(plate, { title: "A", tags: ["x"] }, "/b"), NO_PEERS),
+      inputHash(plan(fakePlate({ fingerprint: "v2" }), { title: "A", tags: ["x"] }), NO_PEERS),
+      inputHash(plan(plate, { title: "A", tags: ["x"] }), { ...NO_PEERS, satori: "0.63.2" }),
+      inputHash(planImages([{ plate, pages: [{ route: "/a", copy: { title: "A", tags: ["x"] } }] }], out)[0]!, NO_PEERS),
+    ]);
+    expect(new Set([base, ...changed]).size).toBe(changed.length + 1);
+  });
+
+  it("records no hash for a plate without a fingerprint or copy that cannot be serialized", async () => {
+    expect(await inputHash(plan(fakePlate(), { title: "A" }), NO_PEERS)).toBeNull();
+    const cycle: Record<string, unknown> = {};
+    cycle.self = cycle;
+    const plate = fakePlate({ fingerprint: "v1" });
+    expect(await inputHash(plan(plate, cycle), NO_PEERS)).toBeNull();
+    expect(await inputHash(plan(plate, { when: new (class Moment {})() }), NO_PEERS)).toBeNull();
+  });
+
+  it("reads installed peer versions from the module's location, and null where none are installed", async () => {
+    const installed = async (name: string) =>
+      JSON.parse(await readFile(path.join("node_modules", ...name.split("/"), "package.json"), "utf8")).version;
+    // @resvg/resvg-wasm does not export its package.json, so it is found from its entry.
+    expect(await peerVersions(path.resolve("og.render.mjs"))).toEqual({
+      satori: await installed("satori"),
+      "@resvg/resvg-js": await installed("@resvg/resvg-js"),
+      "@resvg/resvg-wasm": await installed("@resvg/resvg-wasm"),
+    });
+    const elsewhere = await temporary("peers");
+    expect(await peerVersions(path.join(elsewhere, "og.render.mjs"))).toEqual(NO_PEERS);
+  });
+
+  it("reads a previous manifest's reusable entries and warns about one it cannot use", async () => {
+    const dir = await temporary("previous");
+    const warnings: string[] = [];
+    const warn = (message: string) => warnings.push(message);
+    expect((await readPreviousManifest(path.join(dir, "absent.json"), warn)).size).toBe(0);
+    expect(warnings).toEqual([]);
+
+    const entry = {
+      path: "a/og.png", url: "/a/og.png", route: "/a", variant: null, size: LANDSCAPE, format: "png",
+      contentType: "image/png", bytes: 10, sha256: "a".repeat(64), verified: true, inputHash: "b".repeat(64),
+    };
+    const file = path.join(dir, "manifest.json");
+    // An entry from before inputHash existed, or with a malformed field, is never reused.
+    await writeFile(file, JSON.stringify({
+      schemaVersion: 1,
+      images: [entry, { ...entry, path: "b/og.png", inputHash: undefined }, { ...entry, path: "c/og.png", bytes: -1 }],
+    }));
+    expect([...(await readPreviousManifest(file, warn)).keys()]).toEqual(["a/og.png"]);
+
+    await writeFile(file, "{");
+    expect((await readPreviousManifest(file, warn)).size).toBe(0);
+    await writeFile(file, JSON.stringify({ schemaVersion: 2, images: [entry] }));
+    expect((await readPreviousManifest(file, warn)).size).toBe(0);
+    const foreign = `The previous manifest ${file} is not a schemaVersion 1 render manifest; rendering every image`;
+    expect(warnings).toEqual([foreign, foreign]);
+  });
+
+  it("writes a file atomically through a temporary sibling it never leaves behind", async () => {
+    const dir = await temporary("atomic");
+    const file = path.join(dir, "nested", "manifest.json");
+    await writeFileAtomic(file, "first\n");
+    await writeFileAtomic(file, "second\n");
+    expect(await readFile(file, "utf8")).toBe("second\n");
+    expect(await readdir(path.dirname(file))).toEqual(["manifest.json"]);
+    // A target that cannot be replaced fails without leaving the temporary file.
+    await mkdir(path.join(dir, "taken"));
+    await expect(writeFileAtomic(path.join(dir, "taken"), "x")).rejects.toThrow();
+    expect((await readdir(dir)).sort()).toEqual(["nested", "taken"]);
+  });
+});
+
+describe("renderFiles with a previous manifest", () => {
+  function countingPlate(options: FakeOptions = {}) {
+    const counter = { renders: 0 };
+    const plate = fakePlate({
+      fingerprint: "v1",
+      variants: [],
+      ...options,
+      artifact: async () => {
+        counter.renders += 1;
+        return completePng(1200, 630);
+      },
+    });
+    return { plate, counter };
+  }
+
+  async function firstRun(options: FakeOptions = {}) {
+    const out = await temporary("reuse");
+    const { plate } = countingPlate(options);
+    const pages = [{ route: "/a", copy: { title: "A" } }, { route: "/b", copy: { title: "B" } }];
+    const outcomes = await renderFiles(planImages([{ plate, pages }], out), { outDir: out, concurrency: 2 });
+    const previous = new Map((outcomes as ManifestImage[]).map((image) => [image.path, image]));
+    return { out, pages, previous };
+  }
+
+  it("reuses an unchanged image whose file still matches, and records its current URL", async () => {
+    const { out, pages, previous } = await firstRun();
+    const { plate, counter } = countingPlate({ base: "https://example.com" });
+    const outcomes = await renderFiles(planImages([{ plate, pages }], out), { outDir: out, concurrency: 2, previous });
+    expect(counter.renders).toBe(0);
+    expect(outcomes.map((outcome) => outcome.valid && outcome.reused)).toEqual([true, true]);
+    expect(outcomes[0]).toMatchObject({
+      url: "https://example.com/a/og-image.png",
+      sha256: previous.get("a/og-image.png")!.sha256,
+      inputHash: previous.get("a/og-image.png")!.inputHash,
+    });
+  });
+
+  it("re-renders an image whose input changed or whose file no longer matches the manifest", async () => {
+    const { out, previous } = await firstRun();
+    // A file edited after the build hashes differently, so it is not trusted.
+    await writeFile(path.join(out, "b", "og-image.png"), completePng(1080, 1080));
+    const { plate, counter } = countingPlate();
+    const pages = [{ route: "/a", copy: { title: "A, edited" } }, { route: "/b", copy: { title: "B" } }];
+    const outcomes = await renderFiles(planImages([{ plate, pages }], out), { outDir: out, concurrency: 1, previous });
+    expect(outcomes.map((outcome) => outcome.valid && outcome.reused)).toEqual([false, false]);
+    expect(counter.renders).toBe(2);
+    const restored = await readFile(path.join(out, "b", "og-image.png"));
+    expect(sha256(restored)).toBe(previous.get("b/og-image.png")!.sha256);
+  });
+
+  it("records a reused image under the same versioned URL a render would publish", { timeout: 30_000 }, async () => {
+    const out = await temporary("reuse-versioned");
+    const og = createNodeOg<Copy>({
+      alt: (copy) => copy.title,
+      fonts: inter,
+      imagePath: "og-image.png",
+      component: card,
+      origin: "https://example.com",
+      version: "copy",
+      revision: "1",
+    }) as RenderablePlate<Copy> as RenderablePlate<unknown>;
+    const pages = [{ route: "/derived", copy: { title: "A" } }, { route: "/pinned", copy: { title: "B" }, version: "rel-7" }];
+    const first = await renderFiles(planImages([{ plate: og, pages }], out), { outDir: out, concurrency: 2 });
+    const previous = new Map((first as ManifestImage[]).map((image) => [image.path, image]));
+    const second = await renderFiles(planImages([{ plate: og, pages }], out), { outDir: out, concurrency: 2, previous });
+    expect(second.map((outcome) => outcome.valid && outcome.reused)).toEqual([true, true]);
+    expect(second.map((outcome) => outcome.valid && outcome.url)).toEqual((first as ManifestImage[]).map((image) => image.url));
+    expect((second[0] as ManifestImage).url).toMatch(/^https:\/\/example\.com\/derived\/og-image\.png\?v=[0-9a-f]{8}$/);
+    expect((second[1] as ManifestImage).url).toBe("https://example.com/pinned/og-image.png?v=rel-7");
+  });
+
+  it("never reuses for a plate without a fingerprint", async () => {
+    const { out, pages, previous } = await firstRun({ fingerprint: undefined });
+    expect(previous.get("a/og-image.png")!.inputHash).toBeNull();
+    const { plate, counter } = countingPlate({ fingerprint: undefined });
+    const outcomes = await renderFiles(planImages([{ plate, pages }], out), { outDir: out, concurrency: 1, previous });
+    expect(outcomes.map((outcome) => outcome.valid && outcome.reused)).toEqual([false, false]);
+    expect(counter.renders).toBe(2);
   });
 });

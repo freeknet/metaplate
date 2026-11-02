@@ -85,9 +85,14 @@ export type PlateVersioning = {
   /** `"copy"` derives each card's URL version from its copy and `revision`. */
   version?: "copy";
   /**
-   * The design's revision, folded into every derived version. Bump it when
-   * the component changes how existing copy looks, so unchanged copy still
-   * gets new URLs. Requires `version: "copy"`.
+   * Names the design's current version, such as a release number or a hash
+   * of the plate's source files. Bump it when the design changes in a way the
+   * plate cannot see for itself, such as a helper the component imports or a
+   * theme it closes over. It is part of `fingerprint()` on `metaplate/node`
+   * and `metaplate/edge` plates, so a bump invalidates `cached()` entries and
+   * `metaplate render --incremental` reuse; with `version: "copy"` it is also
+   * folded into every derived URL version, so unchanged copy gets new URLs.
+   * Valid with or without `version`.
    */
   revision?: string;
 };
@@ -125,7 +130,6 @@ function plateVersion<Copy>(definition: PlateVersioning) {
     if (typeof revision !== "string" || revision === "") {
       throw new Error(`Invalid revision: expected a non-empty string; received ${JSON.stringify(revision)}`);
     }
-    if (mode !== "copy") throw new Error('revision requires version: "copy"');
   }
   return (copy: Copy, options: PlateUrlOptions | undefined): Pick<SocialImageOptions, "version"> => {
     const version = options?.version ?? (mode === "copy" ? socialImageVersion(copy, revision) : undefined);

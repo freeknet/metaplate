@@ -1840,7 +1840,7 @@ export const GET: RequestHandler = og.handlerFrom(({ params }) => ({
     pathToFileURL(join(standalone, "node_modules", "metaplate", "dist", "image.js")).href
   );
 
-  function verifyRenderedSite(label, module, extraArgs = []) {
+  function verifyRenderedSite(label, module, extraArgs = [], expectReused = false) {
     const out = join(standalone, `site-${label}`);
     const rendered = spawnSync(
       process.execPath,
@@ -1869,7 +1869,9 @@ export const GET: RequestHandler = og.handlerFrom(({ params }) => ({
         entry.sha256 !== sha256 ||
         entry.size.width !== image.width ||
         entry.size.height !== image.height ||
-        report.images[index]?.valid !== true
+        !/^[0-9a-f]{64}$/.test(entry.inputHash ?? "") ||
+        report.images[index]?.valid !== true ||
+        report.images[index]?.reused !== expectReused
       ) {
         throw new Error(`Packed metaplate render (${label}) manifest disagrees with ${path}: ${JSON.stringify(entry)}`);
       }
@@ -1879,6 +1881,10 @@ export const GET: RequestHandler = og.handlerFrom(({ params }) => ({
     }
   }
   verifyRenderedSite("mjs", "og.render.mjs");
+  // A second run over the same tree with --incremental proves the packed
+  // plate fingerprints and the installed peers resolve identically: every
+  // image is reused, and the rewritten manifest still matches the files.
+  verifyRenderedSite("mjs", "og.render.mjs", ["--incremental"], true);
 
   // Node strips types by default on every version the full gate runs (22.18+),
   // so the packed CLI must load a TypeScript module with no compiler at all.
