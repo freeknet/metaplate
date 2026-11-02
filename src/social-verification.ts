@@ -6,6 +6,7 @@ import {
   type SocialCompatibilityReport,
 } from "./compatibility.js";
 import { imageContentType, imageDimensions, type ImageFormat } from "./image.js";
+import { integerOption } from "./internal.js";
 
 export type SocialImageVerificationOptions = Omit<SocialCompatibilityOptions, "fileSize" | "checkUrl" | "checkAlt"> & {
   /** Optional application-specific byte ceiling, measured from encoded bytes. */
@@ -59,10 +60,7 @@ export function verifySocialImage(
     }
     assertImageSize({ width: descriptor.width, height: descriptor.height });
   }
-  if (options.maxFileSize !== undefined &&
-      (!Number.isInteger(options.maxFileSize) || options.maxFileSize < 0)) {
-    throw new Error(`maxFileSize must be a non-negative integer; received ${options.maxFileSize}`);
-  }
+  integerOption("maxFileSize", options.maxFileSize, 0);
 
   const compatibilityDescriptor = {
     ...descriptor,

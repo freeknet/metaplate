@@ -5,17 +5,31 @@ import {
   createRasterPlate,
   type ResvgRenderOptions,
 } from "./raster.js";
+import type { RasterRenderGuards } from "./guards.js";
 import type { SvgOgDefinition } from "./render.js";
 import type { SatoriRender } from "./svg-plate.js";
 
 export type { RenderedPixels } from "./raster.js";
 
+export {
+  RenderGuardError,
+  type RasterRenderGuards,
+  type RenderGuardBox,
+  type RenderGuardIssue,
+  type RenderGuardLevel,
+  type RenderGuardName,
+  type RenderGuards,
+} from "./guards.js";
+
 export type {
   PlateContext,
+  PlateElement,
   PlateMetadataOptions,
   PlateRouteOptions,
+  PlateUrlOptions,
   PlateVariant,
   PlateVariants,
+  PlateVersioning,
   PlateView,
   SignedRouteOptions,
 } from "./plate.js";
@@ -67,6 +81,11 @@ export type EdgeOgDefinition<Copy, Variant extends string = string> = SvgOgDefin
   /** Adds a strong SHA-256 ETag, computed with Web Crypto, to responses. */
   etag?: boolean | "sha256";
   /**
+   * Render guards, plus `blank`, which fails or reports a rasterised image
+   * whose every pixel is one color. All off by default.
+   */
+  guards?: RasterRenderGuards;
+  /**
    * Not supported: `metaplate/edge` emits PNG only, because
    * `@resvg/resvg-wasm` has no JPEG or WebP encoder. Use `renderPixels` with
    * a Wasm encoder, or `metaplate/node` and its `output` encoders.
@@ -79,15 +98,22 @@ type SatoriStandalone = Awaited<ReturnType<typeof loadSatoriStandalone>>;
 
 /**
  * Both Wasm modules are process-wide singletons inside their packages, so the
- * first source supplied for each wins and later ones are ignored.
+ * first source supplied for each wins and later ones are ignored, unless that
+ * source failed to initialise: then the next source supplied replaces it, so
+ * a corrected module takes effect without restarting the isolate. Until one
+ * arrives, renders retry the failed source, which recovers a transient fetch.
  */
-type WasmSlot = { source?: EdgeWasmSource; ready?: Promise<void> | undefined };
+type WasmSlot = { source?: EdgeWasmSource; ready?: Promise<void> | undefined; failed?: boolean };
 
 const resvgSlot: WasmSlot = {};
 const layoutSlot: WasmSlot = {};
 
 function provide(slot: WasmSlot, source: EdgeWasmSource | undefined): void {
-  if (source !== undefined) slot.source ??= source;
+  if (source === undefined) return;
+  if (slot.source === undefined || slot.failed) {
+    slot.source = source;
+    slot.failed = false;
+  }
 }
 
 async function resolveWasm(source: EdgeWasmSource): Promise<EdgeWasmModule> {
@@ -110,6 +136,7 @@ function initialise(
     .then(init)
     .catch((error: unknown) => {
       slot.ready = undefined;
+      slot.failed = true;
       throw error;
     });
   return slot.ready;
@@ -156,7 +183,7 @@ async function loadSatori(): Promise<SatoriRender> {
   }) as SatoriRender;
 }
 
-const EDGE_RUNTIMES_DOC = "https://github.com/lnorton89/metaplate#edge-runtimes-with-metaplateedge";
+const EDGE_RUNTIMES_DOC = "https://github.com/lnorton89/metaplate/blob/main/docs/edge.md#edge-runtimes-with-metaplateedge";
 
 /**
  * Satori's standalone build shapes text with a bundled HarfBuzz Emscripten

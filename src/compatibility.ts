@@ -1,4 +1,5 @@
 import { assertImageSize, type SocialImageDescriptor } from "./core.js";
+import { integerOption } from "./internal.js";
 import {
   SOCIAL_COMPATIBILITY_PROFILES,
   SOCIAL_TARGETS,
@@ -93,16 +94,11 @@ export function socialImageCompatibility(
     throw new TypeError("social compatibility requires image width and height");
   }
   assertImageSize({ width: image.width, height: image.height });
-  if (
-    options.fileSize !== undefined &&
-    (!Number.isInteger(options.fileSize) || options.fileSize < 0)
-  ) {
-    throw new Error(`fileSize must be a non-negative integer; received ${options.fileSize}`);
-  }
+  integerOption("fileSize", options.fileSize, 0);
 
   const targets = [...new Set(options.targets ?? ["universal"] as const)];
   for (const target of targets) {
-    if (!ALL_TARGETS.has(target)) throw new Error(`Unknown social target: ${target}`);
+    if (!ALL_TARGETS.has(target)) throw new TypeError(`Unknown social target: ${target}`);
   }
   const issues: SocialCompatibilityIssue[] = [];
   const type = image.type?.toLowerCase();
