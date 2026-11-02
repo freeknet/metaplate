@@ -146,9 +146,12 @@ your cards contain; Metaplate never does it by default.
 
 `emoji?: EmojiLoader` on `createSvgOg`, `createNodeOg`, and `createEdgeOg`
 definitions. When set, Metaplate supplies Satori's `loadAdditionalAsset`:
-emoji go to the loader first; every other language code, and any emoji the
-loader has no image for, go to `satori.loadAdditionalAsset` when the
-definition also has one, or are left to the plate's fonts otherwise.
+emoji go to the loader first; every other language code goes to the
+`languageFonts` option when the plate has one (see
+[Other scripts](fonts.md#composition-with-emoji-and-loadadditionalasset));
+whatever neither resolves, including any emoji the loader has no image for,
+goes to `satori.loadAdditionalAsset` when the definition also has one, or is
+left to the plate's fonts otherwise.
 
 ### `metaplate/fonts` (Node-compatible runtimes)
 

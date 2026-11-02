@@ -61,23 +61,33 @@ async function renderSvg<Copy, Variant extends string>(
 }
 
 /**
- * Routes Satori's emoji requests through the plate's emoji loader. Every other
- * language code, and an emoji the loader has no image for, goes to the
- * caller's own `loadAdditionalAsset` when there is one; otherwise an empty
- * font list tells Satori to draw the segment with the fonts it has.
+ * Composes Satori's `loadAdditionalAsset` from the plate's options. Each
+ * request is offered, in this order, to:
+ *
+ * 1. `emoji`, for the `emoji` language code: an image resolves the grapheme;
+ * 2. `languageFonts`, for every other code: a non-empty font list resolves
+ *    the segment;
+ * 3. the caller's own `satori.loadAdditionalAsset`, for anything the steps
+ *    above did not resolve.
+ *
+ * Without a caller loader, an empty font list tells Satori to draw the
+ * segment with the fonts it has.
  */
 function satoriOptions<Copy, Variant extends string>(
   definition: SvgOgDefinition<Copy, Variant>,
 ): SatoriOptions | undefined {
-  const { emoji, satori } = definition;
-  if (!emoji) return satori;
+  const { emoji, languageFonts, satori } = definition;
+  if (!emoji && !languageFonts) return satori;
   const fallback = satori?.loadAdditionalAsset;
   return {
     ...satori,
     loadAdditionalAsset: async (languageCode, segment) => {
       if (languageCode === "emoji") {
-        const image = await emoji(segment);
+        const image = await emoji?.(segment);
         if (image !== undefined) return image;
+      } else if (languageFonts) {
+        const fonts = await languageFonts(languageCode, segment);
+        if (fonts.length > 0) return fonts;
       }
       return fallback ? fallback(languageCode, segment) : [];
     },
