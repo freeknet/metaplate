@@ -29,6 +29,7 @@ export type {
 
 export type {
   PlateContext,
+  PlateElement,
   PlateMetadataOptions,
   PlateUrlOptions,
   PlateVariant,

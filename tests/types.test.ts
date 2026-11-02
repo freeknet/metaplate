@@ -22,6 +22,7 @@ import {
 import {
   createSvgOg,
   type PlateContext,
+  type PlateElement,
   type SatoriNode,
   type SatoriOptions,
   type SvgOgDefinition,
@@ -102,6 +103,30 @@ createSvgOg<Copy>({ alt: (copy) => copy.title, fonts, component: (copy) => copy.
 createNodeOg(legacyNode);
 createNextOg(legacyNext);
 createNextOg<Copy>({ alt: (copy) => copy.title, component: () => null as unknown as ReactElement });
+
+// Components may be async everywhere a component is accepted; the element a
+// promise resolves to is held to the same type as a synchronous result.
+const asyncSvg: SvgOgDefinition<Copy> = {
+  ...legacySvg,
+  component: async (copy) => legacyCard(copy),
+};
+const asyncNode: NodeOgDefinition<Copy, "square"> = {
+  ...legacySvg,
+  variants: { square: { size: { width: 1080, height: 1080 } } },
+  component: async (copy, context) => `${copy.title} ${context.variant ?? "default"}`,
+};
+createSvgOg(asyncSvg);
+createNodeOg(asyncNode);
+createNextOg<Copy>({ alt: (copy) => copy.title, component: async () => null as unknown as ReactElement });
+const thenable: PlateElement<SatoriNode> = Promise.resolve("text");
+void thenable;
+
+export function asyncElementsAreChecked() {
+  // @ts-expect-error -- a promise must still resolve to a Satori element tree.
+  createSvgOg<Copy>({ alt: (copy) => copy.title, fonts, component: async () => ({ notAnElement: true }) });
+  // @ts-expect-error -- the Next adapter's promise must resolve to a React element.
+  createNextOg<Copy>({ alt: (copy) => copy.title, component: async () => 42 });
+}
 
 // Without explicit type arguments, variant names are inferred from the
 // declaration: the component's context and `plate.variant` both use them.
