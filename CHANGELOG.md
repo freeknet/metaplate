@@ -21,6 +21,18 @@ All notable changes to Metaplate are documented in this file. The project uses
   `nextPageMetadata` (Next `openGraph` fields plus `og:pubdate` through
   `other`), `nextPageViewport` (`themeColor` for Next's `viewport` export),
   and `NEXT_OPEN_GRAPH_TYPES`. See `docs/metadata.md#page-level-tags`.
+- Opt-in cache-busting image URLs. `socialImageMetadata` and `socialImage`
+  accept `version`, a token of 1 to 64 URI-unreserved characters appended as
+  `?v=<version>` to every image URL they build (default and variants, Open
+  Graph and X), and so to `socialMetaTags`, JSON-LD, and Adaptive Cards.
+  `socialImageVersion(copy, revision?)` derives an eight-hex-digit token from
+  a stable serialization of the copy (32-bit FNV-1a, synchronous and
+  runtime-neutral). Plates take `version: "copy"` and a design `revision`, and
+  `metadata`, `image`, and `artifact` take a per-call `{ version }`; a
+  `metaplate render` page may name its own `version`, and the manifest `url`
+  carries the token. `socialImagePath`, `sitePath`, and rendered file paths
+  never do, and `route`, `basePath`, and `imagePath` still reject queries. See
+  [`docs/metadata.md`](docs/metadata.md#versioned-image-urls).
 - `metaplate render <module>` renders static social images as a build step.
   The module's default export is `{ plate, pages: [{ route?, copy }] }`, an
   array of those, or a function returning either; a `createNodeOg` or

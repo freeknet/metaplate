@@ -20,6 +20,8 @@ export {
   type XImageOptions,
 } from "./core.js";
 
+export { IMAGE_VERSION_PARAMETER, socialImageVersion } from "./image-version.js";
+
 export {
   socialImageCompatibility,
   type CompatibilitySeverity,
