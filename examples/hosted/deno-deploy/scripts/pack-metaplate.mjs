@@ -7,13 +7,14 @@ import { createHash } from "node:crypto";
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { npmPackResult } from "../../../../scripts/npm-pack-result.mjs";
 
 const here = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const root = resolve(here, "../../..");
 const run = (command, cwd) => execSync(command, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
 
 run("npm run build", root);
-const [packed] = JSON.parse(run(`npm pack --json --pack-destination "${here}"`, root));
+const packed = npmPackResult(run(`npm pack --json --pack-destination "${here}"`, root));
 const tarball = join(here, "metaplate.tgz");
 renameSync(join(here, packed.filename), tarball);
 

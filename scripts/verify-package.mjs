@@ -33,6 +33,7 @@ import {
   nextPeerGuidanceSmoke,
   packageEntrySpecifiers,
 } from "./package-fixtures.mjs";
+import { npmPackResult } from "./npm-pack-result.mjs";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const temporary = mkdtempSync(join(tmpdir(), "metaplate-package-"));
@@ -459,11 +460,9 @@ async function verifyDynamicImageRoute(base, paths, { contentType, format, cache
 }
 
 try {
-  const packed = JSON.parse(
-    run(["pack", "--json", "--pack-destination", temporary]),
-  );
-  const archive = join(temporary, packed[0].filename);
-  const paths = new Set(packed[0].files.map((file) => file.path));
+  const packed = npmPackResult(run(["pack", "--json", "--pack-destination", temporary]));
+  const archive = join(temporary, packed.filename);
+  const paths = new Set(packed.files.map((file) => file.path));
 
   if (!paths.has(manifest.bin.metaplate.replace(/^\.\//, ""))) {
     throw new Error(`Package is missing its CLI entry: ${manifest.bin.metaplate}`);
@@ -1884,7 +1883,7 @@ export const GET: RequestHandler = og.handlerFrom(({ params }) => ({
 
   writeFileSync(join(root, "deployment-contract-evidence.json"), `${JSON.stringify(routeEvidence, null, 2)}\n`);
   process.stdout.write(
-    `Verified ${packed[0].filename} exports, CLI, and all consumer installs.\n`,
+    `Verified ${packed.filename} exports, CLI, and all consumer installs.\n`,
   );
 } finally {
   rmSync(temporary, { recursive: true, force: true });
