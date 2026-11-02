@@ -235,6 +235,8 @@ describe("planImages", () => {
       { plate, pages: [{ route: "/Docs", copy: 1 }] },
       { plate, pages: [{ route: "/docs", copy: 2 }] },
     ], out)).toThrow("both write docs/og-image.png");
+    expect(() => planImages([{ plate, pages: [{ route: "", copy: 1 }, { route: "/", copy: 2 }] }], out))
+      .toThrow('Invalid render module: / and "" both write og-image.png');
   });
 
   it("rejects dot-segment routes through the plate's own path rules", () => {
@@ -360,6 +362,25 @@ describe("renderFiles", { timeout: 30_000 }, () => {
       sha256: sha256(avif),
       verified: false,
     });
+  });
+
+  it("refuses a file name a static host would serve as the wrong type", async () => {
+    const out = await temporary("extension");
+    const plate = fakePlate({
+      variants: [],
+      sitePath: (route) => (route === "/bare" ? "bare/og-image" : route === "/jpeg" ? "jpeg/og.jpg" : "ok/og.PNG"),
+    });
+    const pages = [{ route: "/bare", copy: 1 }, { route: "/jpeg", copy: 2 }, { route: "/ok", copy: 3 }];
+    const outcomes = await renderFiles(planImages([{ plate, pages }], out), { outDir: out, concurrency: 1 });
+    expect(outcomes.map((outcome) => [outcome.path, outcome.valid])).toEqual([
+      ["bare/og-image", false],
+      ["jpeg/og.jpg", false],
+      ["ok/og.PNG", true],
+    ]);
+    expect(outcomes[0]!.issues[0]!.message).toContain('has no file extension');
+    expect(outcomes[0]!.issues[0]!.message).toContain('"og-image.png"');
+    expect(outcomes[1]!.issues[0]!.message).toContain("ends in .jpg, but the plate encodes image/png");
+    expect(existsSync(path.join(out, "bare", "og-image"))).toBe(false);
   });
 
   it("never runs more renders at once than the concurrency limit", async () => {

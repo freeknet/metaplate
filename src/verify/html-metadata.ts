@@ -384,8 +384,8 @@ type HtmlDecoder = { decode(bytes: Uint8Array): string };
 
 /** What windows-1252 maps bytes 0x80-0x9F to; five bytes map to themselves. */
 const WINDOWS_1252_HIGH =
-  "€‚ƒ„…†‡ˆ‰Š‹ŒŽ" +
-  "‘’“”•–—˜™š›œžŸ";
+  "\u20ac\x81\u201a\u0192\u201e\u2026\u2020\u2021\u02c6\u2030\u0160\u2039\u0152\x8d\u017d\x8f" +
+  "\x90\u2018\u2019\u201c\u201d\u2022\u2013\u2014\u02dc\u2122\u0161\u203a\u0153\x9d\u017e\u0178";
 
 /**
  * Node 20 decodes windows-1252 as ISO-8859-1, leaving bytes 0x80-0x9F as C1
@@ -393,10 +393,10 @@ const WINDOWS_1252_HIGH =
  * is returned unchanged.
  */
 function windows1252(decoder: TextDecoder): HtmlDecoder {
-  if (decoder.decode(Uint8Array.of(0x80)) === "€") return decoder;
+  if (decoder.decode(Uint8Array.of(0x80)) === "\u20ac") return decoder;
   return {
     decode: (bytes) =>
-      decoder.decode(bytes).replace(/[-]/g, (c) => WINDOWS_1252_HIGH[c.charCodeAt(0) - 0x80]!),
+      decoder.decode(bytes).replace(/[\x80-\x9f]/g, (c) => WINDOWS_1252_HIGH[c.charCodeAt(0) - 0x80]!),
   };
 }
 

@@ -96,6 +96,43 @@ describe("socialImageCompatibility", () => {
     }
   });
 
+  it("applies X's documented Card image requirements", () => {
+    // Archived Summary and Summary with Large Image Card references.
+    const x = (image: Partial<SocialImageDescriptor>, fileSize = 4_999_999) =>
+      socialImageCompatibility({ ...png, ...image }, { targets: ["x"], fileSize });
+
+    // At every limit, in each supported format.
+    for (const type of ["image/png", "image/jpeg", "image/webp", "image/gif"]) {
+      expect(x({ type })).toEqual({ compatible: true, issues: [] });
+    }
+    expect(x({ width: 4096, height: 4096, alt: "a".repeat(420) })).toEqual({ compatible: true, issues: [] });
+    // 144x144 suits a summary card, so it is only a warning for the large card.
+    expect(x({ width: 144, height: 144 })).toEqual({
+      compatible: true,
+      issues: [expect.objectContaining({ severity: "warning", code: "dimensions", message: expect.stringMatching(/300x157/) })],
+    });
+    const untyped = { url: png.url, width: png.width, height: png.height, alt: "Card" };
+    expect(socialImageCompatibility(untyped, { targets: ["x"] }).issues).toEqual([
+      expect.objectContaining({ severity: "warning", code: "format" }),
+    ]);
+
+    const rejected = [
+      [x({ url: "https://example.com/card.svg", type: "image/svg+xml" }), "format", /not SVG/],
+      [x({ width: 143, height: 200 }), "dimensions", /at least 144x144/],
+      [x({ width: 4097, height: 2000 }), "dimensions", /at most 4096x4096.*Received 4097x2000/],
+      [x({}, 5_000_000), "file-size", /less than 5MB/],
+      // Alt text is counted in characters, not UTF-16 code units.
+      [x({ alt: "😀".repeat(421) }), "contract", /420 characters\. Received 421/],
+    ] as const;
+    for (const [report, code, message] of rejected) {
+      expect(report.compatible).toBe(false);
+      expect(report.issues).toEqual([
+        expect.objectContaining({ target: "x", severity: "error", code, message: expect.stringMatching(message) }),
+      ]);
+    }
+    expect(x({ alt: "😀".repeat(420) }).compatible).toBe(true);
+  });
+
   it("warns when an image exceeds Bluesky's card thumbnail blob limit", () => {
     // https://bsky.network/docs/about-bluesky-content/posts#website-card-embeds
     const bluesky = (fileSize: number) =>

@@ -8,6 +8,16 @@ import {
 } from "../../src/index.js";
 
 describe("socialImagePath", () => {
+  it("percent-encodes a relative path exactly as the absolute URL does", () => {
+    for (const route of ["/a b", "/caf\u00e9", "/nul\u0000x", "/already%20encoded"]) {
+      const relative = socialImagePath(route, "og-image.png");
+      expect(relative).toBe(new URL(socialImagePath(route, "og-image.png", "", "https://example.com")).pathname);
+      // Only printable ASCII remains; everything else is percent-encoded.
+      expect(relative).toMatch(/^[!-~]+$/);
+    }
+    expect(socialImagePath("/a b")).toBe("/a%20b/og-image");
+  });
+
   it.each([
     ["/", "/og-image"],
     ["", "/og-image"],
