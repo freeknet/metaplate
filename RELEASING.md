@@ -4,7 +4,7 @@ GitHub Releases are the user-facing home for each version. They must explain why
 
 ## Prepare the release
 
-1. Update `package.json`, `package-lock.json`, `src/version.ts`, and `CHANGELOG.md` to the same version.
+1. Update `package.json`, `package-lock.json`, `src/core/version.ts`, and `CHANGELOG.md` to the same version.
 2. Copy `.github/RELEASE_TEMPLATE.md` to `.github/releases/vX.Y.Z.md`.
    `npm run check` validates the notes file for the version in `package.json`,
    so the bump in step 1 fails the local gate until this file exists.
@@ -28,8 +28,8 @@ GitHub Releases are the user-facing home for each version. They must explain why
    and verify its SHA-256 against `provenance.inputSha256`.
 
    The Socket baseline is the last published version:
-   `scripts/verify-socket-dispositions.mjs` pins the accepted report version,
-   and `scripts/verify-deployment-evidence.mjs` pins the release being
+   `scripts/supply-chain/verify-socket-dispositions.mjs` pins the accepted report version,
+   and `scripts/release/verify-deployment-evidence.mjs` pins the release being
    certified. Move both pins forward as part of step 1 so a stale artifact
    cannot pass as current evidence.
 6. Include explicit upgrade advice and write `None.` under breaking changes when there is no migration.
@@ -42,7 +42,7 @@ GitHub Releases are the user-facing home for each version. They must explain why
    npm run check:deployment
    npm run check:workflows
    npm run release:evidence
-   node scripts/verify-socket-dispositions.mjs
+   node scripts/supply-chain/verify-socket-dispositions.mjs
    ```
 
    `npm run check` validates the current version's release notes and rejects missing sections, placeholders, mismatched install commands, and generated-note-only bodies.

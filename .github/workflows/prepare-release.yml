@@ -42,7 +42,7 @@ jobs:
             exit 1
           fi
           notes=".github/releases/$RELEASE_TAG.md"
-          node scripts/validate-release-notes.mjs "$notes" "$version"
+          node scripts/release/validate-release-notes.mjs "$notes" "$version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "notes=$notes" >> "$GITHUB_OUTPUT"
 

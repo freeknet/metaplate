@@ -28,7 +28,7 @@
       "api": "metaplate/node handlerFrom as a named GET export over Web Request/Response",
       "status": "certified",
       "evidence": ".planning/hosted-evidence/vercel-2026-11-01.json; fixture examples/hosted/vercel/function",
-      "localContractEvidence": "scripts/verify-package.mjs packed-artifact deployment fixture",
+      "localContractEvidence": "scripts/package/verify-package.mjs packed-artifact deployment fixture",
       "runtimeBoundary": "Hosted Vercel Function on the Node.js runtime (Node 24.x), production deployment of 2026-11-01 from the packed 0.8.0 tarball; the Edge runtime is not covered",
       "officialDocs": "https://vercel.com/docs/functions/runtimes/node-js",
       "officialReferences": [
@@ -355,7 +355,7 @@
       "api": "metaplate/node handlerFrom as the default export over Web Request/Response with context.params",
       "status": "certified",
       "evidence": ".planning/hosted-evidence/netlify-2026-11-01.json; fixture examples/hosted/netlify/functions",
-      "localContractEvidence": "scripts/verify-package.mjs packed-artifact deployment fixture",
+      "localContractEvidence": "scripts/package/verify-package.mjs packed-artifact deployment fixture",
       "runtimeBoundary": "Hosted Netlify Function on nodejs24.x (us-east-2), production deploy of 2026-11-01 from the packed 0.8.0 tarball, deployed with the Netlify CLI from a Linux-targeted local install; Netlify Edge Functions are the separate netlify-edge route",
       "officialDocs": "https://docs.netlify.com/build/functions/get-started/",
       "officialReferences": [
@@ -653,7 +653,7 @@
       "runtime": "long-lived Node.js",
       "api": "Express/raw bytes",
       "status": "certified-local-contract",
-      "evidence": "scripts/verify-package.mjs packed-artifact deployment fixture",
+      "evidence": "scripts/package/verify-package.mjs packed-artifact deployment fixture",
       "officialDocs": "https://docs.railway.com/guides/express"
     },
     {
@@ -662,7 +662,7 @@
       "runtime": "long-lived Node.js",
       "api": "metaplate/next dynamic opengraph-image metadata file; metaplate/node handlerFrom route handler",
       "status": "certified-local-contract",
-      "evidence": "scripts/verify-package.mjs packed-artifact Next server fixture: next build (default server output) and next start on 127.0.0.1",
+      "evidence": "scripts/package/verify-package.mjs packed-artifact Next server fixture: next build (default server output) and next start on 127.0.0.1",
       "runtimeBoundary": "Next.js 16.3.2-16.x on Node.js 24, local next start only; hosted Next deployments (Vercel, Netlify, containers) are not certified",
       "officialDocs": "https://nextjs.org/docs/app/api-reference/file-conventions/route",
       "officialReferences": [
@@ -678,7 +678,7 @@
       "runtime": "long-lived Node.js",
       "api": "Astro APIRoute GET from metaplate/node handlerFrom",
       "status": "certified-local-contract",
-      "evidence": "scripts/verify-package.mjs packed-artifact Astro server fixture: astro build (output server) and dist/server/entry.mjs on 127.0.0.1",
+      "evidence": "scripts/package/verify-package.mjs packed-artifact Astro server fixture: astro build (output server) and dist/server/entry.mjs on 127.0.0.1",
       "runtimeBoundary": "Astro 7 with @astrojs/node 11 standalone mode on Node.js 24, local entry.mjs only; hosted Astro adapters are not certified",
       "officialDocs": "https://docs.astro.build/en/guides/on-demand-rendering/",
       "officialReferences": [
@@ -693,7 +693,7 @@
       "runtime": "long-lived Node.js",
       "api": "+server RequestHandler via handlerFrom",
       "status": "certified-local-contract",
-      "evidence": "scripts/verify-package.mjs packed-artifact SvelteKit fixture",
+      "evidence": "scripts/package/verify-package.mjs packed-artifact SvelteKit fixture",
       "officialDocs": "https://svelte.dev/docs/kit/adapter-node",
       "relatedDocs": [
         "https://svelte.dev/docs/kit/routing#server"
@@ -705,7 +705,7 @@
       "runtime": "Bun 1.x Node compatibility",
       "api": "metaplate/node artifact and handlerFrom",
       "status": "certified",
-      "evidence": "Required CI check \"Runtime smoke / bun\": scripts/prepare-runtime-consumer.mjs installs the packed tarball into a clean consumer and scripts/verify-runtime.mjs renders and verifies a PNG there; .planning/hosted-evidence/runtimes-2026-11-01.json",
+      "evidence": "Required CI check \"Runtime smoke / bun\": scripts/package/prepare-runtime-consumer.mjs installs the packed tarball into a clean consumer and scripts/package/verify-runtime.mjs renders and verifies a PNG there; .planning/hosted-evidence/runtimes-2026-11-01.json",
       "officialDocs": "https://bun.com/docs/runtime/node-api",
       "runtimeBoundary": "Packed metaplate tarball on Bun 1.4.4 (linux-x64, GitHub Actions ubuntu-latest) through Bun's Node compatibility with the native @resvg/resvg-js binding; no hosted Bun deployment is certified",
       "certification": {
@@ -717,7 +717,7 @@
         "commitSha": "c42fa9e0d6c77b168629dfb746201723121c679d",
         "packageVersion": "0.8.0",
         "packedArtifact": "metaplate-0.8.0.tgz sha256 8b46134be1ecc4237fe6f2a918509010f981ee6416b1871e416210f154b745af, installed into a clean consumer with @resvg/resvg-js@2.6.2, satori@0.63.2, react@19.3.1, @fontsource/inter@5.3.0",
-        "productionBuild": "npm ci --ignore-scripts && npm run build && node scripts/prepare-runtime-consumer.mjs \"$RUNNER_TEMP/runtime-consumer\"",
+        "productionBuild": "npm ci --ignore-scripts && npm run build && node scripts/package/prepare-runtime-consumer.mjs \"$RUNNER_TEMP/runtime-consumer\"",
         "output": "In-process Web Response from createNodeOg(...).handlerFrom under bun: status 200, 15978 bytes",
         "servedOutput": "https://github.com/lnorton89/metaplate/actions/runs/41357713413/job/125001256310",
         "evidenceUrlOrArtifact": "https://github.com/lnorton89/metaplate/actions/runs/41357713413/job/125001256310; .planning/hosted-evidence/runtimes-2026-11-01.json",
@@ -753,7 +753,7 @@
       "runtime": "Deno 2.x Node and npm compatibility",
       "api": "metaplate/node artifact and handlerFrom",
       "status": "certified",
-      "evidence": "Required CI check \"Runtime smoke / deno\": scripts/prepare-runtime-consumer.mjs installs the packed tarball into a clean consumer and scripts/verify-runtime.mjs renders and verifies a PNG there; .planning/hosted-evidence/runtimes-2026-11-01.json",
+      "evidence": "Required CI check \"Runtime smoke / deno\": scripts/package/prepare-runtime-consumer.mjs installs the packed tarball into a clean consumer and scripts/package/verify-runtime.mjs renders and verifies a PNG there; .planning/hosted-evidence/runtimes-2026-11-01.json",
       "officialDocs": "https://docs.deno.com/runtime/fundamentals/node/",
       "runtimeBoundary": "Packed metaplate tarball on Deno 2.9.8 (linux-x64, GitHub Actions ubuntu-latest) through Deno's Node compatibility with the native @resvg/resvg-js binding; hosted Deno Deploy is certified separately as deno-deploy-edge and deno-deploy-node",
       "certification": {
@@ -765,7 +765,7 @@
         "commitSha": "c42fa9e0d6c77b168629dfb746201723121c679d",
         "packageVersion": "0.8.0",
         "packedArtifact": "metaplate-0.8.0.tgz sha256 8b46134be1ecc4237fe6f2a918509010f981ee6416b1871e416210f154b745af, installed into a clean consumer with @resvg/resvg-js@2.6.2, satori@0.63.2, react@19.3.1, @fontsource/inter@5.3.0",
-        "productionBuild": "npm ci --ignore-scripts && npm run build && node scripts/prepare-runtime-consumer.mjs \"$RUNNER_TEMP/runtime-consumer\"",
+        "productionBuild": "npm ci --ignore-scripts && npm run build && node scripts/package/prepare-runtime-consumer.mjs \"$RUNNER_TEMP/runtime-consumer\"",
         "output": "In-process Web Response from createNodeOg(...).handlerFrom under deno: status 200, 15978 bytes",
         "servedOutput": "https://github.com/lnorton89/metaplate/actions/runs/41357713413/job/125001256644",
         "evidenceUrlOrArtifact": "https://github.com/lnorton89/metaplate/actions/runs/41357713413/job/125001256644; .planning/hosted-evidence/runtimes-2026-11-01.json",

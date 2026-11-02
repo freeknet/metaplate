@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { npmPackResult } from "../../../../scripts/npm-pack-result.mjs";
+import { npmPackResult } from "../../../../scripts/package/npm-pack-result.mjs";
 
 const here = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const root = resolve(here, "../../..");

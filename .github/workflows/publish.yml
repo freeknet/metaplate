@@ -75,7 +75,7 @@ jobs:
         run: |
           set -euo pipefail
           gh release view "$RELEASE_TAG" --json body --jq .body > "$RUNNER_TEMP/release-notes.md"
-          node scripts/validate-release-notes.mjs "$RUNNER_TEMP/release-notes.md" "$VERSION"
+          node scripts/release/validate-release-notes.mjs "$RUNNER_TEMP/release-notes.md" "$VERSION"
 
       # No install lifecycle scripts are needed by this project. Keeping them
       # disabled limits what a compromised transitive package can execute.
@@ -196,4 +196,4 @@ jobs:
       - name: Verify registry artifact, signatures, and provenance
         env:
           VERSION: ${{ needs.verify.outputs.version }}
-        run: node scripts/verify-published-package.mjs "$VERSION"
+        run: node scripts/package/verify-published-package.mjs "$VERSION"
