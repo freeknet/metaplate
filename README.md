@@ -252,8 +252,11 @@ in JSON-LD, and `socialImageJsonLdScript` serializes it safely for a
 
 Satori needs the bytes of every face it renders. Loaders read them from
 project files, Fontsource, other npm packages, or bytes you supply, and
-memoize one copy for every render.
-[Fonts guide](docs/fonts.md)
+memoize one copy for every render. The `languageFonts` plate option draws
+Japanese, Arabic, Hebrew, and other scripts the plate's fonts lack, offline:
+`fontsourceLanguageFontLoader` reads only the Noto subset files the copy needs
+from installed Fontsource packages.
+[Fonts guide](docs/fonts.md#other-scripts)
 
 ### Emoji
 
@@ -309,10 +312,13 @@ every route is in [`deployment-evidence.json`](deployment-evidence.json).
   `nextTwitterMetadata` for X player and app cards in Next metadata, and
   `nextPageMetadata`/`nextPageViewport` for page-level tags. Needs `next`.
 - `metaplate/font-data` — runtime-neutral normalization and memoization for
-  application/framework-provided bytes. No peers or Node built-ins.
+  application/framework-provided bytes, and `languageFontLoader` for
+  per-language fallback fonts from any byte source. No peers or Node
+  built-ins.
 - `metaplate/fonts` — project-file, Fontsource, generic npm-package, and
-  application-byte font loading, plus installed emoji packages
-  (`packageEmojiLoader`), for Node-compatible runtimes. No peers.
+  application-byte font loading, per-language fallback fonts from installed
+  Fontsource packages (`fontsourceLanguageFontLoader`), plus installed emoji
+  packages (`packageEmojiLoader`), for Node-compatible runtimes. No peers.
 - `metaplate/emoji` — runtime-neutral emoji images for the `emoji` plate
   option (`emojiLoader`, `twemojiName`). No peers or Node built-ins; the
   installed-package reader, `packageEmojiLoader`, is in `metaplate/fonts`.

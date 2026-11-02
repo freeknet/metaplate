@@ -1,6 +1,7 @@
 import type { ImageSize } from "./core.js";
 import type { EmojiLoader } from "./emoji.js";
 import { assertRenderGuards, type RenderGuards } from "./guards.js";
+import type { LanguageFontLoader } from "./language-fonts.js";
 import type { PlateContext, PlateElement, PlateVariants, PlateVersioning } from "./plate.js";
 import { loadSatori } from "./peers.js";
 import { createSvgPlate } from "./svg-plate.js";
@@ -143,6 +144,16 @@ export type SvgOgDefinition<Copy, Variant extends string = string> = {
    * receives every other script and any emoji the loader has no image for.
    */
   emoji?: EmojiLoader;
+  /**
+   * Fonts for scripts the plate's fonts do not cover, such as Japanese,
+   * Arabic, or Devanagari: `fontsourceLanguageFontLoader` from
+   * `metaplate/fonts` reads installed Fontsource packages, and
+   * `languageFontLoader` from `metaplate/font-data` takes bytes from any
+   * source. Satori's requests are answered in a fixed order: emoji go to
+   * `emoji`, every other script to `languageFonts`, and whatever neither
+   * resolves to `satori.loadAdditionalAsset`.
+   */
+  languageFonts?: LanguageFontLoader;
   /**
    * Opt-in checks that fail (`"error"`) or report (`"warn"`) a render that
    * would ship a broken card instead of returning it. Every guard is off by
