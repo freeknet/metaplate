@@ -31,7 +31,9 @@ export type {
   SignedRouteOptions,
 } from "./plate.js";
 
-type ImageResponseConstructor = typeof import("next/og").ImageResponse;
+// `next/og.js`, not `next/og`: Next has no exports map, so only the file
+// path resolves in plain Node ESM and under NodeNext type resolution.
+type ImageResponseConstructor = typeof import("next/og.js").ImageResponse;
 type ImageResponseOptions = NonNullable<
   ConstructorParameters<ImageResponseConstructor>[1]
 >;
@@ -39,7 +41,7 @@ type ImageResponseFont = NonNullable<ImageResponseOptions["fonts"]>[number];
 
 const loadImageResponse = optionalPeer(
   { package: "next", entries: "metaplate/next" },
-  async (): Promise<ImageResponseConstructor> => (await import("next/og")).ImageResponse,
+  async (): Promise<ImageResponseConstructor> => (await import("next/og.js")).ImageResponse,
 );
 
 export type FontLoader = () =>
