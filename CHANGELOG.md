@@ -138,6 +138,12 @@ All notable changes to Metaplate are documented in this file. The project uses
   clearing the moderate globparts denial-of-service advisory (fixed in
   11.0.1) that eslint and typescript-eslint pulled in through their 10.x
   ranges. Development-only; the published package has no dependencies.
+- The `discord` compatibility profile now checks the image formats Discord's
+  published link-preview contract supports (PNG, GIF, JPEG, WebP, and AVIF)
+  instead of reporting an unknown contract. Discord sets no image size limit
+  and accepts root-relative image URLs, so the profile does not require
+  crawler-ready URLs. `socialImageCompatibility` output for `discord` changes
+  accordingly; Instagram is still reported as unknown.
 
 - Every font loader now rejects bytes that are not a TrueType, OpenType, WOFF,
   or WOFF2 file with a `TypeError` naming the font and showing the leading

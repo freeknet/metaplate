@@ -86,10 +86,18 @@ export const SOCIAL_COMPATIBILITY_PROFILES = {
   },
   slack: { crawlerReady: true, warnOnSvg: SVG_WARNING },
   mastodon: { crawlerReady: true, warnOnSvg: SVG_WARNING },
+  // Discord's link-preview contract:
+  // https://docs.discord.com/developers/link-previews/overview
+  // It reads og:image with its width, height, type, and alt; supports PNG,
+  // GIF, JPEG, WebP, and AVIF; sets no image dimension or file-size limit; and
+  // accepts root-relative image URLs, so crawler-ready URLs are not required.
   discord: {
     crawlerReady: false,
-    unknownContract:
-      "Discord does not publish a stable webpage image-tag compatibility contract.",
+    format: {
+      accepted: [...DOCUMENTED_RASTER_TYPES, "image/webp", "image/avif"],
+      missingSeverity: "warning",
+      invalidMessage: "is not a format Discord link previews support; use PNG, GIF, JPEG, WebP, or AVIF.",
+    },
   },
   instagram: {
     crawlerReady: false,
