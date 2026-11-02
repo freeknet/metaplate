@@ -2,6 +2,8 @@ import { lookup } from "node:dns/promises";
 import { request as httpRequest, type IncomingMessage } from "node:http";
 import { request as httpsRequest, type RequestOptions } from "node:https";
 import { isIP } from "node:net";
+import type { Readable } from "node:stream";
+import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib";
 import type { ImageSize } from "../core/social-image.js";
 import { imageContentType, verifyImage, type ImageDimensions, type ImageFormat } from "../image.js";
 import { integerOption } from "../core/internal.js";
@@ -420,6 +422,18 @@ async function vetAddress(url: URL, settings: Settings, signal: AbortSignal): Pr
 // ---------------------------------------------------------------------------
 // One HTTP exchange
 
+/**
+ * Decoders for the content codings a server may apply even though every
+ * request asks for `identity` (an object stored compressed, for example).
+ * Crawlers decode them, so the checks must read the decoded bytes too.
+ */
+const CONTENT_DECODERS: Readonly<Record<string, () => NodeJS.ReadWriteStream>> = {
+  gzip: createGunzip,
+  "x-gzip": createGunzip,
+  deflate: createInflate,
+  br: createBrotliDecompress,
+};
+
 type Exchange =
   | { kind: "redirect"; status: number; location: string | undefined }
   | { kind: "body"; status: number; contentType: string | undefined; bytes: Uint8Array; truncated: boolean };
@@ -509,6 +523,33 @@ function exchange(
         fail(byteLimit(declared));
         return;
       }
+      // Undo each coding in reverse order of application. The byte limit
+      // then applies to the decoded body, so a small compressed response
+      // cannot expand past it.
+      const codings = (response.headers["content-encoding"] ?? "")
+        .split(",")
+        .map((coding) => coding.trim().toLowerCase())
+        .filter((coding) => coding !== "" && coding !== "identity");
+      let stream: Readable = response;
+      for (const coding of codings.reverse()) {
+        const decoder = CONTENT_DECODERS[coding];
+        if (decoder === undefined) {
+          response.destroy();
+          fail(new RemoteImageError(
+            "network",
+            `${url.href} was served with Content-Encoding: ${coding}, which cannot be decoded`,
+            url.href,
+          ));
+          return;
+        }
+        const decoding = decoder();
+        decoding.on("error", (error: Error) => fail(new RemoteImageError(
+          "network",
+          `${url.href} could not be decoded as Content-Encoding: ${coding}: ${error.message}`,
+          url.href,
+        )));
+        stream = stream.pipe(decoding) as unknown as Readable;
+      }
       const chunks: Buffer[] = [];
       let received = 0;
       const body = (truncated: boolean) => ({
@@ -518,7 +559,7 @@ function exchange(
         bytes: new Uint8Array(Buffer.concat(chunks, received)),
         truncated,
       });
-      response.on("data", (chunk: Buffer) => {
+      stream.on("data", (chunk: Buffer) => {
         if (received + chunk.byteLength > settings.maxBytes) {
           if (!settings.truncate) {
             fail(byteLimit(received + chunk.byteLength));
@@ -534,7 +575,7 @@ function exchange(
         received += chunk.byteLength;
         chunks.push(chunk);
       });
-      response.on("end", () => succeed(body(false)));
+      stream.on("end", () => succeed(body(false)));
       response.on("error", (error) => fail(networkError(url, error)));
       response.on("close", () => {
         if (!response.complete) {
