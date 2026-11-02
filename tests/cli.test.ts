@@ -15,7 +15,7 @@ import {
 } from "../src/cli-args.js";
 import { METAPLATE_VERSION } from "../src/version.js";
 import { bundleCli, runCli } from "./helpers/cli-bundle.js";
-import { closeLocalServers, localServer, redirectTo, routes, serveBytes } from "./helpers/http-fixtures.js";
+import { closeLocalServers, localServer, pathRoutes, redirectTo, routes, serveBytes } from "./helpers/http-fixtures.js";
 import { completePng } from "./helpers/image-fixtures.js";
 
 // The CLI runs against a freshly bundled build so spawn tests never go stale.
@@ -475,8 +475,14 @@ describe("verify-url CLI", () => {
     const result = await runAsync(["verify-url", "--timeout", "soon", "--size", "1x1", "https://example.com/og.png"]);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("Invalid timeout.");
-    expect(result.stderr).toContain(VERIFY_URL_USAGE);
+    expect(result.stderr.split(VERIFY_URL_USAGE)).toHaveLength(2);
   });
+});
+
+it("prints the usage once for an argument error that already names it", async () => {
+  const result = await runAsync(["verify", "--url", "x", "--size", "1200x630", "f.png"]);
+  expect(result.status).toBe(1);
+  expect(result.stderr).toBe(`--url and --alt require at least one --target. ${VERIFY_USAGE}\n`);
 });
 
 describe("parseVerifyPageInvocation", () => {
@@ -587,6 +593,20 @@ describe("verify-page CLI", () => {
     ]);
   });
 
+  it("accepts a versioned og:image whose query the host ignores", async () => {
+    const versioned = head.replaceAll('content="/og.png"', 'content="/og.png?v=3f2a1b9c"');
+    const server = await localServer(pathRoutes({
+      "/": serveBytes(new TextEncoder().encode(`<html><head>${versioned}</head></html>`), "text/html"),
+      "/og.png": serveBytes(card, "image/png"),
+    }));
+    const result = await runAsync(["verify-page", "--allow-private", "--allow-port", String(server.port), `${server.origin}/`]);
+
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(`  ✓ og:image[0] ${server.origin}/og.png?v=3f2a1b9c 1200x630 png (${card.byteLength} bytes)`);
+    expect(server.requests.map(({ url }) => url)).toEqual(["/", "/og.png?v=3f2a1b9c"]);
+  });
+
   it("sends errors to stderr and exits non-zero", async () => {
     const server = await pageServer();
     const result = await runAsync(["verify-page", ...server.local, `${server.origin}/wrong-size`, `${server.origin}/`]);
@@ -659,6 +679,6 @@ describe("verify-page CLI", () => {
     const result = await runAsync(["verify-page", "--size", "1x1", "https://example.com/"]);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("--size is not accepted here.");
-    expect(result.stderr).toContain(VERIFY_PAGE_USAGE);
+    expect(result.stderr.split(VERIFY_PAGE_USAGE)).toHaveLength(2);
   });
 });

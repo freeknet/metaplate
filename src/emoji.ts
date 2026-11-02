@@ -9,6 +9,8 @@
  * Resvg rasterises the SVG offline and never fetches a remote `href`.
  */
 
+import { base64, bytesOf } from "./bytes.js";
+
 /**
  * The image for one emoji: SVG markup, an existing `data:image/svg+xml` or
  * `data:image/png` URI, or the bytes of an SVG or PNG file.
@@ -98,20 +100,6 @@ export function emojiKey(codepoints: readonly number[]): string {
 }
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-
-function bytesOf(image: ArrayBuffer | ArrayBufferView): Uint8Array {
-  return image instanceof ArrayBuffer
-    ? new Uint8Array(image)
-    : new Uint8Array(image.buffer, image.byteOffset, image.byteLength);
-}
-
-function base64(bytes: Uint8Array): string {
-  let binary = "";
-  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
-  }
-  return btoa(binary);
-}
 
 function isSvgMarkup(text: string): boolean {
   const trimmed = text.replace(/^\uFEFF/, "").trimStart();
