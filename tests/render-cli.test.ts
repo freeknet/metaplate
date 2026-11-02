@@ -247,7 +247,9 @@ describe("outputTarget", () => {
   });
 });
 
-describe("renderFiles", () => {
+// Real renders load the native renderer and fonts on first use, which can pass
+// Vitest's 5 s default on a cold macOS or Windows runner (6.3 s observed).
+describe("renderFiles", { timeout: 30_000 }, () => {
   it("writes real plate renders whose manifest hashes match the files on disk", async () => {
     const out = await temporary("real");
     const plate = nodePlate({ basePath: "/project" }) as RenderablePlate<Copy> as RenderablePlate<unknown>;
