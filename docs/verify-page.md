@@ -126,7 +126,7 @@ image is `valid`.
 ## Compatibility targets
 
 `--target NAME` (repeatable) evaluates the same
-[compatibility profiles](../README.md#social-compatibility-profiles) as
+[compatibility profiles](compatibility.md) as
 `verify`, against the image each consumer would choose rather than every
 image on the page:
 
@@ -319,7 +319,7 @@ post-deploy check built on `verifyRemotePage`.
   an `og:image` should give `og:image:alt`.
 - X Cards markup, cited from the last published versions of the
   [Cards markup reference](https://developer.x.com/en/docs/x-for-websites/cards/overview/markup)
-  as in the [README](../README.md#x-player-and-app-cards); those pages now
+  as in the [X cards guide](x-cards.md); those pages now
   redirect away from the card documentation. They define the `twitter:card`
   values and the fallback from `twitter:title`, `twitter:description`, and
   `twitter:image` to their Open Graph counterparts, which is why an absent
