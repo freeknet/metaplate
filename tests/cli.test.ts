@@ -524,6 +524,12 @@ describe("parseVerifyPageInvocation", () => {
     });
   });
 
+  it("collects --crawler tokens, deduplicated case-insensitively", () => {
+    expect(parseVerifyPageInvocation([
+      "verify-page", "--crawler", "Twitterbot", "--crawler", "ExampleBot", "--crawler", "twitterbot", "https://example.com/",
+    ])).toMatchObject({ crawlers: ["Twitterbot", "ExampleBot"] });
+  });
+
   it("defaults to the strict policy", () => {
     expect(parseVerifyPageInvocation(["verify-page", "https://example.com/"])).toEqual({
       urls: ["https://example.com/"],
@@ -544,6 +550,8 @@ describe("parseVerifyPageInvocation", () => {
     { args: ["verify-page", "--max-html-bytes", "0", "https://example.com/"] },
     { args: ["verify-page", "--target", "myspace", "https://example.com/"] },
     { args: ["verify-page", "--bogus", "https://example.com/"] },
+    { args: ["verify-page", "--crawler", "Twitterbot/1.0", "https://example.com/"] },
+    { args: ["verify-page", "--crawler", "*", "https://example.com/"] },
   ] satisfies { args: string[] }[])("rejects invalid arguments: $args", ({ args }) => {
     expect(() => parseVerifyPageInvocation(args)).toThrow(VERIFY_PAGE_USAGE);
   });
@@ -568,6 +576,7 @@ describe("verify-page CLI", () => {
       "/moved": redirectTo("/", 302),
       "/wrong-size": html(head.replace('content="630"', 'content="600"')),
       "/og.png": serveBytes(card, "image/png"),
+      "/robots.txt": serveBytes(new TextEncoder().encode("User-agent: ExampleBot\nDisallow: /wrong-size\n"), "text/plain"),
     }));
     return { ...server, local: ["--allow-private", "--allow-port", String(server.port)] };
   }
@@ -643,6 +652,20 @@ describe("verify-page CLI", () => {
       targets: {},
       images: [],
     });
+  });
+
+  it("evaluates robots.txt for --crawler tokens and prints one line per crawler", async () => {
+    const server = await pageServer();
+    const result = await runAsync([
+      "verify-page", ...server.local, "--crawler", "ExampleBot", `${server.origin}/`, `${server.origin}/wrong-size`,
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("  ✓ robots.txt allows ExampleBot on 2 URLs");
+    expect(result.stdout).toContain("  ✗ robots.txt disallows ExampleBot on 1 of 2 URLs");
+    expect(result.stderr).toContain(
+      `✗ ${server.origin}/wrong-size ${server.origin}/robots.txt disallows ${server.origin}/wrong-size for ExampleBot at line 2 (Disallow: /wrong-size).`,
+    );
   });
 
   it("refuses a loopback page without --allow-private", async () => {

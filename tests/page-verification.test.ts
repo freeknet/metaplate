@@ -404,3 +404,281 @@ describe("verifyRemotePage page policy", () => {
     await expect(verifyRemotePage("https://example.com/", { targets: ["myspace" as never] })).rejects.toThrow("Unknown social target");
   });
 });
+
+/** A plain-text handler, as robots.txt is served. */
+function serveText(text: string, status = 200): Handler {
+  return (_request, response) => {
+    response.writeHead(status, { "Content-Type": "text/plain" });
+    response.end(text);
+  };
+}
+
+const CARD_HEAD = `
+  <meta property="og:image" content="/og.png">
+  <meta property="og:image:alt" content="Card">
+  <meta name="twitter:card" content="summary_large_image">
+`;
+
+describe("verifyRemotePage robots.txt checks", () => {
+  it("fetches nothing extra without targets or crawlers", async () => {
+    const server = await site(() => ({ "/": serveHtml(page(CARD_HEAD)), "/og.png": serveBytes(card, "image/png") }));
+    const report = await verifyRemotePage(`${server.origin}/`, local(server));
+    expect(report.robots).toBeUndefined();
+    expect(server.requests.map(({ url }) => url)).toEqual(["/", "/og.png"]);
+  });
+
+  it("evaluates each target's crawler against the page and the image it reads, with the metaplate user agent", async () => {
+    const server = await site(() => ({
+      "/post": serveHtml(page(CARD_HEAD)),
+      "/og.png": serveBytes(card, "image/png"),
+      "/robots.txt": serveText("User-agent: Twitterbot\nDisallow: /post\n\nUser-agent: Discordbot\nDisallow: /og.png\n\nUser-agent: *\nDisallow: /\n"),
+    }));
+    const report = await verifyRemotePage(`${server.origin}/post`, local(server, { targets: ["x", "discord"] }));
+
+    // X documents that Twitterbot obeys robots.txt: a disallowed page is an X error.
+    expect(report.targets.x).toEqual({
+      compatible: false,
+      issues: [expect.objectContaining({
+        severity: "error",
+        code: "robots-disallowed",
+        target: "x",
+        message: expect.stringContaining("line 2 (Disallow: /post)"),
+      })],
+    });
+    // Discord does not document robots.txt use: a disallowed image is a Discord warning.
+    expect(report.targets.discord?.compatible).toBe(true);
+    expect(report.images[0]!.targets.discord?.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ severity: "warning", code: "robots-disallowed", target: "discord" }),
+    ]));
+    expect(report.images[0]!.targets.x?.issues.map(({ code }) => code)).not.toContain("robots-disallowed");
+    expect(report.valid).toBe(true);
+
+    expect(report.robots?.files).toEqual([{
+      origin: server.origin,
+      url: `${server.origin}/robots.txt`,
+      status: "parsed",
+      httpStatus: 200,
+      finalUrl: `${server.origin}/robots.txt`,
+      bytes: expect.any(Number),
+    }]);
+    expect(report.robots?.crawlers.map(({ token, robots, targets, requested, allowed }) => ({ token, robots, targets, requested, allowed }))).toEqual([
+      { token: "Twitterbot", robots: "honors", targets: ["x"], requested: false, allowed: false },
+      { token: "Discordbot", robots: "undocumented", targets: ["discord"], requested: false, allowed: false },
+    ]);
+    expect(report.robots?.crawlers[0]!.checks).toEqual([
+      {
+        resource: "page",
+        url: `${server.origin}/post`,
+        robotsUrl: `${server.origin}/robots.txt`,
+        allowed: false,
+        group: "named",
+        rule: { kind: "disallow", pattern: "/post", line: 2 },
+      },
+      {
+        resource: "image",
+        url: `${server.origin}/og.png`,
+        references: ["og:image[0]"],
+        robotsUrl: `${server.origin}/robots.txt`,
+        allowed: true,
+        group: "named",
+      },
+    ]);
+
+    // robots.txt is fetched once, after the page and images, and never as a crawler.
+    expect(server.requests.map(({ url }) => url)).toEqual(["/post", "/og.png", "/robots.txt"]);
+    const robotsRequest = server.requests[2]!;
+    expect(robotsRequest.headers["user-agent"]).toBe(REMOTE_USER_AGENT);
+    expect(robotsRequest.headers.accept).toBe("text/plain");
+  });
+
+  it("fails the page for a requested crawler that is disallowed, and checks every image for it", async () => {
+    const server = await site(() => ({
+      "/": serveHtml(page(CARD_HEAD)),
+      "/og.png": serveBytes(card, "image/png"),
+      "/robots.txt": serveText("user-agent: examplebot\ndisallow: /\n"),
+    }));
+    const report = await verifyRemotePage(
+      `${server.origin}/`,
+      local(server, { crawlers: ["ExampleBot", "slackbot-linkexpanding", "ExampleBot"] }),
+    );
+
+    expect(report.valid).toBe(false);
+    const disallowed = report.globalIssues.find(({ code }) => code === "robots-disallowed");
+    expect(disallowed).toMatchObject({ severity: "error", message: expect.stringContaining("for ExampleBot") });
+    expect(disallowed).not.toHaveProperty("target");
+    expect(report.images[0]).toMatchObject({ valid: false });
+    expect(report.images[0]!.globalIssues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "robots-disallowed" })]));
+    // Slack documents that it ignores robots.txt: reported, never an issue.
+    expect(report.robots?.crawlers.map(({ token, robots, requested, allowed }) => ({ token, robots, requested, allowed }))).toEqual([
+      { token: "ExampleBot", robots: "requested", requested: true, allowed: false },
+      { token: "Slackbot-LinkExpanding", robots: "ignores", requested: true, allowed: true },
+    ]);
+    expect(report.globalIssues.filter(({ message }) => message.includes("Slackbot"))).toEqual([]);
+  });
+
+  it("follows RFC 9309 for missing, failing, and oversized files", async () => {
+    const cases: [Handler, Record<string, unknown>, boolean][] = [
+      [(_request, response) => { response.writeHead(404); response.end(); }, { status: "unavailable", httpStatus: 404 }, true],
+      [serveText("user-agent: *\ndisallow: /", 403), { status: "unavailable", httpStatus: 403 }, true],
+      [serveText("", 503), { status: "unreachable", httpStatus: 503 }, false],
+      [serveText(`${"# padding\n".repeat(60_000)}user-agent: *\ndisallow: /\n`), { status: "parsed", truncated: true, bytes: 500 * 1024 }, true],
+    ];
+    for (const [handler, file, allowed] of cases) {
+      const server = await site(() => ({ "/": serveHtml(page(CARD_HEAD)), "/og.png": serveBytes(card, "image/png"), "/robots.txt": handler }));
+      const report = await verifyRemotePage(`${server.origin}/`, local(server, { targets: ["x"] }));
+      expect(report.robots?.files[0]).toMatchObject(file);
+      expect(report.robots?.crawlers[0]!.allowed).toBe(allowed);
+      // The loopback card is not X-ready anyway (relative, http); only robots findings matter here.
+      expect(report.targets.x?.issues.some(({ code }) => code.startsWith("robots-"))).toBe(!allowed);
+      if (!allowed) {
+        expect(report.targets.x?.issues).toEqual(expect.arrayContaining([
+          expect.objectContaining({ severity: "error", code: "robots-unreachable", message: expect.stringContaining("responded 503") }),
+        ]));
+      }
+    }
+  });
+
+  it("follows up to five robots.txt redirects, then treats the file as unavailable", async () => {
+    const hops = (count: number): Record<string, Handler> => Object.fromEntries(
+      Array.from({ length: count }, (_, index) => [index === 0 ? "/robots.txt" : `/r${index}`, redirectTo(`/r${index + 1}`)]),
+    );
+    const near = await site(() => ({
+      "/": serveHtml(page(CARD_HEAD)),
+      "/og.png": serveBytes(card, "image/png"),
+      ...hops(5),
+      "/r5": serveText("user-agent: twitterbot\ndisallow: /og.png"),
+    }));
+    // The page's own redirect limit does not apply to robots.txt.
+    const nearReport = await verifyRemotePage(`${near.origin}/`, local(near, { targets: ["x"], maxRedirects: 0 }));
+    expect(nearReport.robots?.files[0]).toMatchObject({ status: "parsed", finalUrl: `${near.origin}/r5` });
+    expect(nearReport.images[0]!.targets.x?.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "robots-disallowed" })]));
+
+    const far = await site(() => ({
+      "/": serveHtml(page(CARD_HEAD)),
+      "/og.png": serveBytes(card, "image/png"),
+      ...hops(6),
+      "/r6": serveText("user-agent: *\ndisallow: /"),
+    }));
+    const farReport = await verifyRemotePage(`${far.origin}/`, local(far, { targets: ["x"] }));
+    expect(farReport.robots?.files[0]).toMatchObject({ status: "unavailable" });
+    expect(farReport.robots?.crawlers[0]!.allowed).toBe(true);
+  });
+
+  it("reports a robots.txt the fetch policy refuses as unknown, never as allowed", async () => {
+    const server = await site(() => ({
+      "/": serveHtml(page(CARD_HEAD)),
+      "/og.png": serveBytes(card, "image/png"),
+      "/robots.txt": redirectTo("http://127.0.0.1:1/robots.txt"),
+    }));
+    const report = await verifyRemotePage(`${server.origin}/`, local(server, { targets: ["x"] }));
+    expect(report.robots?.files[0]).toMatchObject({ status: "unknown", message: expect.any(String) });
+    expect(report.robots?.crawlers[0]!.allowed).toBeNull();
+    expect(report.targets.x?.issues.filter(({ code }) => code.startsWith("robots-"))).toEqual([
+      expect.objectContaining({ severity: "unknown", code: "robots-unknown" }),
+    ]);
+  });
+
+  it("reads robots.txt for every origin the page and its images are served from", async () => {
+    const images = await site(() => ({
+      "/og.png": serveBytes(card, "image/png"),
+      "/robots.txt": serveText("user-agent: twitterbot\ndisallow: /og.png"),
+    }));
+    const server = await site(() => ({
+      "/": serveHtml(page(`<meta property="og:image" content="${images.origin}/og.png"><meta name="twitter:card" content="summary">`)),
+    }));
+    const report = await verifyRemotePage(`${server.origin}/`, {
+      allowPrivate: true,
+      allowedPorts: [server.port, images.port],
+      targets: ["x"],
+    });
+    expect(report.robots?.files.map(({ origin, status }) => ({ origin, status }))).toEqual([
+      { origin: server.origin, status: "unavailable" },
+      { origin: images.origin, status: "parsed" },
+    ]);
+    expect(report.targets.x?.compatible).toBe(false);
+    expect(report.images[0]!.targets.x?.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ severity: "error", code: "robots-disallowed", message: expect.stringContaining(`${images.origin}/robots.txt disallows`) }),
+    ]));
+  });
+
+  it("rejects crawler names that are not product tokens", async () => {
+    await expect(verifyRemotePage("https://example.com/", { crawlers: ["Twitterbot/1.0"] })).rejects.toThrow(TypeError);
+    await expect(verifyRemotePage("https://example.com/", { crawlers: [""] })).rejects.toThrow(TypeError);
+  });
+});
+
+describe("verifyRemotePage crawler read limits", () => {
+  const padding = (bytes: number) => `<style>${"x".repeat(bytes)}</style>`;
+
+  it("warns when Open Graph tags start after Meta's first 1 MB", async () => {
+    const server = await site(() => ({
+      "/late": serveHtml(page(`${padding(1_000_000)}${CARD_HEAD}`)),
+      "/early": serveHtml(page(CARD_HEAD, padding(1_100_000))),
+      "/og.png": serveBytes(card, "image/png"),
+    }));
+    const late = await verifyRemotePage(`${server.origin}/late`, local(server));
+    expect(late.globalIssues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ severity: "warning", code: "html-limit", message: expect.stringContaining("first 1,000,000 bytes") }),
+    ]));
+    const targeted = await verifyRemotePage(`${server.origin}/late`, local(server, { targets: ["facebook", "instagram"] }));
+    expect(codes(targeted)).not.toContain("html-limit");
+    expect(targeted.targets.facebook?.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "html-limit", target: "facebook" })]));
+    expect(targeted.targets.instagram?.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "html-limit", target: "instagram" })]));
+    const early = await verifyRemotePage(`${server.origin}/early`, local(server));
+    expect(codes(early)).not.toContain("html-limit");
+  }, 30_000);
+
+  it("warns under whatsapp when the head does not end within 300KB", async () => {
+    const server = await site(() => ({
+      "/long-head": serveHtml(page(`${CARD_HEAD}${padding(300_000)}`)),
+      "/long-body": serveHtml(page(CARD_HEAD, padding(400_000))),
+      "/og.png": serveBytes(card, "image/png"),
+    }));
+    const long = await verifyRemotePage(`${server.origin}/long-head`, local(server, { targets: ["whatsapp"] }));
+    expect(long.targets.whatsapp?.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ severity: "warning", code: "html-limit", target: "whatsapp", message: expect.stringContaining("first 300,000 bytes") }),
+    ]));
+    const short = await verifyRemotePage(`${server.origin}/long-body`, local(server, { targets: ["whatsapp"] }));
+    expect(short.targets.whatsapp?.issues.map(({ code }) => code)).not.toContain("html-limit");
+    // Without the whatsapp target, no WhatsApp finding.
+    const untargeted = await verifyRemotePage(`${server.origin}/long-head`, local(server));
+    expect(codes(untargeted)).not.toContain("html-limit");
+  }, 30_000);
+});
+
+describe("verifyRemotePage reference limits", () => {
+  it("parses a shared image once however many references name it", async () => {
+    // A JPEG with a long entropy-coded scan: walking it is the expensive part.
+    const jpeg = Uint8Array.from([
+      0xff, 0xd8, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x10, 0x00, 0x10, 0x01, 0x01, 0x11, 0x00,
+      0xff, 0xda, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f, 0x00,
+      ...new Uint8Array(4 * 1024 * 1024).fill(0x55),
+      0xff, 0xd9,
+    ]);
+    const tags = '<meta property="og:image" content="/i.jpg"><meta property="og:image:alt" content="a">'.repeat(400);
+    const server = await site(() => ({ "/": serveHtml(page(tags)), "/i.jpg": serveBytes(jpeg, "image/jpeg") }));
+    const started = performance.now();
+    const report = await verifyRemotePage(`${server.origin}/`, local(server, { maxImageReferences: 400 }));
+    expect(performance.now() - started).toBeLessThan(10_000);
+    expect(report.images).toHaveLength(400);
+    expect(report.images.every((image) => image.image?.format === "jpeg")).toBe(true);
+    expect(server.requests.map(({ url }) => url)).toEqual(["/", "/i.jpg"]);
+  }, 30_000);
+
+  it("inspects at most maxImageReferences references, always keeping the ones consumers read first", async () => {
+    const tags = Array.from({ length: 100 }, (_, index) => `<meta property="og:image" content="/i${index % 3}.png">`).join("");
+    const server = await site(() => ({
+      "/": serveHtml(page(`${tags}<meta name="twitter:card" content="summary"><meta name="twitter:image" content="/i0.png">`)),
+      "/i0.png": serveBytes(card, "image/png"),
+      "/i1.png": serveBytes(card, "image/png"),
+      "/i2.png": serveBytes(card, "image/png"),
+    }));
+    const report = await verifyRemotePage(`${server.origin}/`, local(server));
+    expect(report.images).toHaveLength(65);
+    expect(report.images.some(({ source }) => source === "twitter:image")).toBe(true);
+    expect(report.globalIssues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ severity: "unknown", code: "image-limit", message: expect.stringContaining("36 further image references were not inspected") }),
+    ]));
+    await expect(verifyRemotePage(`${server.origin}/`, local(server, { maxImageReferences: 0 }))).rejects.toThrow(TypeError);
+  });
+});

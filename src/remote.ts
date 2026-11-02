@@ -68,12 +68,15 @@ export class RemoteImageError extends Error {
   readonly code: RemoteImageErrorCode;
   /** The URL being fetched when the failure happened. */
   readonly url: string;
+  /** The HTTP status that was refused, for the `status` code. */
+  readonly status?: number;
 
-  constructor(code: RemoteImageErrorCode, message: string, url: string) {
+  constructor(code: RemoteImageErrorCode, message: string, url: string, status?: number) {
     super(message);
     this.name = "RemoteImageError";
     this.code = code;
     this.url = url;
+    if (status !== undefined) this.status = status;
   }
 }
 
@@ -99,6 +102,8 @@ export type RemoteImageVerification = RemoteImage & Readonly<{ image: ImageDimen
 export type RemoteImageExpectation = ImageSize & { format?: ImageFormat };
 
 type Settings = {
+  /** Keep the first `maxBytes` bytes of a larger body instead of failing. */
+  truncate: boolean;
   allowPrivate: boolean;
   allowedPorts: ReadonlySet<number>;
   maxRedirects: number;
@@ -233,7 +238,7 @@ function positiveInteger(name: string, value: number | undefined, fallback: numb
   return value;
 }
 
-function settingsFrom(options: RemoteFetchOptions): Settings {
+function settingsFrom(options: RemoteFetchOptions, truncate: boolean): Settings {
   for (const port of options.allowedPorts ?? []) {
     if (!Number.isInteger(port) || port < 1 || port > 65_535) {
       throw new TypeError(`allowedPorts entries must be integers from 1 to 65535; received ${port}`);
@@ -241,6 +246,7 @@ function settingsFrom(options: RemoteFetchOptions): Settings {
   }
   const timeoutMs = positiveInteger("timeoutMs", options.timeoutMs, REMOTE_FETCH_DEFAULTS.timeoutMs);
   return {
+    truncate,
     allowPrivate: options.allowPrivate === true,
     allowedPorts: new Set(options.allowedPorts ?? []),
     maxRedirects: positiveInteger("maxRedirects", options.maxRedirects, REMOTE_FETCH_DEFAULTS.maxRedirects, 0),
@@ -364,7 +370,7 @@ async function vetAddress(url: URL, settings: Settings, signal: AbortSignal): Pr
 
 type Exchange =
   | { kind: "redirect"; status: number; location: string | undefined }
-  | { kind: "body"; status: number; contentType: string | undefined; bytes: Uint8Array };
+  | { kind: "body"; status: number; contentType: string | undefined; bytes: Uint8Array; truncated: boolean };
 
 function exchange(
   url: URL,
@@ -442,32 +448,41 @@ function exchange(
           "status",
           `${url.href} responded ${status}${response.statusMessage ? ` ${response.statusMessage}` : ""}`,
           url.href,
+          status,
         ));
         return;
       }
       const declared = Number(response.headers["content-length"]);
-      if (Number.isSafeInteger(declared) && declared > settings.maxBytes) {
+      if (!settings.truncate && Number.isSafeInteger(declared) && declared > settings.maxBytes) {
         fail(byteLimit(declared));
         return;
       }
       const chunks: Buffer[] = [];
       let received = 0;
+      const body = (truncated: boolean) => ({
+        kind: "body" as const,
+        status,
+        contentType: response.headers["content-type"],
+        bytes: new Uint8Array(Buffer.concat(chunks, received)),
+        truncated,
+      });
       response.on("data", (chunk: Buffer) => {
-        received += chunk.byteLength;
-        if (received > settings.maxBytes) {
-          fail(byteLimit(received));
+        if (received + chunk.byteLength > settings.maxBytes) {
+          if (!settings.truncate) {
+            fail(byteLimit(received + chunk.byteLength));
+            return;
+          }
+          // Keep exactly the first maxBytes bytes and stop reading.
+          chunks.push(chunk.subarray(0, settings.maxBytes - received));
+          received = settings.maxBytes;
+          succeed(body(true));
+          response.destroy();
           return;
         }
+        received += chunk.byteLength;
         chunks.push(chunk);
       });
-      response.on("end", () => {
-        succeed({
-          kind: "body",
-          status,
-          contentType: response.headers["content-type"],
-          bytes: new Uint8Array(Buffer.concat(chunks, received)),
-        });
-      });
+      response.on("end", () => succeed(body(false)));
       response.on("error", (error) => fail(networkError(url, error)));
       response.on("close", () => {
         if (!response.complete) {
@@ -508,15 +523,19 @@ export function fetchRemoteImageVia(
 /**
  * The one hardened fetch loop behind every remote check. Only the `Accept`
  * header varies by caller; every scheme, credential, port, address,
- * redirect, byte, and time limit is applied identically.
+ * redirect, byte, and time limit is applied identically. With `truncate`, a
+ * body larger than `maxBytes` is cut to its first `maxBytes` bytes (and
+ * marked `truncated`) instead of failing, which is how a robots.txt parser
+ * applies its parsing limit.
  */
 export async function fetchRemoteResourceVia(
   input: string | URL,
   options: RemoteFetchOptions,
   dial: RemoteDialer,
   accept: string,
-): Promise<RemoteImage> {
-  const settings = settingsFrom(options);
+  truncate = false,
+): Promise<RemoteImage & { truncated?: true }> {
+  const settings = settingsFrom(options, truncate);
   const requested = parseUrl(String(input), undefined, "URL");
   const controller = new AbortController();
   const budget = setTimeout(() => controller.abort(), settings.timeoutMs);
@@ -537,6 +556,7 @@ export async function fetchRemoteResourceVia(
           contentType: result.contentType,
           bytes: result.bytes,
           byteLength: result.bytes.byteLength,
+          ...(result.truncated ? { truncated: true as const } : {}),
         });
       }
       if (result.location === undefined || result.location === "") {

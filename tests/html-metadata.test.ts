@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodeAttributeValue, decodeHtmlBytes, extractPageSocialMetadata } from "../src/html-metadata.js";
+import { decodeAttributeValue, decodeHtmlBytes, extractPageSocialMetadata, scanPageSocialMetadata } from "../src/html-metadata.js";
 
 const PAGE = "https://example.com/blog/post";
 
@@ -189,6 +189,77 @@ describe("extractPageSocialMetadata: document structure", () => {
     ]);
   });
 
+  it("closes comments the way the tokenizer does: <!-->, <!--->, and --!>", () => {
+    const image = `<meta property="og:image" content="/a.png">`;
+    for (const head of [`<!-->${image}`, `<!--->${image}`, `<!-- c --!>${image}`, `<!---->${image}`, `<!-- a -- b -->${image}`]) {
+      expect(extractPageSocialMetadata(`<head>${head}</head>`, PAGE).openGraph.images).toEqual([{ url: "/a.png" }]);
+    }
+    // "--" followed by anything else does not close the comment.
+    expect(extractPageSocialMetadata(`<head><!-- -- >${image}</head>`, PAGE).openGraph.images).toEqual([]);
+  });
+
+  it("keeps head-only elements between </head> and <body> in the head (after head mode)", () => {
+    const metadata = extractPageSocialMetadata(
+      `<html><head><title>t</title></head>
+<meta property="og:image" content="/late.png"><link rel="x"><body><meta name="twitter:card" content="summary">`,
+      PAGE,
+    );
+    expect(metadata.openGraph.images).toEqual([{ url: "/late.png" }]);
+    expect(metadata.issues).toEqual([expect.objectContaining({ code: "meta-outside-head", message: expect.stringContaining("1 social meta tag (first: twitter:card)") })]);
+    // Any other element after </head> starts the body.
+    expect(extractPageSocialMetadata(`<head></head><p><meta property="og:image" content="/x.png">`, PAGE).openGraph.images).toEqual([]);
+  });
+
+  it("ends the head at text that is not whitespace, as the tree builder does", () => {
+    const metadata = extractPageSocialMetadata(`<head>
+  stray<meta property="og:image" content="/a.png"></head>`, PAGE);
+    expect(metadata.openGraph.images).toEqual([]);
+    expect(metadata.issues).toEqual([expect.objectContaining({ code: "meta-outside-head" })]);
+    // A "<" that starts no markup is text too.
+    expect(extractPageSocialMetadata(`<head>< <meta property="og:image" content="/a.png"></head>`, PAGE).openGraph.images).toEqual([]);
+    // Whitespace, comments, and the doctype do not end it.
+    expect(extract(`
+	<!-- c -->
+<meta property="og:image" content="/a.png">`).openGraph.images).toEqual([{ url: "/a.png" }]);
+  });
+
+  it("reads <noscript> as raw text, so a pixel snippet in the head does not end it", () => {
+    const metadata = extract(`
+      <script>fbq('init', '1');</script>
+      <noscript><img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=1&ev=PageView&noscript=1"/></noscript>
+      <noscript><meta property="og:image" content="/hidden.png"></noscript>
+      <meta property="og:image" content="/after.png">
+      <meta name="twitter:card" content="summary">
+    `);
+    expect(metadata.openGraph.images).toEqual([{ url: "/after.png" }]);
+    expect(metadata.twitter.card).toBe("summary");
+    expect(metadata.issues).toEqual([]);
+  });
+
+  it("skips inert <template> contents, nested templates included", () => {
+    const metadata = extract(`
+      <template><meta property="og:image" content="/t.png"><template><base href="/x/"></template>
+        <script type="application/ld+json">{"image":"/ld.png"}</script></template>
+      <meta property="og:image" content="/real.png">
+    `);
+    expect(metadata.openGraph.images).toEqual([{ url: "/real.png" }]);
+    expect(metadata.baseHref).toBeUndefined();
+    expect(metadata.jsonLd).toEqual({ scripts: 0, images: [] });
+    expect(metadata.issues).toEqual([]);
+  });
+
+  it("trims only ASCII whitespace from values", () => {
+    const metadata = extract(`<meta property="og:image" content="&nbsp;https://example.com/x.png\t"><meta property=" og:title " content="\u2003T">`);
+    expect(metadata.openGraph.images).toEqual([{ url: "\u00a0https://example.com/x.png" }]);
+    expect(metadata.openGraph.title).toBe("\u2003T");
+  });
+
+  it("says whether the head ended within the input", () => {
+    expect(scanPageSocialMetadata(`<head><meta property="og:title" content="x">`, PAGE).headEnded).toBe(false);
+    expect(scanPageSocialMetadata(`<head></head>`, PAGE).headEnded).toBe(true);
+    expect(scanPageSocialMetadata(`<head><meta charset="utf-8"><body>`, PAGE).headEnded).toBe(true);
+  });
+
   it("ends the head at the first element that cannot appear in it", () => {
     const metadata = extractPageSocialMetadata(
       `<meta property="og:title" content="Kept"><div></div><meta property="og:image" content="/late.png">`,
@@ -226,6 +297,10 @@ describe("extractPageSocialMetadata: document structure", () => {
       `<script>${"</scrip".repeat(100_000)}`,
       `<script type="application/ld+json">${"[".repeat(100_000)}</script>`,
       "<!".repeat(200_000),
+      "<!-- -".repeat(100_000),
+      `<head>${"<!-- x -->".repeat(100_000)}`,
+      `<template>${"<template>".repeat(100_000)}`,
+      `<head>${"< ".repeat(200_000)}`,
     ];
     const started = performance.now();
     for (const html of inputs) extractPageSocialMetadata(html, PAGE);
@@ -310,6 +385,18 @@ describe("extractPageSocialMetadata: JSON-LD", () => {
     ]);
   });
 
+  it("deduplicates many images in linear time, merging the facts of a repeated URL", () => {
+    const urls = Array.from({ length: 4_000 }, (_, index) => `https://example.com/images/${index}.png`);
+    const started = performance.now();
+    const metadata = extract(`<script type="application/ld+json">${JSON.stringify({ image: [...urls, ...urls] })}</script>`);
+    expect(performance.now() - started).toBeLessThan(2_000);
+    expect(metadata.jsonLd.images).toHaveLength(4_000);
+    const merged = extract(`<script type="application/ld+json">${JSON.stringify({
+      image: ["/a.png", { "@type": "ImageObject", contentUrl: "/a.png", width: 10, height: 20 }],
+    })}</script>`);
+    expect(merged.jsonLd.images).toEqual([{ url: "/a.png", width: 10, height: 20, script: 0 }]);
+  });
+
   it("bounds deeply nested JSON-LD", () => {
     const nested = `${"[".repeat(100)}{"@type":"ImageObject","contentUrl":"/deep.png"}${"]".repeat(100)}`;
     const metadata = extract(`<script type="application/ld+json">${nested}</script>`);
@@ -348,6 +435,15 @@ describe("decodeHtmlBytes", () => {
     const bom = Uint8Array.from([0xef, 0xbb, 0xbf, ...new TextEncoder().encode("café")]);
     expect(decodeHtmlBytes(bom, "text/html; charset=windows-1252")).toBe("café");
     expect(decodeHtmlBytes(new TextEncoder().encode("café"), "text/html; charset=not-a-charset")).toBe("café");
-    expect(decodeHtmlBytes(new TextEncoder().encode("café"), "text/html; charset=utf-16")).toBe("café");
+  });
+
+  it("uses a UTF-16 Content-Type charset as given, but reads a UTF-16 <meta charset> as UTF-8", () => {
+    const utf16 = new Uint8Array([...("café")].flatMap((character) => [character.charCodeAt(0) & 0xff, character.charCodeAt(0) >> 8]));
+    expect(decodeHtmlBytes(utf16, "text/html; charset=utf-16le")).toBe("café");
+    expect(decodeHtmlBytes(utf16, "text/html; charset=utf-16")).toBe("café");
+    const metaUtf16 = new TextEncoder().encode('<meta charset="utf-16">café');
+    expect(decodeHtmlBytes(metaUtf16, "text/html")).toBe('<meta charset="utf-16">café');
+    const metaUserDefined = Uint8Array.from([...new TextEncoder().encode('<meta charset="x-user-defined">'), 0x80]);
+    expect(decodeHtmlBytes(metaUserDefined, undefined)).toBe('<meta charset="x-user-defined">€');
   });
 });
