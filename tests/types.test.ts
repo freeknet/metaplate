@@ -2,8 +2,16 @@ import { describe, expect, it } from "vitest";
 import type { ResvgRenderOptions as UpstreamResvgRenderOptions } from "@resvg/resvg-js";
 import type { SatoriOptions as UpstreamSatoriOptions } from "satori";
 import type { ReactElement } from "react";
-import type { Metadata } from "next";
-import { createNextOg, nextTwitterMetadata, type NextOgDefinition } from "../src/next.js";
+import type { Metadata, Viewport } from "next";
+import {
+  NEXT_OPEN_GRAPH_TYPES,
+  createNextOg,
+  nextPageMetadata,
+  nextPageViewport,
+  nextTwitterMetadata,
+  type NextOgDefinition,
+  type NextOpenGraphType,
+} from "../src/next.js";
 import {
   createNodeOg,
   type NodeOgDefinition,
@@ -190,6 +198,16 @@ export function xCardPayloadsAreChecked() {
   const wide: XImageOptions = { card: "player", site: "@e" };
   void wide;
 }
+
+// Page-level fields: the Next mapping returns Next's own types, and the
+// og:type allowlist names every value Next's openGraph.type accepts.
+const pageMetadata: Metadata = {
+  ...nextPageMetadata({ type: "article", article: { publishedTime: new Date(0) } }),
+};
+const pageViewport: Viewport = nextPageViewport({ themeColor: "#000000" });
+type UnlistedNextType = Exclude<NextOpenGraphType, (typeof NEXT_OPEN_GRAPH_TYPES)[number]>;
+const everyNextTypeListed: [UnlistedNextType] extends [never] ? true : false = true;
+void [pageMetadata, pageViewport, everyNextTypeListed];
 
 describe("React-free type mirror", () => {
   it("is exercised by the type-level assertions above", () => {

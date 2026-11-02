@@ -42,6 +42,8 @@ export {
 export {
   socialMetaHtml,
   socialMetaTags,
+  type SocialMetaArticle,
+  type SocialMetaDateTime,
   type SocialMetaHtmlOptions,
   type SocialMetaImageInput,
   type SocialMetaInput,
