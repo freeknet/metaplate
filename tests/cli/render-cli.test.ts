@@ -362,6 +362,25 @@ describe("renderFiles", { timeout: 30_000 }, () => {
     });
   });
 
+  it("refuses a file name a static host would serve as the wrong type", async () => {
+    const out = await temporary("extension");
+    const plate = fakePlate({
+      variants: [],
+      sitePath: (route) => (route === "/bare" ? "bare/og-image" : route === "/jpeg" ? "jpeg/og.jpg" : "ok/og.PNG"),
+    });
+    const pages = [{ route: "/bare", copy: 1 }, { route: "/jpeg", copy: 2 }, { route: "/ok", copy: 3 }];
+    const outcomes = await renderFiles(planImages([{ plate, pages }], out), { outDir: out, concurrency: 1 });
+    expect(outcomes.map((outcome) => [outcome.path, outcome.valid])).toEqual([
+      ["bare/og-image", false],
+      ["jpeg/og.jpg", false],
+      ["ok/og.PNG", true],
+    ]);
+    expect(outcomes[0]!.issues[0]!.message).toContain('has no file extension');
+    expect(outcomes[0]!.issues[0]!.message).toContain('"og-image.png"');
+    expect(outcomes[1]!.issues[0]!.message).toContain("ends in .jpg, but the plate encodes image/png");
+    expect(existsSync(path.join(out, "bare", "og-image"))).toBe(false);
+  });
+
   it("never runs more renders at once than the concurrency limit", async () => {
     for (const limit of [1, 3]) {
       let inFlight = 0;

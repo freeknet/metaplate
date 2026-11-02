@@ -176,8 +176,14 @@ the manifest and the pages agree on every token.
 
 The plate decides the format. A plate with no `output` writes PNG; a plate
 with an [`output` encoder](rendering.md#other-output-formats) writes what that
-encoder produces, at the plate's `imagePath` (give it the matching
-extension).
+encoder produces, at the plate's `imagePath`.
+
+Static hosts choose the `Content-Type` from the file extension, so the
+`imagePath` must end in the format's extension: `.png`, `.jpg` or `.jpeg`,
+`.webp`, `.gif`, `.avif`, or `.svg`, in any case. An image whose file name has
+no extension (such as the default `og-image`) or another format's fails before
+it is written, because the host would serve it as the wrong type and crawlers
+and `verify-url` would reject it.
 
 Every written file is read back from disk and checked. Its SHA-256 must match
 the rendered bytes, and `verifyImage` must confirm the format and the exact
