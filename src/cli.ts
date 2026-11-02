@@ -18,6 +18,7 @@ import type { SocialTarget } from "./compatibility-profiles.js";
 import type { ImageSize } from "./core.js";
 import { verifySocialImage } from "./social-verification.js";
 import { imageContentType, verifyImage, type ImageDimensions } from "./image.js";
+import { hasError, redactUrl } from "./internal.js";
 import { pngUniformColor } from "./png-content.js";
 import { verifyRemotePage, type RemotePageImageReport, type RemotePageVerification } from "./page-verification.js";
 import { RemoteImageError, verifyRemoteImage } from "./remote.js";
@@ -109,10 +110,6 @@ type Check = {
   size: ImageSize;
   load: () => Promise<Loaded>;
 };
-
-function hasError(issues: readonly CliIssue[]): boolean {
-  return issues.some((issue) => issue.severity === "error");
-}
 
 function messages(issues: readonly CliIssue[]): string {
   return issues.map(({ message }) => message ?? "verification failed").join("; ");
@@ -222,19 +219,6 @@ function assertContent(bytes: Uint8Array, format: string): void {
   }
 }
 
-/** Never echo embedded credentials back into logs or JSON reports. */
-function displayUrl(raw: string): string {
-  try {
-    const url = new URL(raw);
-    if (url.username === "" && url.password === "") return raw;
-    url.username = "";
-    url.password = "";
-    return url.href;
-  } catch {
-    return raw;
-  }
-}
-
 function verifyFiles(args: string[]) {
   const invocation = parseVerifyInvocation(args);
   const checks = invocation.targets.map((target): Check => {
@@ -257,7 +241,8 @@ function verifyFiles(args: string[]) {
 function verifyUrls(args: string[]) {
   const invocation = parseVerifyUrlInvocation(args);
   const checks = invocation.targets.map((target): Check => {
-    const name = displayUrl(target.url);
+    // Never echo embedded credentials back into logs or JSON reports.
+    const name = redactUrl(target.url);
     return {
       name,
       identity: { url: name },
@@ -349,7 +334,7 @@ async function verifyPages(args: string[]) {
   let failed = 0;
 
   for (const raw of invocation.urls) {
-    const page = displayUrl(raw);
+    const page = redactUrl(raw);
     try {
       const report = await verifyRemotePage(raw, {
         ...invocation.fetch,
@@ -401,8 +386,10 @@ async function main(args: string[]) {
 main(process.argv.slice(2)).catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
   process.stderr.write(`${message}\n`);
-  if (!(error instanceof ReportedError)) {
-    process.stderr.write(`${COMMANDS.get(process.argv[2] ?? "")?.usage ?? VERIFY_USAGE}\n`);
+  // Argument errors already end with the command's usage; print it only once.
+  const usage = COMMANDS.get(process.argv[2] ?? "")?.usage ?? VERIFY_USAGE;
+  if (!(error instanceof ReportedError) && !message.endsWith(usage)) {
+    process.stderr.write(`${usage}\n`);
   }
   process.exitCode = 1;
 });
