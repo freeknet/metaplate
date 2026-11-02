@@ -1,6 +1,7 @@
 import { MAX_IMAGE_DIMENSION, type XCard } from "./core.js";
 import { xCardTags, type XAppCard, type XPlayerCard } from "./x-cards.js";
 import { openGraphMediaTags, type SocialMetaMediaInput } from "./og-media.js";
+import { isAbsoluteUrl, present } from "./internal.js";
 import { canonicalBase, pageTags, type SocialMetaOptions } from "./page-tags.js";
 
 export { canonicalBase };
@@ -71,10 +72,6 @@ export type SocialMetaHtmlOptions = SocialMetaOptions & {
 const TAG_KEY = /^(?:(?:og|twitter|article)(?::[a-z]+(?:_[a-z]+)*)+|theme-color)$/;
 const INDENT = /^[ \t]*$/;
 
-export function present(value: string | undefined): value is string {
-  return value !== undefined && value !== "";
-}
-
 export function dimension(value: number, axis: string): string {
   if (!Number.isInteger(value) || value < 1 || value > MAX_IMAGE_DIMENSION) {
     throw new Error(
@@ -82,15 +79,6 @@ export function dimension(value: number, axis: string): string {
     );
   }
   return String(value);
-}
-
-function isAbsoluteUrl(value: string): boolean {
-  try {
-    new URL(value);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 export function imageUrl(image: SocialMetaImageInput, base: URL | undefined, label: string): string {

@@ -588,7 +588,7 @@ export default {
 
     const usage = runCli(bundlePath, ["render"], cwd);
     expect(usage.status).toBe(1);
-    expect(usage.stderr).toBe(`${RENDER_USAGE}\n${RENDER_USAGE}\n`);
+    expect(usage.stderr).toBe(`${RENDER_USAGE}\n`);
   });
 
   it("explains how to load JSX instead of failing on the extension", async () => {

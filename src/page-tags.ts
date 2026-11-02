@@ -10,6 +10,7 @@
  * @see https://html.spec.whatwg.org/multipage/semantics.html#meta-theme-color
  */
 import type { SocialMetaTag } from "./meta-tags.js";
+import { present } from "./internal.js";
 
 /**
  * A point in time as page fields accept it: a `Date`, serialized with
@@ -125,10 +126,6 @@ const THEME_COLOR = /^#(?:[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/;
 const CALENDAR_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const DATE_TIME =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-](\d{2}):(\d{2}))$/;
-
-function present(value: string | undefined): value is string {
-  return value !== undefined && value !== "";
-}
 
 /** Parses the canonical URL, accepting only credential-free http(s) URLs. */
 export function canonicalBase(url: string): URL {

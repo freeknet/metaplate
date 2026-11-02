@@ -135,8 +135,13 @@ public image:
 - **Addresses.** The hostname is resolved once per hop, and the fetch is
   refused if *any* resolved address is loopback, private (10/8, 172.16/12,
   192.168/16), carrier-grade NAT, link-local (including 169.254.169.254 cloud
-  metadata), unique-local, unspecified, multicast, reserved, or an IPv4-mapped,
-  NAT64, or 6to4 form of one. The connection is then made to the checked
+  metadata), unique-local, unspecified, multicast, reserved, documentation
+  (192.0.2/24, 198.51.100/24, 203.0.113/24, 2001:db8::/32), benchmarking,
+  discard-only, Teredo, local-use NAT64 (64:ff9b:1::/48), or any other block the
+  IANA [IPv4](https://www.iana.org/assignments/iana-ipv4-special-registry/) and
+  [IPv6](https://www.iana.org/assignments/iana-ipv6-special-registry/)
+  special-purpose registries mark "Globally Reachable: False", or an
+  IPv4-mapped, NAT64, or 6to4 form of one. The connection is then made to the checked
   address itself, with the original name in `Host` and TLS SNI, so a DNS answer
   that changes between check and connect cannot move the request.
 - **Redirects.** At most `--max-redirects N` (default 3) are followed, and every
