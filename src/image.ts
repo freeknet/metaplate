@@ -12,7 +12,7 @@ export {
   type ImageDimensions,
   type ImageFormat,
   type OutputFormat,
-} from "./image-core.js";
+} from "./image/inspect.js";
 
 export {
   IMAGE_ASSET_DEFAULTS,
@@ -22,4 +22,4 @@ export {
   type ImageAssetBytes,
   type ImageAssetOptions,
   type ImageAssetSource,
-} from "./image-asset.js";
+} from "./image/asset.js";

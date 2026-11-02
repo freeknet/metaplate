@@ -1,5 +1,5 @@
 import { deflateSync } from "node:zlib";
-import { ADAM7 } from "../../src/png-content.js";
+import { ADAM7 } from "../../src/image/png-content.js";
 import { pngChunk, uint32be } from "./image-fixtures.js";
 
 const CHANNELS: Record<number, number> = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 };
