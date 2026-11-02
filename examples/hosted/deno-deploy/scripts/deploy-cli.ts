@@ -33,23 +33,22 @@ function traceRequests() {
   const log = (line: string) => console.error(`[trace +${((Date.now() - started) / 1000).toFixed(1)}s] ${line}`);
 
   // Summarizes one revision update: status, step names, and label keys, never
-  // label values. The payload is decoded the way the CLI's own tRPC transformer
-  // decodes it.
+  // label values except the deno.diffsync upload handshake. The payload is a
+  // JavaScript object literal (the CLI's tRPC transformer evaluates it); it is
+  // only pattern-matched here, never evaluated.
   function describe(data: string): string {
+    let source: string;
     try {
-      const revision = (0, eval)(`(${JSON.parse(data)})`);
-      const steps = (revision?.steps ?? []).map((step: { step?: string; status?: string }) =>
-        `${step.step}:${step.status ?? "?"}`
-      );
-      const labels = Object.keys(revision?.labels ?? {}).join(",");
-      // The upload handshake lives under the deno.diffsync labels; print those.
-      const diffsync = Object.entries(revision?.labels ?? {})
-        .filter(([key]) => key.startsWith("deno.diffsync"))
-        .map(([key, value]) => `${key}=${String(value).slice(0, 400)}`);
-      return `status=${revision?.status} steps=[${steps.join(",")}] labels=[${labels}] ${diffsync.join(" ")}`;
+      source = String(JSON.parse(data));
     } catch (error) {
       return `undecodable (${error})`;
     }
+    const status = /\bstatus"?\s*:\s*"([a-z_]+)"/.exec(source)?.[1] ?? "?";
+    const steps = [...source.matchAll(/\bstep"?\s*:\s*"([a-z_]+)"/g)].map((match) => match[1]);
+    const labels = [...new Set([...source.matchAll(/"(deno\.[a-z_.]+)"\s*:/g)].map((match) => match[1]))];
+    const diffsync = [...source.matchAll(/"(deno\.diffsync[a-z_.]*)"\s*:\s*("(?:[^"\\]|\\.)*")/g)]
+      .map((match) => `${match[1]}=${match[2].slice(0, 400)}`);
+    return `status=${status} steps=[${steps.join(",")}] labels=[${labels.join(",")}] ${diffsync.join(" ")}`;
   }
 
   async function watchEvents(label: string, body: ReadableStream<Uint8Array>) {
@@ -76,7 +75,7 @@ function traceRequests() {
 
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
-    if (!url.hostname.endsWith("deno.com")) return realFetch(input, init);
+    if (url.hostname !== "deno.com" && !url.hostname.endsWith(".deno.com")) return realFetch(input, init);
     const label = `${init?.method ?? (input instanceof Request ? input.method : "GET")} ${url.pathname}`;
     log(`-> ${label}`);
     let response: Response;
