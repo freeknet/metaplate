@@ -42,6 +42,10 @@ function issue(
   return Object.freeze({ severity, code, message, ...(target ? { target } : {}) });
 }
 
+function wholePixels(value: number): number {
+  return Number.isInteger(value) ? value : Math.max(1, Math.round(value));
+}
+
 /**
  * Verifies encoded bytes and their published social descriptor as one
  * contract. Structural image failures still throw, while ordinary metadata
@@ -73,10 +77,13 @@ export function verifySocialImageFacts(
   }
   integerOption("maxFileSize", options.maxFileSize, 0);
 
+  // An SVG may declare a fractional size (`width="98.36"`), but size rules
+  // and `og:image:width` work in whole pixels, so compare it rounded.
+  const measured = { width: wholePixels(actual.width), height: wholePixels(actual.height) };
   const compatibilityDescriptor = {
     ...descriptor,
-    width: descriptor.width ?? actual.width,
-    height: descriptor.height ?? actual.height,
+    width: descriptor.width ?? measured.width,
+    height: descriptor.height ?? measured.height,
   };
   const compatibility = socialImageCompatibility(compatibilityDescriptor, {
     ...(options.targets ? { targets: options.targets } : {}),
@@ -90,7 +97,7 @@ export function verifySocialImageFacts(
   if (
     descriptor.width !== undefined &&
     descriptor.height !== undefined &&
-    (actual.width !== descriptor.width || actual.height !== descriptor.height)
+    (measured.width !== descriptor.width || measured.height !== descriptor.height)
   ) {
     issues.push(issue(
       "error",
