@@ -755,7 +755,7 @@
       "status": "certified",
       "evidence": "Required CI check \"Runtime smoke / deno\": scripts/prepare-runtime-consumer.mjs installs the packed tarball into a clean consumer and scripts/verify-runtime.mjs renders and verifies a PNG there; .planning/hosted-evidence/runtimes-2026-11-01.json",
       "officialDocs": "https://docs.deno.com/runtime/fundamentals/node/",
-      "runtimeBoundary": "Packed metaplate tarball on Deno 2.9.8 (linux-x64, GitHub Actions ubuntu-latest) through Deno's Node compatibility with the native @resvg/resvg-js binding; no hosted Deno Deploy deployment is certified",
+      "runtimeBoundary": "Packed metaplate tarball on Deno 2.9.8 (linux-x64, GitHub Actions ubuntu-latest) through Deno's Node compatibility with the native @resvg/resvg-js binding; hosted Deno Deploy is certified separately as deno-deploy-edge and deno-deploy-node",
       "certification": {
         "verifiedAt": "2026-11-01T22:33:18Z",
         "provider": "Deno",
@@ -792,6 +792,232 @@
           "metaplate/node": "dist/node.js",
           "metaplate/fonts": "dist/fonts.js",
           "metaplate/image": "dist/image.js"
+        }
+      }
+    },
+    {
+      "id": "deno-deploy-edge",
+      "provider": "Deno Deploy",
+      "runtime": "Deno Deploy (Deno 2.9 with npm and Node compatibility)",
+      "api": "metaplate/edge createEdgeOg fetchableFrom with resvg.wasm and layout.wasm read from node_modules",
+      "status": "certified",
+      "evidence": ".planning/hosted-evidence/deno-deploy-2026-11-01.json; fixture examples/hosted/deno-deploy",
+      "runtimeBoundary": "Hosted Deno Deploy app, production timeline, built by Deno Deploy from the GitHub repository at 36be0e9 on 2026-11-01. The build packs metaplate from the checkout and installs the app against that tarball. Local directory uploads are not covered: they stall on Deno Deploy's side (denoland/deploy_feedback#954).",
+      "officialDocs": "https://docs.deno.com/deploy/",
+      "officialReferences": [
+        "https://docs.deno.com/deploy/reference/builds/",
+        "https://docs.deno.com/deploy/reference/apps/",
+        "https://docs.deno.com/deploy/reference/timelines/",
+        "https://api.deno.com/v2/docs"
+      ],
+      "certification": {
+        "verifiedAt": "2026-11-02T02:08:00Z",
+        "provider": "Deno Deploy",
+        "providerVersion": "Deno Deploy (console.deno.com), GitHub build of 36be0e9; builder npm 12.2.1",
+        "runtimeVersion": "deno 2.9.8+e565d2b on Deno Deploy",
+        "commit": "36be0e9bbf8c6827d4e613d2e11f9f6fcf1f718e",
+        "commitSha": "36be0e9bbf8c6827d4e613d2e11f9f6fcf1f718e",
+        "packageVersion": "0.8.0",
+        "packedArtifact": {
+          "file": "metaplate.tgz (metaplate 0.8.0)",
+          "sha256": "0b9d77986cd96383e5679a719389cbeafc1ccfbac0eec9e0f6c7a26b6fab6b1f",
+          "packedBy": "Deno Deploy's builder: npm ci at the repository root, npm run build, npm pack (npm 12.2.1 through Deno), in the install step of the build",
+          "installedAs": "file:./metaplate.tgz in examples/hosted/deno-deploy",
+          "reportedBy": "https://metaplate-deno-github.metaplate.deno.net/ (metaplate-pack.json, written when the tarball was packed)",
+          "note": "Each builder compiles dist itself, so the tarball bytes differ by builder: the same tree packs to 00bedd44... on Debian with Node and 114a3c62... on Windows. Deno's builder packed 0b9d7798... for both the branch build s10ap12jdp49 and this production build."
+        },
+        "productionBuild": {
+          "revision": "8yn9xxxf3p64",
+          "timeline": "Production",
+          "command": "npm ci --prefix ../../.. --ignore-scripts --no-audit --no-fund && npm run setup && rm -rf ../../../node_modules ../../../dist",
+          "entrypoint": "main.ts",
+          "createdAt": "2026-11-02T02:01:06.631Z",
+          "buildFinishedAt": "2026-11-02T02:01:41.200Z",
+          "artifact": "26.6 MB, 3383 files (build log)"
+        },
+        "output": "https://metaplate-deno-github.metaplate.deno.net",
+        "servedOutput": [
+          "https://metaplate-deno-github.metaplate.deno.net/og/d1",
+          "https://metaplate-deno-github.metaplate.deno.net/og/edge-wrap-check-title-3f"
+        ],
+        "evidenceUrlOrArtifact": ".planning/hosted-evidence/deno-deploy-2026-11-01.json",
+        "api": "metaplate/edge at /og/:slug",
+        "imageVerification": {
+          "verified": true,
+          "tool": "metaplate verify-url --json --size 1200x630 --format png",
+          "results": [
+            {
+              "url": "https://metaplate-deno-github.metaplate.deno.net/og/d1",
+              "valid": true,
+              "contentType": "image/png",
+              "format": "png",
+              "width": 1200,
+              "height": 630,
+              "bytes": 19150
+            },
+            {
+              "url": "https://metaplate-deno-github.metaplate.deno.net/og/edge-wrap-check-title-3f",
+              "valid": true,
+              "contentType": "image/png",
+              "format": "png",
+              "width": 1200,
+              "height": 630,
+              "bytes": 27722
+            }
+          ]
+        },
+        "responseVerification": {
+          "verified": true,
+          "distinctBytesPerSlug": true,
+          "nonUniformImages": true,
+          "oneLineTitlesRender": true,
+          "results": [
+            {
+              "url": "https://metaplate-deno-github.metaplate.deno.net/og/d1",
+              "status": 200,
+              "contentType": "image/png",
+              "cacheControl": "public, max-age=86400",
+              "contentLength": "19150",
+              "etag": "\"3f1c1a054439514d1915af8fdf81ccdc7e51a7d3c0bc3d23401a5aadbd04fd23\"",
+              "sha256": "3f1c1a054439514d1915af8fdf81ccdc7e51a7d3c0bc3d23401a5aadbd04fd23",
+              "titleLines": "one line",
+              "contentCheck": {
+                "tool": "Pillow 12.3.0: grayscale histogram entropy (bits) and distinct gray levels",
+                "entropy": 0.2228,
+                "distinctGrayLevels": 26,
+                "uniform": false
+              }
+            },
+            {
+              "url": "https://metaplate-deno-github.metaplate.deno.net/og/edge-wrap-check-title-3f",
+              "status": 200,
+              "contentType": "image/png",
+              "cacheControl": "public, max-age=86400",
+              "contentLength": "27722",
+              "etag": "\"3aad1ac3b7c7d441b9ba418fee453a0b16461e2811b53cf2f031e4e8dccd9b5b\"",
+              "sha256": "3aad1ac3b7c7d441b9ba418fee453a0b16461e2811b53cf2f031e4e8dccd9b5b",
+              "titleLines": "two lines",
+              "contentCheck": {
+                "tool": "Pillow 12.3.0: grayscale histogram entropy (bits) and distinct gray levels",
+                "entropy": 0.3341,
+                "distinctGrayLevels": 26,
+                "uniform": false
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "deno-deploy-node",
+      "provider": "Deno Deploy",
+      "runtime": "Deno Deploy (Deno 2.9 with npm and Node compatibility)",
+      "api": "metaplate/node createNodeOg fetchableFrom with the native @resvg/resvg-js binding",
+      "status": "certified",
+      "evidence": ".planning/hosted-evidence/deno-deploy-2026-11-01.json; fixture examples/hosted/deno-deploy",
+      "runtimeBoundary": "Same Deno Deploy app and production build as deno-deploy-edge. The native @resvg/resvg-js binding loads through Deno's Node compatibility from the linux-x64-gnu package the build installed.",
+      "officialDocs": "https://docs.deno.com/deploy/",
+      "officialReferences": [
+        "https://docs.deno.com/deploy/reference/builds/",
+        "https://docs.deno.com/deploy/reference/apps/",
+        "https://docs.deno.com/deploy/reference/timelines/",
+        "https://api.deno.com/v2/docs"
+      ],
+      "certification": {
+        "verifiedAt": "2026-11-02T02:08:00Z",
+        "provider": "Deno Deploy",
+        "providerVersion": "Deno Deploy (console.deno.com), GitHub build of 36be0e9; builder npm 12.2.1",
+        "runtimeVersion": "deno 2.9.8+e565d2b on Deno Deploy",
+        "commit": "36be0e9bbf8c6827d4e613d2e11f9f6fcf1f718e",
+        "commitSha": "36be0e9bbf8c6827d4e613d2e11f9f6fcf1f718e",
+        "packageVersion": "0.8.0",
+        "packedArtifact": {
+          "file": "metaplate.tgz (metaplate 0.8.0)",
+          "sha256": "0b9d77986cd96383e5679a719389cbeafc1ccfbac0eec9e0f6c7a26b6fab6b1f",
+          "packedBy": "Deno Deploy's builder: npm ci at the repository root, npm run build, npm pack (npm 12.2.1 through Deno), in the install step of the build",
+          "installedAs": "file:./metaplate.tgz in examples/hosted/deno-deploy",
+          "reportedBy": "https://metaplate-deno-github.metaplate.deno.net/ (metaplate-pack.json, written when the tarball was packed)",
+          "note": "Each builder compiles dist itself, so the tarball bytes differ by builder: the same tree packs to 00bedd44... on Debian with Node and 114a3c62... on Windows. Deno's builder packed 0b9d7798... for both the branch build s10ap12jdp49 and this production build."
+        },
+        "productionBuild": {
+          "revision": "8yn9xxxf3p64",
+          "timeline": "Production",
+          "command": "npm ci --prefix ../../.. --ignore-scripts --no-audit --no-fund && npm run setup && rm -rf ../../../node_modules ../../../dist",
+          "entrypoint": "main.ts",
+          "createdAt": "2026-11-02T02:01:06.631Z",
+          "buildFinishedAt": "2026-11-02T02:01:41.200Z",
+          "artifact": "26.6 MB, 3383 files (build log)"
+        },
+        "output": "https://metaplate-deno-github.metaplate.deno.net",
+        "servedOutput": [
+          "https://metaplate-deno-github.metaplate.deno.net/og-node/n1",
+          "https://metaplate-deno-github.metaplate.deno.net/og-node/node-wrap-check-title-9a"
+        ],
+        "evidenceUrlOrArtifact": ".planning/hosted-evidence/deno-deploy-2026-11-01.json",
+        "api": "metaplate/node at /og-node/:slug",
+        "imageVerification": {
+          "verified": true,
+          "tool": "metaplate verify-url --json --size 1200x630 --format png",
+          "results": [
+            {
+              "url": "https://metaplate-deno-github.metaplate.deno.net/og-node/n1",
+              "valid": true,
+              "contentType": "image/png",
+              "format": "png",
+              "width": 1200,
+              "height": 630,
+              "bytes": 18350
+            },
+            {
+              "url": "https://metaplate-deno-github.metaplate.deno.net/og-node/node-wrap-check-title-9a",
+              "valid": true,
+              "contentType": "image/png",
+              "format": "png",
+              "width": 1200,
+              "height": 630,
+              "bytes": 27260
+            }
+          ]
+        },
+        "responseVerification": {
+          "verified": true,
+          "distinctBytesPerSlug": true,
+          "nonUniformImages": true,
+          "oneLineTitlesRender": true,
+          "results": [
+            {
+              "url": "https://metaplate-deno-github.metaplate.deno.net/og-node/n1",
+              "status": 200,
+              "contentType": "image/png",
+              "cacheControl": "public, max-age=86400",
+              "contentLength": "18350",
+              "etag": "\"36256b05a048b69d583fa8577d9b3e5d4194216f5ba88a3d6c78966547b5d623\"",
+              "sha256": "36256b05a048b69d583fa8577d9b3e5d4194216f5ba88a3d6c78966547b5d623",
+              "titleLines": "one line",
+              "contentCheck": {
+                "tool": "Pillow 12.3.0: grayscale histogram entropy (bits) and distinct gray levels",
+                "entropy": 0.2192,
+                "distinctGrayLevels": 26,
+                "uniform": false
+              }
+            },
+            {
+              "url": "https://metaplate-deno-github.metaplate.deno.net/og-node/node-wrap-check-title-9a",
+              "status": 200,
+              "contentType": "image/png",
+              "cacheControl": "public, max-age=86400",
+              "contentLength": "27260",
+              "etag": "\"1d18aff6eb80b426e60cea8e3cf2633d012c8e1bc902cb5ef3b5156306a8e095\"",
+              "sha256": "1d18aff6eb80b426e60cea8e3cf2633d012c8e1bc902cb5ef3b5156306a8e095",
+              "titleLines": "two lines",
+              "contentCheck": {
+                "tool": "Pillow 12.3.0: grayscale histogram entropy (bits) and distinct gray levels",
+                "entropy": 0.3317,
+                "distinctGrayLevels": 26,
+                "uniform": false
+              }
+            }
+          ]
         }
       }
     },
