@@ -247,6 +247,9 @@ describe("extractPageSocialMetadata: base URL", () => {
   it.each([
     [`<base href="javascript:alert(1)">`],
     [`<base href="data:text/html,x">`],
+    [`<base href="vbscript:msgbox(1)">`],
+    [`<base href="file:///etc/">`],
+    [`<base href="ftp://example.com/">`],
     [`<base href="http://[bad">`],
   ])("falls back to the document URL for %s", (tag) => {
     expect(extract(tag).baseUrl).toBe(PAGE);

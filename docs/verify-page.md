@@ -83,8 +83,10 @@ crawler sees:
   first 1024 bytes, in that order, and as UTF-8 otherwise.
 - Relative URLs resolve against the document base URL: the first
   `<base href>`, resolved against the page's final URL after redirects, or the
-  final URL itself. A `<base>` that does not parse, or names `data:` or
-  `javascript:`, is ignored.
+  final URL itself. A `<base>` that does not parse, or whose scheme is not
+  http or https, is ignored. HTML itself ignores only `data:` and
+  `javascript:` bases; any other non-http(s) base would make every relative
+  image unfetchable, so it is ignored too.
 
 The scanner runs in linear time: it uses no regular expressions over page
 content, never backtracks, and bounds JSON-LD nesting to 32 levels and
@@ -327,7 +329,8 @@ post-deploy check built on `verifyRemotePage`.
 - HTML Living Standard: the
   [`base` element](https://html.spec.whatwg.org/multipage/semantics.html#the-base-element)
   (the first `base` with `href` sets the frozen base URL, parsed against the
-  fallback base URL, with `data:` and `javascript:` refused), the
+  fallback base URL, with `data:` and `javascript:` refused; this tool also
+  refuses any other non-http(s) scheme), the
   [document base URL](https://html.spec.whatwg.org/multipage/urls-and-fetching.html#document-base-url)
   (the document's URL when there is no such `base`), the
   [`meta` element](https://html.spec.whatwg.org/multipage/semantics.html#the-meta-element)
