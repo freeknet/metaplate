@@ -33,6 +33,11 @@ export type SocialCompatibilityProfile = Readonly<{
   warnOnSvg?: string;
   /** Omit a dimension the platform does not constrain. */
   minimumSize?: Readonly<{ width?: number; height?: number; message: string }>;
+  /** A larger minimum some of the platform's layouts need, reported as a warning. */
+  preferredMinimumSize?: Readonly<{ width: number; height: number; message: string }>;
+  maximumSize?: Readonly<{ width: number; height: number; message: string }>;
+  /** Longest alt text, in characters (code points). */
+  maximumAltLength?: Readonly<{ characters: number; message: string }>;
   recommendedAspectRatio?: Readonly<{ value: number; tolerance: number; message: string }>;
   /** Largest documented width/height ratio. */
   maximumAspectRatio?: Readonly<{ value: number; message: string }>;
@@ -72,7 +77,49 @@ export const SOCIAL_COMPATIBILITY_PROFILES = {
       invalidMessage: UNIVERSAL_FORMAT_MESSAGE,
     },
   },
-  x: { crawlerReady: true },
+  /**
+   * X's Summary and Summary with Large Image Card references (archived
+   * copies; X has taken the pages offline): images "must be less than 5MB in
+   * size. JPG, PNG, WEBP and GIF formats are supported. ... SVG is not
+   * supported", at least 144x144 for `summary` and 300x157 for
+   * `summary_large_image`, at most 4096x4096, with alt text of "Maximum 420
+   * characters". The card type is not part of the image, so 144x144 is the
+   * hard minimum and 300x157 a warning. "Less than 5MB" is read as under
+   * 5,000,000 bytes, as WhatsApp's "under 600KB" is.
+   * https://web.archive.org/web/20240125214107/https://developer.twitter.com/en/docs/twitter-for-websites/cards/overview/summary
+   * https://web.archive.org/web/20231217021401/https://developer.twitter.com/en/docs/twitter-for-websites/cards/overview/summary-card-with-large-image
+   */
+  x: {
+    crawlerReady: true,
+    format: {
+      accepted: [...DOCUMENTED_RASTER_TYPES, "image/webp"],
+      missingSeverity: "warning",
+      invalidMessage: "is not an X Card image format; X supports JPG, PNG, WEBP, and GIF, and not SVG.",
+    },
+    minimumSize: {
+      width: 144,
+      height: 144,
+      message: "X Card images must be at least 144x144 pixels.",
+    },
+    preferredMinimumSize: {
+      width: 300,
+      height: 157,
+      message: "X summary_large_image cards need at least 300x157 pixels; a smaller image suits only the summary card.",
+    },
+    maximumSize: {
+      width: 4096,
+      height: 4096,
+      message: "X Card images must be at most 4096x4096 pixels.",
+    },
+    maximumFileSize: {
+      bytes: 4_999_999,
+      message: "X Card images must be less than 5MB.",
+    },
+    maximumAltLength: {
+      characters: 420,
+      message: "X Card image alt text is limited to 420 characters.",
+    },
+  },
   linkedin: {
     crawlerReady: true,
     format: {

@@ -126,6 +126,14 @@ export function socialImageCompatibility(
 
     if (options.checkAlt !== false && !image.alt) {
       issues.push(issue(target, "error", "contract", "Social images require alt text."));
+    } else if (
+      options.checkAlt !== false &&
+      image.alt &&
+      profile.maximumAltLength &&
+      [...image.alt].length > profile.maximumAltLength.characters
+    ) {
+      const { message } = profile.maximumAltLength;
+      issues.push(issue(target, "error", "contract", `${message} Received ${[...image.alt].length}.`));
     }
 
     if (profile.format) {
@@ -159,6 +167,18 @@ export function socialImageCompatibility(
       issues.push(
         issue(target, "error", "dimensions", profile.minimumSize.message),
       );
+    }
+    if (profile.preferredMinimumSize && meetsMinimum && !meetsMinimumSize(image, profile.preferredMinimumSize)) {
+      issues.push(issue(target, "warning", "dimensions", profile.preferredMinimumSize.message));
+    }
+    const maximum = profile.maximumSize;
+    if (maximum && (image.width > maximum.width || image.height > maximum.height)) {
+      issues.push(issue(
+        target,
+        "error",
+        "dimensions",
+        `${maximum.message} Received ${image.width}x${image.height}.`,
+      ));
     }
     if (
       profile.maximumAspectRatio &&
