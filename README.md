@@ -223,8 +223,11 @@ runtime. Metaplate bundles no artwork; the guide covers each set's license.
 
 `metaplate verify` checks generated files for dimensions, format, structure,
 and platform rules, and `metaplate verify-url` runs the same checks on a
-deployed URL under a hardened fetch policy.
-[Verification guide](docs/verification.md)
+deployed URL under a hardened fetch policy. `metaplate verify-page` audits a
+whole page: it reads the page's `og:image`, `twitter:card`, `twitter:image`,
+and JSON-LD images and verifies every image they name.
+[Verification guide](docs/verification.md) and
+[page audit guide](docs/verify-page.md)
 
 ### Deployment routes
 
@@ -246,8 +249,9 @@ every route is in [`deployment-evidence.json`](deployment-evidence.json).
   automatically.
 - `metaplate/node` — SVG, PNG, raw pixels, and any format a supplied encoder
   produces, plus Fetch API responses. Satori and Resvg are installed
-  automatically. Also the hardened remote fetcher behind `verify-url`
-  (`fetchRemoteImage`, `verifyRemoteImage`).
+  automatically. Also the hardened remote fetcher behind `verify-url` and
+  `verify-page` (`fetchRemoteImage`, `verifyRemoteImage`, `verifyRemotePage`,
+  `extractPageSocialMetadata`).
 - `metaplate/edge` — PNG, raw pixels, and Fetch API responses through
   `@resvg/resvg-wasm` for Deno-based edges such as Netlify Edge Functions,
   and other runtimes that allow run-time Wasm compilation; not Cloudflare

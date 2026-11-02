@@ -7,6 +7,19 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Added
 
+- `metaplate verify-page <url>` audits a deployed page's social preview. It
+  fetches the HTML with the same hardened fetcher as `verify-url` (its own
+  `text/html`/`application/xhtml+xml` check and `--max-html-bytes` cap,
+  default 4 MiB), extracts `og:image` and its structured properties,
+  `twitter:card`/`twitter:image`, and Schema.org JSON-LD `ImageObject` and
+  `image` URLs with a linear-time, dependency-free tokenizer, resolves them
+  against the final URL and `<base href>`, and verifies each distinct image
+  (at most `--max-images`, default 8): bytes, `Content-Type`, declared
+  dimensions and type, alt text, http URLs, and `--target` profiles judged
+  against the image each consumer picks. `--json` prints
+  `{ "schemaVersion": 1, "pages": [...] }`. `verifyRemotePage` and
+  `extractPageSocialMetadata` are exported from `metaplate/node`; see
+  `docs/verify-page.md`.
 - `metaplate/edge` renders plates to PNG through `@resvg/resvg-wasm` on
   Deno-based edges such as Netlify Edge Functions (hosted-certified on
   2026-11-01), and on other Fetch-shaped runtimes that allow WebAssembly to be
