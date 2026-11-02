@@ -7,6 +7,26 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Added
 
+- Plate components may be `async` in `createSvgOg`, `createNodeOg`,
+  `createEdgeOg`, and `createNextOg`, so a component can load per-page
+  data before returning its element tree; a synchronous component is not
+  awaited. The `PlateElement` type names either result.
+- `imageAsset` and `imageAssetLoader` in `metaplate/image` embed image
+  bytes as a `data:` URI with the intrinsic size Satori uses, in any
+  runtime. The format is detected from the bytes and walked structurally, so
+  truncated files, HTML error pages, and formats Satori rejects (AVIF, HEIC,
+  JPEG XL, TIFF, BMP, ICO) throw with the reason. Only PNG, JPEG, and SVG are
+  accepted by default, because the Resvg in `metaplate/node`,
+  `metaplate/edge`, and `next/og` draws WebP (and, in `next/og`, GIF)
+  as nothing; `formats` opts in. A viewBox-only SVG is sized from its
+  `viewBox`, and sources over `maxBytes` (default 4 MiB) are refused.
+- New `metaplate/assets` entry: `readImageAsset` and `fileImageLoader`
+  read project image files, and `remoteImageLoader` fetches per-page images
+  only from a required `origins` allowlist, re-checked on every redirect,
+  through the hardened `verify-url` fetcher, with a streaming byte cap and a
+  bounded per-URL cache. See
+  [Images and assets](docs/rendering.md#images-and-assets).
+
 - `metaplate render <module>` renders static social images as a build step.
   The module's default export is `{ plate, pages: [{ route?, copy }] }`, an
   array of those, or a function returning either; a `createNodeOg` or

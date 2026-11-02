@@ -18,6 +18,7 @@ export type {
 
 export type {
   PlateContext,
+  PlateElement,
   PlateMetadataOptions,
   PlateVariant,
   PlateVariants,

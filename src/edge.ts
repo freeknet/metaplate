@@ -12,6 +12,7 @@ export type { RenderedPixels } from "./raster.js";
 
 export type {
   PlateContext,
+  PlateElement,
   PlateMetadataOptions,
   PlateVariant,
   PlateVariants,

@@ -24,6 +24,22 @@ export type PlateContext<Variant extends string = string> = Readonly<{
 }>;
 
 /**
+ * What a plate `component` returns: an element tree, or a promise of one so
+ * the component can load per-page data (an avatar, a cover image) itself.
+ */
+export type PlateElement<Element> = Element | PromiseLike<Element>;
+
+/**
+ * True for a component result that must be awaited. Checking first lets a
+ * synchronous component render without an extra microtask per card.
+ */
+export function isPendingElement<Element>(
+  element: PlateElement<Element>,
+): element is PromiseLike<Element> {
+  return typeof (element as { then?: unknown } | null | undefined)?.then === "function";
+}
+
+/**
  * One additional size a plate renders from the same copy. `imagePath`
  * defaults to the plate's `imagePath` with `-<name>` inserted before the
  * extension (`og-image.png` becomes `og-image-square.png`).

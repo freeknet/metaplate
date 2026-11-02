@@ -8,13 +8,16 @@ import {
   createPlateHandlers,
   createPlateSocial,
   createPlateViews,
+  isPendingElement,
   type PlateContext,
+  type PlateElement,
   type PlateMetadataOptions,
   type PlateVariants,
 } from "./plate.js";
 
 export type {
   PlateContext,
+  PlateElement,
   PlateMetadataOptions,
   PlateVariant,
   PlateVariants,
@@ -39,9 +42,10 @@ export type FontLoader = () =>
 export type NextOgDefinition<Copy, Variant extends string = string> = {
   /**
    * Satori-compatible JSX. Every element with multiple children should use
-   * flex. The second argument names the variant and size being rendered.
+   * flex. The second argument names the variant and size being rendered. An
+   * `async` component may load per-page data before returning its element.
    */
-  component: (copy: Copy, context: PlateContext<Variant>) => ReactElement;
+  component: (copy: Copy, context: PlateContext<Variant>) => PlateElement<ReactElement>;
   /** Derives accessible alternative text from the same page-owned copy. */
   alt: (copy: Copy) => string;
   /**
@@ -82,7 +86,9 @@ export function createNextOg<Copy, Variant extends string = string>(
       };
 
       const ImageResponse = await loadImageResponse();
-      return new ImageResponse(definition.component(copy, view.context), responseOptions);
+      const rendered = definition.component(copy, view.context);
+      const element = isPendingElement(rendered) ? await rendered : rendered;
+      return new ImageResponse(element, responseOptions);
     }
 
     return {
