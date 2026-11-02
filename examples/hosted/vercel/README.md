@@ -36,7 +36,8 @@ means an existing project was reused. For `edge/`, also copy
 `node_modules/@fontsource/inter/files/inter-latin-700-normal.woff` from this
 repository into `public/fonts/`, which the function fetches from its own origin.
 
-Then check two slugs per image URL with the packed CLI and a plain GET:
+Then, from the repository root after `npm run build`, check two slugs per
+image URL with the CLI and a plain GET:
 
 ```sh
 node dist/cli.js verify-url --json --size 1200x630 --format png https://<project>.vercel.app/api/og/hello-world
@@ -52,14 +53,18 @@ exact advertised URLs, including Next's `?<hash>` query on the metadata image.
   selects the Linux binding and file tracing copies the `.node` binary into the
   function. `fontsourceFontLoader` reads the font at run time, which tracing
   cannot see, so `vercel.json` adds it with `includeFiles`.
-- **`next/`**: `serverExternalPackages: ["@resvg/resvg-js", "satori"]` as in the
-  README, plus `outputFileTracingIncludes` for the font. Its keys are picomatch
+- **`next/`**: `serverExternalPackages: ["@resvg/resvg-js", "satori"]` as in
+  [JPEG or WebP cards in Next.js](../../../docs/nextjs.md#jpeg-or-webp-cards-in-nextjs),
+  plus `outputFileTracingIncludes` for the font. Its keys are picomatch
   globs over route paths, so `"/*/og-image.jpg"` works and a literal
   `"/[slug]/og-image.jpg"` matches nothing.
 - **`edge/`**: Edge cannot compile Wasm from bytes, so both modules are
   `?module` imports (`@resvg/resvg-wasm/index_bg.wasm?module` and
   `satori/layout.wasm?module`). The build accepts them, but the function is
-  2.13 MB after gzip: the resvg Wasm alone is 0.95 MB, and Satori's default
-  build is bundled beside `satori/standalone`. It cannot fit a Hobby plan's
-  1 MB limit. Without the duplicate Satori build it would be about 1.6 MB,
-  which fits Pro's 2 MB limit, but no Pro deployment has been tested.
+  2.13 MB after gzip: the resvg Wasm alone is 0.95 MB, and that build also
+  bundled Satori's default build beside `satori/standalone` (`createEdgeOg`
+  no longer pulls it in). It cannot fit a Hobby plan's 1 MB limit. A smaller
+  bundle would not make it work: Satori's bundled HarfBuzz compiles its Wasm
+  from bytes at run time, which Vercel Edge forbids, so `metaplate/edge` is
+  not supported there on any plan (see
+  [Edge runtimes](../../../docs/edge.md#edge-runtimes-with-metaplateedge)).

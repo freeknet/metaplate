@@ -70,8 +70,29 @@ The CLI exposes the same checks for deployment pipelines:
 npx metaplate verify --json --target linkedin --url https://example.com/og.png --alt "Project card" --max-file-size 1000000 --size 1200x630 out/og-image.png
 ```
 
-`--json` prints one stable report per file with `valid` (file-level findings)
-separate from per-target `compatible`. `--target` is repeatable.
+`--json` prints one stable report per file, with `valid` (file-level
+findings) separate from each target's `compatible`:
+
+```json
+{
+  "schemaVersion": 1,
+  "files": [
+    {
+      "file": "out/og-image.png",
+      "valid": true,
+      "image": { "format": "png", "width": 1200, "height": 630, "bytes": 48213 },
+      "globalIssues": [],
+      "targets": { "linkedin": { "compatible": true, "issues": [] } }
+    }
+  ]
+}
+```
+
+Each issue has a `severity`, a `message`, and, for target findings, a `code`
+(`url`, `format`, `dimensions`, `file-size`, or `contract`). A file that
+cannot be read or parsed at all has `valid: false`, a single global issue
+with the error's `message`, no `image`, and empty `targets`. `--target` is
+repeatable.
 `--max-file-size N` fails any file over `N` bytes and works without a target.
 A target without `--url` or `--alt` verifies only image and platform facts and
 does not invent metadata; those two flags are evaluated against targets only,
@@ -118,7 +139,10 @@ the `verify` checks, the response `Content-Type` must name the format the bytes
 really are. A success line reports the byte count and, after redirects, the
 final URL; `--json` prints `{ "schemaVersion": 1, "urls": [...] }`, where each
 entry carries the `verify` fields plus `url`, `finalUrl`, `redirects`,
-`contentType`, and `bytes`, and each failure carries a stable `code`.
+`contentType`, and `bytes`. A fetch that fails has only `url`, `valid: false`,
+empty `targets`, and one global issue whose `code` is the `RemoteImageError`
+code below; a size or format mismatch in fetched bytes has a `message` but no
+`code`.
 
 Fetching a URL someone else controls from a CI runner is a server-side request
 forgery risk, so the fetcher refuses by default anything that is not plainly a
@@ -147,7 +171,7 @@ public image:
   IPv4-mapped, NAT64, or 6to4 form of one. The connection is then made to the checked
   address itself, with the original name in `Host` and TLS SNI, so a DNS answer
   that changes between check and connect cannot move the request.
-- **Redirects.** At most `--max-redirects N` (default 3) are followed, and every
+- **Redirects.** At most `--max-redirects N` (0 to 20, default 3) are followed, and every
   hop gets the full scheme, credential, port, and address check again.
 - **Limits.** The body is capped at `--max-bytes N` (default 16 MiB) while it
   streams, and the whole fetch, redirects included, must finish within
@@ -164,8 +188,11 @@ npx metaplate verify-url --allow-private --allow-port 3000 --size 1200x630 http:
 ```
 
 The same fetcher is available from `metaplate/node` as `verifyRemoteImage` and
-`fetchRemoteImage`. Failures throw `RemoteImageError` with a `code` such as
-`address`, `scheme`, `byte-limit`, `timeout`, or `content-type`:
+`fetchRemoteImage`. Failures throw `RemoteImageError` with a stable `code`:
+`invalid-url`, `scheme`, `credentials`, `port`, `dns`, `address`, `redirect`,
+`too-many-redirects`, `status` (with the HTTP `status`), `byte-limit`,
+`timeout`, `network`, `content-type`, or, from `remoteImageLoader`'s origin
+allowlist, `origin`:
 
 ```ts
 import { RemoteImageError, verifyRemoteImage } from "metaplate/node";

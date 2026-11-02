@@ -5,6 +5,8 @@ Define a plate once and render it to SVG, PNG, JPEG, or WebP, then serve it from
 
 Define the design once with `createNodeOg`. The component is Satori-compatible
 JSX, not browser DOM, so containers with multiple children should use flex.
+The examples load Inter from Fontsource: `npm install @fontsource/inter` (see
+the [fonts guide](fonts.md)).
 
 ```tsx
 // src/lib/og.tsx
@@ -128,9 +130,9 @@ const { pixels, width, height } = await og.renderPixels(copy);
 ```
 
 Point `imagePath` at the extension actually written, so `socialImage` and
-`socialImageMetadata` describe the real file. `metaplate verify` reads PNG,
-JPEG, WebP, or structurally walked GIF files, so the build check follows the
-card whichever format it takes.
+`socialImageMetadata` describe the real file. `metaplate verify` reads SVG,
+PNG, JPEG, WebP, or structurally walked GIF files, so the build check follows
+the card whichever format it takes.
 
 ### Fetch-based framework routes
 
@@ -212,8 +214,8 @@ omits `handler`, as its plates do), plus `entry(copy)` and `key(copy)`.
   `fingerprint()` and the copy, serialized with object keys sorted. The
   fingerprint covers the Metaplate version, the renderer, `revision`, size,
   output format, guard levels, font bytes, the source text of `component` and the
-  definition's other functions, and the `satori`, `emoji`, and `resvg`
-  options. Different copy can never share an entry, and a changed design
+  definition's other functions, and the `satori`, `emoji`, `languageFonts`,
+  and `resvg` options. Different copy can never share an entry, and a changed design
   misses rather than serving the old card. Copy must be plain data (objects,
   arrays, strings, numbers, booleans, `Date`, `URL`, byte arrays); anything
   else rejects the request with a `TypeError` naming the field.
@@ -293,13 +295,16 @@ app.get("/og-image.png", async (_request, response, next) => {
 });
 ```
 
-Static generators can write the same bytes into `public/` during a build:
+Static generators can write the same bytes into `public/` during a build, at
+the extension of the plate's format (PNG for this plate). For many pages and
+sizes, [`metaplate render`](render-cli.md) writes every file, verifies it, and
+records a manifest:
 
 ```ts
 import { writeFile } from "node:fs/promises";
 import { og } from "./og.js";
 
-await writeFile("public/og-image.jpg", await og.render(copy));
+await writeFile("public/og-image.png", await og.render(copy));
 ```
 
 ### Authoring without a JSX toolchain
@@ -779,5 +784,5 @@ for that route shape). `createSvgOg` has no pixels either, so it rejects
 runs the blank check on PNG files and URLs; see
 [the verification guide](verification.md#require-visible-content).
 
-[`examples/api/render-guards.ts`](../examples/api/render-guards.ts) is a type-checked
+[`examples/api/render-guards.ts`](https://github.com/lnorton89/metaplate/blob/main/examples/api/render-guards.ts) is a type-checked
 version of a strict build plate and a lenient live one.
