@@ -94,6 +94,17 @@ All notable changes to Metaplate are documented in this file. The project uses
 - `verify-deployment-evidence.mjs` now allows a `certified` edge route only
   when its `api` names `metaplate/edge`. The native renderer still cannot be
   certified on an edge runtime.
+- `socialImageAdaptiveCard(metadata, options)` builds a Microsoft Teams
+  Adaptive Card (schema `https://adaptivecards.io/schemas/adaptive-card.json`,
+  version 1.6, the highest Teams documents) for bots, Workflows webhooks, and
+  message extensions: an `Image` with `altText`, a title `TextBlock`, an
+  optional description, and an `Action.OpenUrl` to the page. It enforces the
+  documented Teams limits (HTTPS image URL, PNG/JPEG/GIF, at most 1024x1024
+  pixels, image under 1 MB when `fileSize` is given, card within the 28 KB
+  webhook message limit). `SocialTarget` gains `teams` for
+  `socialImageCompatibility` and `--target teams`. The README section "Teams,
+  Slack, and Discord previews" documents what each client reads for an
+  ordinary link, which metaplate options feed it, and when an app is needed.
 - Open Graph video and audio (`og:video`, `og:audio`, https://ogp.me/#structured).
   `socialImageMetadata` and plate `metadata()` calls accept
   `media: { videos, audio }` (`OpenGraphVideo`, `OpenGraphAudio`) and carry
