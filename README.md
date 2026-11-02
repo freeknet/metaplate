@@ -183,8 +183,9 @@ to Next.js metadata.
 ### Social compatibility profiles
 
 `socialImageCompatibility` checks an image descriptor against each platform's
-published preview rules, such as LinkedIn's minimum size or Discord's
-accepted formats, without network requests.
+published preview rules, such as LinkedIn's minimum size, Discord's accepted
+formats, or WhatsApp's 600 KB limit, without network requests. Platforms that
+publish no rules, such as Instagram and Telegram, are reported as unknown.
 [Profiles guide](docs/compatibility.md)
 
 ### Teams, Slack, and Discord previews
