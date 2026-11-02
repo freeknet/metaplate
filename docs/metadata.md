@@ -1,6 +1,6 @@
 # Metadata
 
-Open Graph and X metadata without a renderer, per-channel images, the `<meta>` tags themselves, video and audio, and versioned image URLs.
+Open Graph and X metadata without a renderer, per-channel images, the `<meta>` tags themselves, page-level tags (locale, articles, Discord's timestamp and accent color), video and audio, and versioned image URLs.
 ## Metadata without a renderer
 
 The root `metaplate` entry has no framework dependency. It can describe a
@@ -113,8 +113,9 @@ the framework escapes them:
 {socialMetaTags(social, page).map((tag) => <meta {...tag} />)}
 ```
 
-`socialMetaTags` returns `{ property, content }` for Open Graph tags and
-`{ name, content }` for X Card tags, in this fixed order:
+`socialMetaTags` returns `{ property, content }` for Open Graph and
+`article:` tags and `{ name, content }` for X Card tags and `theme-color`, in
+this fixed order:
 
 1. Each Open Graph image, in caller order: `og:image`, `og:image:width`,
    `og:image:height`, `og:image:type`, `og:image:alt`. Repeating the group is
@@ -125,12 +126,14 @@ the framework escapes them:
    image, so only the first X Card image is used. Player and app cards then
    add their own tags, in the order listed under
    [X player and app cards](x-cards.md).
-3. Page-level fields from the options: `og:title`, `og:description`,
-   `og:url`, `og:site_name`, `og:type`.
+3. Page-level fields from the options, in the order of the
+   [page-level tags](#page-level-tags) table: `og:title` through `og:type`,
+   then locales, `article:` properties, `og:pubdate`, and `theme-color`.
 
 A tag whose value is undefined or empty is left out, so metadata alone never
-gains page-level tags. `og:type` defaults to `website` only when `title` or
-`url` is supplied. Dimensions are emitted as integer strings.
+gains page-level tags. `og:type` defaults to `article` when an `article` field
+emits a tag, and otherwise to `website` only when `title` or `url` is
+supplied. Dimensions are emitted as integer strings.
 
 `url` is the canonical page URL and must be an absolute http(s) URL. When it
 is supplied, relative image URLs are resolved against it with standard URL
@@ -140,8 +143,9 @@ them.
 
 `socialMetaHtml` renders the same tags in the same order and guarantees that
 its output contains only `<meta>` elements: each has exactly a `property` or
-`name` attribute followed by `content`, the key must match a strict
-`og:`/`twitter:` pattern, and the content is escaped for a double-quoted
+`name` attribute followed by `content`, the key must be a strict `og:`,
+`twitter:`, or `article:` key (lowercase segments only) or exactly
+`theme-color`, and the content is escaped for a double-quoted
 attribute (`&`, `<`, `>`, `"`, and `'`, plus line breaks so each element stays
 on one line). `indent` accepts only spaces and tabs. It does not emit
 `<title>` or `<link rel="canonical">`; those belong to the page, which must
@@ -151,7 +155,169 @@ Next.js `generateMetadata` can carry the tags through `other`, as
 [`examples/social-meta-tags.ts`](../examples/social-meta-tags.ts) shows, but Next
 renders every `other` entry with a `name` attribute and groups repeated keys.
 That is faithful for a single Open Graph image only; with several images, use
-Next's `openGraph` and `twitter` fields.
+Next's `openGraph` and `twitter` fields. For the page-level fields below,
+`nextPageMetadata` and `nextPageViewport` do that mapping.
+
+### Page-level tags
+
+Besides the title, description, URL, site name, and type, the options accept
+the page-level fields that previews read from the Open Graph protocol and from
+Discord's link-preview reference. Every one is optional, validated, and emitted
+after the image, media, and X Card tags in this order:
+
+| Option | Tag | Accepted values | Source |
+| --- | --- | --- | --- |
+| `title` | `og:title` | Any string | [ogp.me basic metadata](https://ogp.me/#metadata) |
+| `description` | `og:description` | Any string | [ogp.me optional metadata](https://ogp.me/#optional) |
+| `url` | `og:url` | Absolute, credential-free http(s) URL | ogp.me basic metadata |
+| `siteName` | `og:site_name` | Any string | ogp.me optional metadata |
+| `type` | `og:type` | Any string; must be `article` with article fields. Defaults to `article` when an `article` field is set, otherwise `website` when `title` or `url` is | [ogp.me object types](https://ogp.me/#types) |
+| `locale` | `og:locale` | `language_TERRITORY`, such as `en_US` | ogp.me optional metadata |
+| `alternateLocales` | one `og:locale:alternate` each | Same format; no repeats, and not `locale` | ogp.me optional metadata |
+| `article.publishedTime` | `article:published_time` | Date (see below) | [ogp.me article](https://ogp.me/#type_article) |
+| `article.modifiedTime` | `article:modified_time` | Date | ogp.me article |
+| `article.expirationTime` | `article:expiration_time` | Date | ogp.me article |
+| `article.authors` | one `article:author` each | Non-empty strings; a profile URL is the most portable | ogp.me article |
+| `article.section` | `article:section` | Non-empty string | ogp.me article |
+| `article.tags` | one `article:tag` each | Non-empty strings | ogp.me article |
+| `pubdate` | `og:pubdate` | Full RFC 3339 date-time with an offset, or a `Date` | [Discord link previews](https://docs.discord.com/developers/link-previews/overview) |
+| `themeColor` | `<meta name="theme-color">` | `#RRGGBB` or `#RRGGBBAA` | Discord link previews; [HTML `theme-color`](https://html.spec.whatwg.org/multipage/semantics.html#meta-theme-color) |
+
+```ts
+import { socialImageMetadata, socialMetaHtml } from "metaplate";
+
+const social = socialImageMetadata("/blog/launch", "Launch card", {
+  origin: "https://example.com",
+});
+
+socialMetaHtml(social, {
+  title: "Launch notes",
+  url: "https://example.com/blog/launch",
+  locale: "en_US",
+  alternateLocales: ["fr_FR"],
+  article: {
+    publishedTime: "2026-11-01T09:30:00Z",
+    authors: ["https://example.com/authors/ada"],
+    section: "Releases",
+    tags: ["metaplate"],
+  },
+  pubdate: "2026-11-01T09:30:00Z",
+  themeColor: "#0b7285",
+});
+```
+
+```html
+<!-- og:image and twitter:* tags first, then: -->
+<meta property="og:title" content="Launch notes">
+<meta property="og:url" content="https://example.com/blog/launch">
+<meta property="og:type" content="article">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="fr_FR">
+<meta property="article:published_time" content="2026-11-01T09:30:00Z">
+<meta property="article:author" content="https://example.com/authors/ada">
+<meta property="article:section" content="Releases">
+<meta property="article:tag" content="metaplate">
+<meta property="og:pubdate" content="2026-11-01T09:30:00Z">
+<meta name="theme-color" content="#0b7285">
+```
+
+**Locales.** ogp.me defines `og:locale` as the locale the tags are marked up
+in, "of the format `language_TERRITORY`", and `og:locale:alternate` as an
+array of other locales the page is available in. Meta's
+[sharing guide](https://developers.facebook.com/docs/sharing/webmasters) reads
+both. A locale must be two or three lowercase letters, an underscore, and two
+uppercase letters; the BCP 47 form `en-US` is rejected with the underscore
+spelling as a hint.
+
+**Article dates.** ogp.me types the three article times as DateTime, an
+ISO 8601 value with a date and an optional time. Metaplate accepts the subset
+that is unambiguous everywhere:
+
+- a calendar date, `YYYY-MM-DD`;
+- an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339#section-5.6)
+  date-time with seconds, optional fractional seconds, and an offset:
+  `2026-11-01T09:30:00Z` or `2026-11-01T09:30:00.250-05:00`, with uppercase
+  `T` and `Z`;
+- a `Date`, emitted with `toISOString()` (years 0000 to 9999 only).
+
+Month lengths, leap years, hours, minutes, seconds, and offsets are checked,
+so `2026-02-29` or `T24:00:00Z` throws. A date-time without an offset is
+rejected because each consumer would read it in a different time zone, and a
+leap second (`:60`) is rejected because JavaScript's `Date` cannot parse it.
+Strings are emitted exactly as written. Metaplate does not compare the dates
+with one another.
+
+**Article type.** The `article:` properties belong to `og:type` `article`, so
+supplying one makes `article` the default type, and an explicit other `type`
+with article fields throws.
+
+**Discord's timestamp and accent color.** Discord's
+[link-preview reference](https://docs.discord.com/developers/link-previews/overview)
+reads a publish date from `og:pubdate` (also `pubdate` and
+`iso-8601-publish-date`), which must be a full RFC 3339 timestamp "with a time
+and an offset", and the embed's accent color from `theme-color`, as a 6- or
+8-digit hex value only. Neither is an Open Graph property, so both are emitted
+only when supplied, and `pubdate` is independent of
+`article.publishedTime`. For color and date tags Discord uses the last one in
+the document, so metaplate emits one of each.
+
+The HTML standard accepts any CSS color in `theme-color` and allows a `media`
+attribute to give light and dark colors. Metaplate accepts only `#RRGGBB` and
+`#RRGGBBAA`: they are the forms Discord reads, they are valid CSS colors for
+browsers, and checking them needs no CSS parser. It emits no `media`
+attribute, which keeps the two-attribute guarantee above; Discord's reference
+does not mention `media` and takes the last of several tags. Per-scheme
+browser theme colors belong in the page's own `<head>` or Next's `viewport`.
+
+**Not emitted.** X documents `twitter:title` and `twitter:description` for the
+summary cards with `og:title` and `og:description` as their fallbacks in the
+[Cards markup reference](https://developer.x.com/en/docs/x-for-websites/cards/overview/markup)
+(last published version; the page now redirects), and Discord reads either
+spelling, so metaplate does not repeat the title and description under
+`twitter:`. Player and app cards still emit their own `twitter:description`.
+Meta documents `fb:app_id` for Facebook Insights, not for previews, so it is
+not emitted either.
+
+**Next.js.** `nextPageMetadata` and `nextPageViewport` from `metaplate/next`
+validate the same options and map them to Next's
+[Metadata](https://nextjs.org/docs/app/api-reference/functions/generate-metadata#opengraph)
+and [Viewport](https://nextjs.org/docs/app/api-reference/functions/generate-viewport#themecolor)
+objects:
+
+```ts
+import type { Metadata, Viewport } from "next";
+import { nextPageMetadata, nextPageViewport } from "metaplate/next";
+
+const pageTags = nextPageMetadata(page);
+
+export const metadata: Metadata = {
+  title: page.title,
+  ...pageTags,
+  // Next shallow-merges openGraph: combine the page fields and the images.
+  openGraph: { ...pageTags.openGraph, images: social.openGraph.images },
+  twitter: social.twitter,
+};
+
+export const viewport: Viewport = nextPageViewport(page);
+```
+
+- `title`, `description`, `url`, `siteName`, `type`, `locale`, and the
+  `article` fields go to `openGraph` under Next's names; `alternateLocales`
+  becomes `alternateLocale`. Next renders the article properties only for
+  `type: "article"`, which metaplate's default already sets.
+- `pubdate` has no Next field and goes to `other` as `og:pubdate`. Next
+  renders `other` entries with a `name` attribute, and Discord reads the key
+  from `name` before `property`.
+- `themeColor` goes to `viewport`: Next 14 deprecated `metadata.themeColor`
+  in favor of the `viewport` export, so `nextPageMetadata` never sets it.
+- `openGraph` is left out when no field is set, so spreading the result never
+  replaces a layout's `openGraph` with an empty object.
+- Next renders `og:type` from a fixed list and throws "Invalid OpenGraph type"
+  for anything else, so a `type` outside `NEXT_OPEN_GRAPH_TYPES` (`website`,
+  `article`, `book`, `profile`, and the `music.*` and `video.*` types) throws
+  here, with `socialMetaTags` as the alternative.
+
+[`examples/page-tags.ts`](../examples/page-tags.ts) shows both paths.
 
 ### Video and audio previews
 
