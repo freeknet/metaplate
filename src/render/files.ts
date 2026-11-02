@@ -427,6 +427,41 @@ async function reuseImage(
   return { ...copyManifestImage(previous), url };
 }
 
+/** File extensions a static host maps to each image content type. */
+const EXTENSIONS: Readonly<Record<string, readonly string[]>> = {
+  "image/png": ["png"],
+  "image/jpeg": ["jpg", "jpeg"],
+  "image/webp": ["webp"],
+  "image/gif": ["gif"],
+  "image/avif": ["avif"],
+  "image/svg+xml": ["svg"],
+};
+
+/**
+ * Static hosts pick the Content-Type from the file extension, so a file
+ * without one, or with another format's, is served as the wrong type and
+ * fails crawlers and `verify-url` even though its bytes are valid.
+ */
+function assertExtension(path: string, contentType: string): void {
+  const expected = EXTENSIONS[contentType.split(";", 1)[0]!.trim().toLowerCase()];
+  if (expected === undefined) return;
+  const name = path.split("/").pop()!;
+  const dot = name.lastIndexOf(".");
+  const extension = dot > 0 ? name.slice(dot + 1).toLowerCase() : undefined;
+  if (extension === undefined) {
+    throw new Error(
+      `${path} has no file extension, so a static host would not serve it as ${contentType}. ` +
+        `Give the plate an imagePath ending in .${expected[0]}, such as "og-image.${expected[0]}".`,
+    );
+  }
+  if (!expected.includes(extension)) {
+    throw new Error(
+      `${path} ends in .${extension}, but the plate encodes ${contentType}, so a static host would ` +
+        `serve it as the wrong type. End its imagePath in .${expected[0]}.`,
+    );
+  }
+}
+
 /**
  * Writes one image and proves the file on disk: the target must pass
  * `assertSafeTarget`, and the bytes read back must hash identically and pass
@@ -436,6 +471,7 @@ async function writeImage(image: PlannedImage, realRoot: string, hash: string | 
   const artifact = image.version === undefined
     ? await image.plate.artifact(image.route, image.copy)
     : await image.plate.artifact(image.route, image.copy, { version: image.version });
+  assertExtension(image.path, artifact.contentType);
   await assertSafeTarget(image, realRoot, "write");
   await writeFile(image.target, artifact.bytes);
 
