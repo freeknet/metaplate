@@ -9,6 +9,11 @@ export const SOCIAL_TARGETS = [
   "discord",
   "instagram",
   "teams",
+  "whatsapp",
+  "bluesky",
+  "telegram",
+  "threads",
+  "pinterest",
 ] as const;
 
 export type SocialTarget = (typeof SOCIAL_TARGETS)[number];
@@ -22,11 +27,17 @@ type FormatProfile = Readonly<{
 
 export type SocialCompatibilityProfile = Readonly<{
   crawlerReady: boolean;
+  /** Require an absolute http(s) image URL without requiring HTTPS. */
+  absoluteUrl?: string;
   format?: FormatProfile;
   warnOnSvg?: string;
-  minimumSize?: Readonly<{ width: number; height: number; message: string }>;
+  /** Omit a dimension the platform does not constrain. */
+  minimumSize?: Readonly<{ width?: number; height?: number; message: string }>;
   recommendedAspectRatio?: Readonly<{ value: number; tolerance: number; message: string }>;
-  maximumFileSize?: Readonly<{ bytes: number; message: string }>;
+  /** Largest documented width/height ratio. */
+  maximumAspectRatio?: Readonly<{ value: number; message: string }>;
+  /** Severity defaults to "error". */
+  maximumFileSize?: Readonly<{ bytes: number; message: string; severity?: ProfileSeverity }>;
   unknownContract?: string;
 }>;
 
@@ -120,5 +131,88 @@ export const SOCIAL_COMPATIBILITY_PROFILES = {
       missingSeverity: "warning",
       invalidMessage: TEAMS_FORMAT_MESSAGE,
     },
+  },
+  /**
+   * WhatsApp crawls the shared page with an HTTP GET request and reads
+   * og:image as "an absolute URL for an image used as the thumbnail for the
+   * link preview. This image should be under 600KB in size. Image should be
+   * 300px or more in width with 4:1 width/height or less aspect ratio." A
+   * preview that misses these is not shown in the large size; any relaxed
+   * fallback "should not be relied on". No image format or HTTPS rule is
+   * published (WhatsApp's own example og:image is an SVG), so neither is
+   * checked. 600KB is read as 600,000 bytes, as LinkedIn's 5 MB is read
+   * as 5,000,000, and "under" makes 599,999 the largest accepted size.
+   * https://developers.facebook.com/documentation/business-messaging/whatsapp/link-previews/
+   */
+  whatsapp: {
+    crawlerReady: false,
+    absoluteUrl: "WhatsApp link previews require og:image to be an absolute URL.",
+    minimumSize: {
+      width: 300,
+      message: "WhatsApp large link previews require an image at least 300px wide.",
+    },
+    maximumAspectRatio: {
+      value: 4,
+      message: "WhatsApp large link previews require a 4:1 width/height aspect ratio or less.",
+    },
+    maximumFileSize: {
+      bytes: 599_999,
+      message: "WhatsApp large link previews require an image under 600KB.",
+    },
+  },
+  /**
+   * Bluesky stores a link card in the post record: "each client fetches and
+   * embeds this card metadata, including blob upload if needed". Bluesky's
+   * example uploads the og:image bytes as the card's thumb blob and turns a
+   * relative og:image into a full URL itself; no image URL rule is published,
+   * so crawler-ready URLs are not required. The app.bsky.embed.external
+   * lexicon limits the thumb blob to image/* and 1,000,000 bytes. The limit
+   * binds the uploaded blob, not the served file, so a larger image is a
+   * warning: it embeds only if the posting client re-encodes it. No dimension
+   * or format rule beyond image/* is published.
+   * https://bsky.network/docs/about-bluesky-content/posts#website-card-embeds
+   * https://github.com/bluesky-social/atproto/blob/main/packages/api/lexicons/app/bsky/embed/external.json
+   */
+  bluesky: {
+    crawlerReady: false,
+    maximumFileSize: {
+      bytes: 1_000_000,
+      severity: "warning",
+      message:
+        "Bluesky card thumbnails are blobs limited to 1,000,000 bytes; a larger image embeds only if the posting client re-encodes it.",
+    },
+  },
+  /**
+   * Telegram documents link-preview options for bots and Instant View
+   * templates, but not which page tags or image properties an ordinary link
+   * preview reads.
+   * https://core.telegram.org/bots/api#linkpreviewoptions
+   * https://instantview.telegram.org/docs
+   */
+  telegram: {
+    crawlerReady: false,
+    unknownContract:
+      "Telegram does not publish the page tags or image requirements its link previews use.",
+  },
+  /**
+   * The Threads API documents that a link is "displayed as a link preview"
+   * but not which page tags or image properties the preview reads.
+   * https://developers.facebook.com/documentation/threads/posts
+   */
+  threads: {
+    crawlerReady: false,
+    unknownContract:
+      "Threads does not publish the page tags or image requirements its link previews use.",
+  },
+  /**
+   * Rich Pins read og:image as "a high-resolution image" (up to six), with
+   * no published format, dimension, file-size, or URL requirement.
+   * https://developers.pinterest.com/docs/web-features/article-rich-pins/
+   * https://developers.pinterest.com/docs/web-features/product-rich-pins/
+   */
+  pinterest: {
+    crawlerReady: false,
+    unknownContract:
+      "Pinterest Rich Pins read og:image as a high-resolution image but publish no format, size, or URL requirements for it.",
   },
 } as const satisfies Record<SocialTarget, SocialCompatibilityProfile>;

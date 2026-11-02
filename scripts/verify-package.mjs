@@ -542,6 +542,31 @@ try {
     `,
     consumer,
   );
+  // metaplate/emoji is the runtime-neutral half of emoji rendering, so it is
+  // held to the same no-Node-built-ins rule as metaplate/font-data.
+  const portableEmojiSource = readFileSync(
+    join(consumer, "node_modules", manifest.name, manifest.exports["./emoji"].import),
+    "utf8",
+  );
+  if (/\bnode:/.test(portableEmojiSource)) {
+    throw new Error("metaplate/emoji unexpectedly imports a Node built-in.");
+  }
+  runModule(
+    `
+      const { emojiLoader, twemojiName } = await import(${JSON.stringify(`${manifest.name}/emoji`)});
+      let calls = 0;
+      const emoji = emojiLoader(({ grapheme }) => {
+        calls += 1;
+        return twemojiName(grapheme) === "1f44b-1f3fd" ? '<svg xmlns="http://www.w3.org/2000/svg"/>' : undefined;
+      });
+      const first = await emoji("👋🏽");
+      const second = await emoji("👋🏽");
+      if (first !== second || calls !== 1 || !first.startsWith("data:image/svg+xml;base64,")) {
+        throw new Error("The portable emoji loader did not encode and memoize an image.");
+      }
+    `,
+    consumer,
+  );
   (await import("./package-fixtures-edge.mjs")).verifyEdgeFixture({ archive, consumer, temporary, manifest, lockfile, install, runModule, linkLockedDependency });
 
   // The Next adapter must work in an actual static export, not merely in a

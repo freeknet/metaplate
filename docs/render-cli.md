@@ -134,7 +134,7 @@ Paths are checked before anything renders, and a bad one fails the run:
 ## Formats and verification
 
 The plate decides the format. A plate with no `output` writes PNG; a plate
-with an [`output` encoder](../README.md#other-output-formats) writes what that
+with an [`output` encoder](rendering.md#other-output-formats) writes what that
 encoder produces, at the plate's `imagePath` (give it the matching
 extension).
 
@@ -149,7 +149,7 @@ format Metaplate cannot recognize, such as AVIF): its file is still written
 and hashed, but recorded with `"format": null` and `"verified": false`.
 
 To check the files against a platform profile as well, run
-[`metaplate verify --target`](../README.md#verify-generated-files) over them.
+[`metaplate verify --target`](verification.md#verify-generated-files) over them.
 
 ## Command line
 
@@ -307,7 +307,7 @@ must use only erasable syntax:
 So a TypeScript module authors its plate with plain `{ type, props }`
 objects, as [`examples/render-module.ts`](../examples/render-module.ts) does
 (see also
-[Authoring without a JSX toolchain](../README.md#authoring-without-a-jsx-toolchain)).
+[Authoring without a JSX toolchain](rendering.md#authoring-without-a-jsx-toolchain)).
 For a plate written in JSX, either compile the module first (with `tsc`, your
 bundler, or your framework's build) and pass the compiled `.js`, or register a
 JSX-capable loader for the CLI's process through `NODE_OPTIONS`, for example

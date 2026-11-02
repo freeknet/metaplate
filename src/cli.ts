@@ -6,8 +6,10 @@ import {
   DEFAULT_RENDER_CONCURRENCY,
   formatVerifyPath,
   parseVerifyInvocation,
+  parseVerifyPageInvocation,
   parseVerifyUrlInvocation,
   RENDER_USAGE,
+  VERIFY_PAGE_USAGE,
   VERIFY_URL_USAGE,
   VERIFY_USAGE,
 } from "./cli-args.js";
@@ -16,16 +18,19 @@ import type { SocialTarget } from "./compatibility-profiles.js";
 import type { ImageSize } from "./core.js";
 import { verifySocialImage } from "./social-verification.js";
 import { imageContentType, verifyImage, type ImageDimensions } from "./image.js";
+import { verifyRemotePage, type RemotePageImageReport, type RemotePageVerification } from "./page-verification.js";
 import { RemoteImageError, verifyRemoteImage } from "./remote.js";
 import { METAPLATE_VERSION } from "./version.js";
 
 const CLI_HELP = `${VERIFY_USAGE}
 ${VERIFY_URL_USAGE}
+${VERIFY_PAGE_USAGE}
 ${RENDER_USAGE}
 
 Commands:
   verify        Verify image dimensions, format, and optional social metadata
   verify-url    Fetch an http(s) image under a hardened policy, then verify it
+  verify-page   Fetch an http(s) page, extract its social images, and verify each
   render        Write every page and size a render module declares as verified files
 
 Options:
@@ -44,17 +49,15 @@ verify-url options:
   --allow-port PORT  Allow a port besides 80/443 (repeatable)
   --allow-private    Allow loopback/private/link-local addresses (local development only)
 
+verify-page options (plus the verify-url fetch options, which apply to every request):
+  --max-html-bytes N  Abort a page larger than N bytes (default 4 MiB)
+  --max-images N      Fetch at most N distinct image URLs per page (default 8)
+
 render options:
   --out DIR          Directory the site is published from (default public)
   --manifest FILE    Manifest path (default DIR/metaplate-manifest.json)
   --concurrency N    Render at most N images at once (default ${DEFAULT_RENDER_CONCURRENCY})
 `;
-
-const USAGES: Readonly<Record<string, string>> = {
-  verify: VERIFY_USAGE,
-  "verify-url": VERIFY_URL_USAGE,
-  render: RENDER_USAGE,
-};
 
 type CliIssue = Readonly<{
   severity?: string;
@@ -263,6 +266,102 @@ function verifyUrls(args: string[]) {
   return runChecks(checks, invocation, "urls", "URLs");
 }
 
+const SYMBOL: Readonly<Record<string, string>> = { error: "✗", warning: "!", unknown: "?" };
+
+type Lines = { out: string[]; err: string[] };
+
+function imageLabel(image: RemotePageImageReport): string {
+  return image.source === "twitter:image" ? image.source : `${image.source}[${image.index}]`;
+}
+
+function imageLine(image: RemotePageImageReport): string {
+  const where = `${imageLabel(image)} ${image.url ?? JSON.stringify(image.declared.url)}`;
+  const compatible = Object.values(image.targets).every((report) => report.compatible);
+  if (image.image && image.valid && compatible) {
+    const { width, height, format, bytes } = image.image;
+    const redirected = image.finalUrl !== undefined && image.finalUrl !== image.url ? `, final URL ${image.finalUrl}` : "";
+    return `  ✓ ${where} ${width}x${height} ${format} (${bytes} bytes${redirected})`;
+  }
+  // Valid but never fetched: the per-page image limit left it unchecked.
+  return `  ${image.valid && compatible ? "?" : "✗"} ${where}`;
+}
+
+/** Routes each finding: errors to stderr, warnings and unknowns to stdout. */
+function reportIssues(lines: Lines, page: string, issues: readonly { severity: string; message: string }[], prefix: string) {
+  for (const found of issues) {
+    const message = `${prefix}${found.message}`;
+    if (found.severity === "error") lines.err.push(`✗ ${page} ${message}`);
+    else lines.out.push(`  ${SYMBOL[found.severity] ?? "!"} ${message}`);
+  }
+}
+
+function describePage(page: string, report: RemotePageVerification): Lines & { failed: boolean } {
+  const compatible = Object.values(report.targets).every((target) => target.compatible);
+  const failed = !report.valid || !compatible;
+  const redirected = report.finalUrl !== report.url ? `, final URL ${report.finalUrl}` : "";
+  const count = report.images.length;
+  const lines: Lines = {
+    out: [`${failed ? "✗" : "✓"} ${page} (${count} image reference${count === 1 ? "" : "s"}${redirected})`],
+    err: [],
+  };
+  reportIssues(lines, page, report.globalIssues, "");
+  for (const [target, targetReport] of Object.entries(report.targets)) {
+    reportIssues(lines, page, targetReport.issues, `${target}: `);
+  }
+  for (const image of report.images) {
+    lines.out.push(imageLine(image));
+    const label = `${imageLabel(image)}: `;
+    reportIssues(lines, page, image.globalIssues, label);
+    for (const [target, targetReport] of Object.entries(image.targets)) {
+      reportIssues(lines, page, targetReport.issues, `${label}${target}: `);
+    }
+  }
+  return { ...lines, failed };
+}
+
+async function verifyPages(args: string[]) {
+  const invocation = parseVerifyPageInvocation(args);
+  const reports: unknown[] = [];
+  const errors: string[] = [];
+  let failed = 0;
+
+  for (const raw of invocation.urls) {
+    const page = displayUrl(raw);
+    try {
+      const report = await verifyRemotePage(raw, {
+        ...invocation.fetch,
+        targets: invocation.socialTargets,
+        ...(invocation.maxFileSize !== undefined ? { maxFileSize: invocation.maxFileSize } : {}),
+      });
+      reports.push(report);
+      const lines = describePage(page, report);
+      if (lines.failed) failed += 1;
+      if (!invocation.json) for (const line of lines.out) process.stdout.write(`${line}\n`);
+      errors.push(...lines.err);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const code = error instanceof RemoteImageError ? { code: error.code } : {};
+      failed += 1;
+      errors.push(`✗ ${page} verification failed: ${message}`);
+      reports.push({ url: page, valid: false, globalIssues: [{ severity: "error", ...code, message }], targets: {}, images: [] });
+    }
+  }
+
+  if (invocation.json) {
+    process.stdout.write(`${JSON.stringify({ schemaVersion: 1, pages: reports }, null, 2)}\n`);
+  } else if (failed > 0) {
+    for (const line of errors) process.stderr.write(`${line}\n`);
+    process.stderr.write(`${failed} of ${invocation.urls.length} pages failed verification\n`);
+  }
+  if (failed > 0) process.exitCode = 1;
+}
+
+const COMMANDS = new Map<string, { run: (args: string[]) => Promise<void>; usage: string }>([
+  ["verify-url", { run: verifyUrls, usage: VERIFY_URL_USAGE }],
+  ["verify-page", { run: verifyPages, usage: VERIFY_PAGE_USAGE }],
+  ["render", { run: runRender, usage: RENDER_USAGE }],
+]);
+
 async function main(args: string[]) {
   if (args.length === 1 && (args[0] === "--help" || args[0] === "-h")) {
     process.stdout.write(CLI_HELP);
@@ -272,15 +371,15 @@ async function main(args: string[]) {
     process.stdout.write(`${METAPLATE_VERSION}\n`);
     return;
   }
-  if (args[0] === "render") return runRender(args);
-  await (args[0] === "verify-url" ? verifyUrls(args) : verifyFiles(args));
+  const command = COMMANDS.get(args[0] ?? "");
+  await (command ? command.run(args) : verifyFiles(args));
 }
 
 main(process.argv.slice(2)).catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
   process.stderr.write(`${message}\n`);
   if (!(error instanceof ReportedError)) {
-    process.stderr.write(`${USAGES[process.argv[2] ?? ""] ?? VERIFY_USAGE}\n`);
+    process.stderr.write(`${COMMANDS.get(process.argv[2] ?? "")?.usage ?? VERIFY_USAGE}\n`);
   }
   process.exitCode = 1;
 });
