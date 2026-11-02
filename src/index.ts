@@ -18,9 +18,9 @@ export {
   type TwitterImageOptions,
   type XCard,
   type XImageOptions,
-} from "./core.js";
+} from "./core/social-image.js";
 
-export { IMAGE_VERSION_PARAMETER, socialImageVersion } from "./image-version.js";
+export { IMAGE_VERSION_PARAMETER, socialImageVersion } from "./metadata/image-version.js";
 
 export {
   socialImageCompatibility,
@@ -30,14 +30,14 @@ export {
   type SocialCompatibilityOptions,
   type SocialCompatibilityReport,
   type SocialTarget,
-} from "./compatibility.js";
+} from "./verify/compatibility.js";
 
 export {
   verifySocialImage,
   type SocialImageVerificationIssue,
   type SocialImageVerificationOptions,
   type SocialImageVerificationReport,
-} from "./social-verification.js";
+} from "./verify/social-verification.js";
 
 export {
   socialMetaHtml,
@@ -49,7 +49,7 @@ export {
   type SocialMetaInput,
   type SocialMetaOptions,
   type SocialMetaTag,
-} from "./meta-tags.js";
+} from "./metadata/meta-tags.js";
 
 export {
   X_APP_PLATFORMS,
@@ -60,7 +60,7 @@ export {
   type XCardMetadataFields,
   type XCardOptions,
   type XPlayerCard,
-} from "./x-cards.js";
+} from "./metadata/x-cards.js";
 
 export {
   ADAPTIVE_CARD_CONTENT_TYPE,
@@ -76,7 +76,7 @@ export {
   type SocialImageAdaptiveCard,
   type SocialImageAdaptiveCardInput,
   type SocialImageAdaptiveCardOptions,
-} from "./adaptive-card.js";
+} from "./metadata/adaptive-card.js";
 export type {
   OpenGraphAudio,
   OpenGraphMedia,
@@ -85,7 +85,7 @@ export type {
   SocialMetaAudioInput,
   SocialMetaMediaInput,
   SocialMetaVideoInput,
-} from "./og-media.js";
+} from "./metadata/og-media.js";
 export {
   serializeJsonLd,
   socialImageJsonLd,
@@ -96,7 +96,7 @@ export {
   type SocialImageJsonLdInput,
   type SocialImageJsonLdOptions,
   type SocialImageObject,
-} from "./json-ld.js";
+} from "./metadata/json-ld.js";
 export {
   MIN_IMAGE_SIGNING_SECRET_BYTES,
   signImagePath,
@@ -105,4 +105,4 @@ export {
   type ImageSigningKeys,
   type ImageSigningSecret,
   type ImageSigningSecrets,
-} from "./signing.js";
+} from "./metadata/signing.js";

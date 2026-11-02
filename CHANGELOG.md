@@ -429,7 +429,7 @@ All notable changes to Metaplate are documented in this file. The project uses
   relative image URLs. The tag order, escaping, and the guarantee that the
   HTML contains only `<meta>` elements are documented and tested. This closes
   the page-level serializer deferred in 0.7.0.
-- `scripts/verify-runtime.mjs`, a runtime-neutral smoke of the built package.
+- `scripts/package/verify-runtime.mjs`, a runtime-neutral smoke of the built package.
   It imports `metaplate` alone and produces metadata, then imports
   `metaplate/render`, `metaplate/node`, `metaplate/fonts`, and
   `metaplate/image`, loads Inter through `fontsourceFontLoader`, renders a
@@ -489,7 +489,7 @@ All notable changes to Metaplate are documented in this file. The project uses
   and the memoized loader retries on the next request.
 - `Runtime smoke / bun` and `Runtime smoke / deno` are now blocking, required
   checks on `main`, and they run against the packed tarball:
-  `scripts/prepare-runtime-consumer.mjs` installs it, with the lockfile's peer
+  `scripts/package/prepare-runtime-consumer.mjs` installs it, with the lockfile's peer
   versions, into a clean consumer, and the smoke imports `metaplate` by
   package name and fails unless every entry resolves into that consumer's
   `node_modules`. Bun and Deno are recorded as `certified` for the packed

@@ -110,4 +110,4 @@ export default function Page() {
 }
 ```
 
-[`examples/json-ld.ts`](../examples/json-ld.ts) type-checks both forms.
+[`examples/api/json-ld.ts`](../examples/api/json-ld.ts) type-checks both forms.
