@@ -4,7 +4,7 @@
 reads it. It fetches the page's HTML, extracts the Open Graph, X Card, and
 Schema.org image metadata from it, resolves every image URL the page names,
 and verifies each image with the same checks as
-[`verify-url`](../README.md#verify-a-deployed-url):
+[`verify-url`](verification.md#verify-a-deployed-url):
 
 ```sh
 npx metaplate verify-page https://example.com/blog/launch
@@ -118,7 +118,7 @@ fetched once:
 | `dimensions`, `format` | error | The declared width and height, or the declared type, disagree with the image bytes. |
 | `file-size` | error | The image is larger than `--max-file-size`. |
 | `image` | error | The bytes are not a complete SVG, PNG, JPEG, WebP, or GIF. |
-| `content-type`, `address`, `scheme`, `status`, `byte-limit`, ... | error | The fetch failed or was refused; these are the stable [`verify-url` codes](../README.md#verify-a-deployed-url). |
+| `content-type`, `address`, `scheme`, `status`, `byte-limit`, ... | error | The fetch failed or was refused; these are the stable [`verify-url` codes](verification.md#verify-a-deployed-url). |
 
 The page is `valid` when no untargeted page finding is an error and every
 image is `valid`.
