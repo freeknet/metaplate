@@ -50,10 +50,15 @@ One command installs Metaplate's complete framework-neutral renderer stack:
 npm install metaplate
 ```
 
-That installs compatible versions of `satori`, `@resvg/resvg-js`, and `react`
-automatically. You do not need to discover or install renderer packages
-separately. npm deduplicates these peer dependencies against compatible
-versions already present in an application.
+Metaplate needs Node.js 20 or newer. With npm 7+ (and pnpm 8+), that also
+installs compatible versions of `satori`, `@resvg/resvg-js`, and `react`
+automatically, deduplicated against compatible versions already in the
+application. Package managers that do not install peers, such as Yarn, need
+them added explicitly:
+
+```sh
+yarn add metaplate satori @resvg/resvg-js react
+```
 
 ### Dependency behavior
 
@@ -80,7 +85,9 @@ import { ImageResponse } from "next/og";
 Define the design once with `createNodeOg`. The component is Satori-compatible
 JSX, not browser DOM: containers with more than one child use flex, and a root
 that fills the card with padding needs `boxSizing: "border-box"` (see
-[plate constraints](docs/rendering.md#plate-constraints)).
+[plate constraints](docs/rendering.md#plate-constraints)). The font comes from
+Fontsource, so install it too: `npm install @fontsource/inter` (see the
+[fonts guide](docs/fonts.md)).
 
 ```tsx
 // src/lib/og.tsx
@@ -287,8 +294,8 @@ Use a real `.png` or `.jpg` file on static hosts, the provider's Node runtime
 for `metaplate/node`, and `metaplate/edge` on Deno-based edges. Hosted
 certifications cover Vercel Functions, Next.js on Vercel, Netlify Functions,
 Netlify Edge Functions, and Deno Deploy, each from a dated deployment whose
-sources are in [`examples/hosted`](examples/hosted). The current status of
-every route is in [`deployment-evidence.json`](deployment-evidence.json).
+sources are in [`examples/hosted`](https://github.com/lnorton89/metaplate/tree/main/examples/hosted). The current status of
+every route is in [`deployment-evidence.json`](https://github.com/lnorton89/metaplate/blob/main/deployment-evidence.json).
 [Deployment guide](docs/deployment.md)
 
 ## Entry points
@@ -332,6 +339,9 @@ every route is in [`deployment-evidence.json`](deployment-evidence.json).
 - `metaplate/assets` — Node readers for plate images: project files
   (`readImageAsset`, `fileImageLoader`) and remote images fetched only
   from allowlisted origins (`remoteImageLoader`). No renderer peers.
+
+[API reference](docs/api.md) lists every export by entry point, with the
+guide for each and the constants no guide covers.
 
 ## License
 

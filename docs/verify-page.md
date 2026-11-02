@@ -133,6 +133,7 @@ fetched once:
 | `dimensions`, `format` | error | The declared width and height, or the declared type, disagree with the image bytes. |
 | `file-size` | error | The image is larger than `--max-file-size`. |
 | `image` | error | The bytes are not a complete SVG, PNG, JPEG, WebP, or GIF. |
+| `image-limit` | unknown | Not fetched, because the page names more distinct image URLs than `--max-images`. |
 | `content-type`, `address`, `scheme`, `status`, `byte-limit`, ... | error | The fetch failed or was refused; these are the stable [`verify-url` codes](verification.md#verify-a-deployed-url). |
 | `robots-disallowed`, `robots-unreachable`, `robots-unknown` | see [Crawler access](#crawler-access-robotstxt) | A crawler's robots.txt rules keep it from the image. |
 
@@ -401,7 +402,7 @@ it takes HTML you already have and returns the `metadata` fields plus
 `documentUrl`, `baseUrl`, and markup `issues`, without any network access.
 Values are returned as written; resolve them against `baseUrl`.
 
-[`examples/api/page-verification.ts`](../examples/api/page-verification.ts) is a
+[`examples/api/page-verification.ts`](https://github.com/lnorton89/metaplate/blob/main/examples/api/page-verification.ts) is a
 post-deploy check built on `verifyRemotePage`.
 
 ## Limitations

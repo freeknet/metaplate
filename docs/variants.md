@@ -90,7 +90,7 @@ Serve each size from its own route, one per URL in the metadata:
 
 | Framework | Default | Square |
 | --- | --- | --- |
-| Next.js | `app/roadmap/og-image/route.tsx`: `export const GET = og.handler(copy)` | `app/roadmap/og-image-square/route.tsx`: `export const GET = og.variant("square").handler(copy)` |
+| Next.js | `app/roadmap/og-image.png/route.tsx`: `export const GET = og.handler(copy)` | `app/roadmap/og-image-square.png/route.tsx`: `export const GET = og.variant("square").handler(copy)` |
 | React Router | `route(":slug/og-image.png", "routes/og.ts")` | `route(":slug/og-image-square.png", "routes/og-square.ts")` exporting `loader = og.variant("square").handlerFrom(...)` |
 | Astro | `src/pages/og-image.png.ts`: `export const GET = og.handler(copy)` | `src/pages/og-image-square.png.ts`: `export const GET = og.variant("square").handler(copy)` |
 | SvelteKit | `src/routes/[slug]/og-image.png/+server.ts` | `src/routes/[slug]/og-image-square.png/+server.ts` with `og.variant("square").handlerFrom(...)` |
@@ -101,17 +101,27 @@ copy-bound `handler`: serve each size through its view's `fetchable`,
 `fetchableFrom`, or `handlerFrom`, as in
 [Edge runtimes with `metaplate/edge`](edge.md#edge-runtimes-with-metaplateedge).
 
-`createNextOg` takes the same `variants` and returns the same views, so the
-Next route form above works with the `next/og` renderer too. For Next's
-`opengraph-image` convention, write one metadata file per size and re-export
-the view's `size` and `contentType`; Metaplate does not wrap
-`generateImageMetadata`. A build script writes one file per view, or
-[`metaplate render`](render-cli.md) writes every view of every page for you:
+`createNextOg` takes the same `variants`, and its views have the same
+`metadata`, `image`, `sitePath`, `render`, and route handlers, so the Next
+route form above works with the `next/og` renderer too. They have no
+`artifact`, `renderSvg`, or `renderPixels`: `next/og` returns only a
+`Response`. For Next's `opengraph-image` convention, write one metadata file
+per size and re-export the view's `size` and `contentType`; Metaplate does not
+wrap `generateImageMetadata`.
+
+A build script with a `metaplate/node` or `metaplate/edge` plate writes one
+file per view, or [`metaplate render`](render-cli.md) writes and verifies
+every view of every page for you:
 
 ```ts
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+
 for (const view of [og, ...og.variants.map((name) => og.variant(name))]) {
-  const { bytes, metadata } = await view.artifact("/roadmap", copy);
-  await writeFile(`public${metadata.openGraph.images[0]!.url}`, bytes);
+  const { bytes } = await view.artifact("/roadmap", copy);
+  const file = path.join("public", view.sitePath("/roadmap"));
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, bytes);
 }
 ```
 
@@ -120,5 +130,5 @@ out, the dimensions Resvg must return, the pixels the encoder receives, and the
 width and height its metadata advertises. Dimension-changing Resvg options are
 checked against every declared size, so a `fitTo` that preserves the landscape
 width but would rescale the square is rejected at definition.
-[`examples/api/size-variants.tsx`](../examples/api/size-variants.tsx) type-checks the
+[`examples/api/size-variants.tsx`](https://github.com/lnorton89/metaplate/blob/main/examples/api/size-variants.tsx) type-checks the
 whole pattern against the sources.

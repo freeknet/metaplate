@@ -31,6 +31,22 @@ accepts root-relative image URLs. Instagram checks are reported as unknown
 because Instagram publishes no webpage image-tag contract. SVG remains useful as renderer output, but it is not a universal
 social delivery format; use PNG or JPEG for broad crawler compatibility.
 
+Every target, with what it checks:
+
+| Target | Checks |
+| --- | --- |
+| `universal` | The conservative default: a crawler-ready absolute HTTPS URL, alt text, and a declared PNG or JPEG type. |
+| `openGraph` | Generic Open Graph: alt text, and a warning for SVG. No URL rule unless `crawlerReady` is set. |
+| `facebook` | A crawler-ready URL and alt text; PNG, JPEG, or GIF (an undeclared type is a warning). |
+| `x` | X Card image rules; see the table below. |
+| `linkedin` | A crawler-ready URL and alt text; PNG, JPEG, or GIF; at least 1200x627 pixels; at most 5 MB; a warning away from 1.91:1. |
+| `slack` | A crawler-ready URL and alt text, and a warning for SVG. |
+| `mastodon` | A crawler-ready URL and alt text, and a warning for SVG. |
+| `discord` | Alt text; PNG, GIF, JPEG, WebP, or AVIF. Root-relative URLs are allowed. |
+| `instagram` | `unknown`: no published webpage image contract. |
+| `teams` | A crawler-ready URL and alt text; PNG, JPEG, or GIF. |
+| `whatsapp`, `bluesky`, `telegram`, `threads`, `pinterest` | See the table below. |
+
 The messaging and social profiles below encode only what each platform's own
 documentation states. A property a platform does not document is not checked,
 and a platform that documents no image contract is reported as `unknown`:
