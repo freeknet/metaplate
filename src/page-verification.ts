@@ -7,6 +7,7 @@ import {
   type PageSocialMetadata,
 } from "./html-metadata.js";
 import type { ImageFormat } from "./image.js";
+import { hasError, integerOption, isAbsoluteUrl, redactUrl } from "./internal.js";
 import {
   assertRemoteContentType,
   fetchRemoteImageVia,
@@ -151,38 +152,8 @@ function issue<Code extends string>(
   return Object.freeze({ severity, code, message, ...(target ? { target } : {}) });
 }
 
-function hasError(issues: readonly { severity: string }[]): boolean {
-  return issues.some(({ severity }) => severity === "error");
-}
-
-function positiveInteger(name: string, value: number | undefined, fallback: number): number {
-  if (value === undefined) return fallback;
-  if (!Number.isSafeInteger(value) || value < 1) {
-    throw new TypeError(`${name} must be an integer of at least 1; received ${value}`);
-  }
-  return value;
-}
-
 function defined<Value>(key: string, value: Value | undefined): Record<string, Value> {
   return value === undefined ? {} : { [key]: value };
-}
-
-/** Never echo embedded credentials into a report. */
-function redact(url: URL): string {
-  if (url.username === "" && url.password === "") return url.href;
-  const copy = new URL(url.href);
-  copy.username = "";
-  copy.password = "";
-  return copy.href;
-}
-
-function isAbsoluteUrl(value: string): boolean {
-  try {
-    new URL(value);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function references(metadata: PageSocialMetadata, targets: readonly SocialTarget[]): Reference[] {
@@ -271,13 +242,13 @@ function referenceIssues(reference: Reference, resolved: URL, issues: ImageIssue
     issues.push(issue(
       "warning",
       "relative-url",
-      `${JSON.stringify(reference.declared.url)} is relative and was resolved to ${redact(resolved)}; Open Graph and X Card URLs should be absolute.`,
+      `${JSON.stringify(reference.declared.url)} is relative and was resolved to ${redactUrl(resolved)}; Open Graph and X Card URLs should be absolute.`,
     ));
   }
   if (resolved.protocol === "http:") {
     issues.push(reference.source === "og:image:secure_url"
-      ? issue("error", "insecure-url", `og:image:secure_url must be an https URL; received ${redact(resolved)}.`)
-      : issue("warning", "insecure-url", `${redact(resolved)} is served over http; crawlers that require https will not load it.`));
+      ? issue("error", "insecure-url", `og:image:secure_url must be an https URL; received ${redactUrl(resolved)}.`)
+      : issue("warning", "insecure-url", `${redactUrl(resolved)} is served over http; crawlers that require https will not load it.`));
   }
   if (reference.hasAlt && !reference.declared.alt) {
     const property = reference.source === "twitter:image" ? "twitter:image:alt" : "og:image:alt";
@@ -345,7 +316,7 @@ async function inspect(
     Object.freeze({
       source: reference.source,
       index: reference.index,
-      declared: Object.freeze({ ...reference.declared, url: resolved ? redactRaw(raw, resolved) : raw }),
+      declared: Object.freeze({ ...reference.declared, url: resolved ? redactUrl(raw, resolved) : raw }),
       url,
       ...extra,
       valid: !hasError(issues),
@@ -359,7 +330,7 @@ async function inspect(
   }
   referenceIssues(reference, resolved, issues);
   const size = declaredSize(reference, issues);
-  const url = redact(resolved);
+  const url = redactUrl(resolved);
   if (!fetchImage) {
     issues.push(issue("unknown", "image-limit", `Not fetched: the page references more than ${options.maxImages ?? REMOTE_PAGE_DEFAULTS.maxImages} distinct image URLs.`));
     return finish(url);
@@ -391,7 +362,7 @@ async function inspect(
 function reportMetadata(metadata: PageSocialMetadata, baseUrl: URL): RemotePageVerification["metadata"] {
   const clean = (value: string): string => {
     try {
-      return redactRaw(value, new URL(value, baseUrl));
+      return redactUrl(value, new URL(value, baseUrl));
     } catch {
       return value;
     }
@@ -413,11 +384,6 @@ function reportMetadata(metadata: PageSocialMetadata, baseUrl: URL): RemotePageV
       images: Object.freeze(jsonLd.images.map((image) => Object.freeze({ ...image, url: clean(image.url) }))),
     }),
   });
-}
-
-/** Keeps the declared text unless it carried credentials. */
-function redactRaw(raw: string, resolved: URL): string {
-  return resolved.username === "" && resolved.password === "" ? raw : redact(resolved);
 }
 
 function pageIssues(metadata: PageSocialMetadata, targets: readonly SocialTarget[], skipped: number, maxImages: number): PageIssue[] {
@@ -471,15 +437,13 @@ export async function verifyRemotePageVia(
   options: RemotePageOptions,
   dial: RemoteDialer,
 ): Promise<RemotePageVerification> {
-  const maxHtmlBytes = positiveInteger("maxHtmlBytes", options.maxHtmlBytes, REMOTE_PAGE_DEFAULTS.maxHtmlBytes);
-  const maxImages = positiveInteger("maxImages", options.maxImages, REMOTE_PAGE_DEFAULTS.maxImages);
+  const maxHtmlBytes = integerOption("maxHtmlBytes", options.maxHtmlBytes, 1) ?? REMOTE_PAGE_DEFAULTS.maxHtmlBytes;
+  const maxImages = integerOption("maxImages", options.maxImages, 1) ?? REMOTE_PAGE_DEFAULTS.maxImages;
   const targets = [...new Set(options.targets ?? [])];
   for (const target of targets) {
-    if (!ALL_TARGETS.has(target)) throw new Error(`Unknown social target: ${target}`);
+    if (!ALL_TARGETS.has(target)) throw new TypeError(`Unknown social target: ${target}`);
   }
-  if (options.maxFileSize !== undefined && (!Number.isSafeInteger(options.maxFileSize) || options.maxFileSize < 0)) {
-    throw new TypeError(`maxFileSize must be a non-negative integer; received ${options.maxFileSize}`);
-  }
+  integerOption("maxFileSize", options.maxFileSize, 0);
 
   const page = await fetchRemoteResourceVia(input, { ...options, maxBytes: maxHtmlBytes }, dial, REMOTE_PAGE_ACCEPT);
   const essence = page.contentType?.split(";", 1)[0]!.trim().toLowerCase();

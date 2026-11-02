@@ -77,15 +77,22 @@ type SatoriStandalone = Awaited<ReturnType<typeof loadSatoriStandalone>>;
 
 /**
  * Both Wasm modules are process-wide singletons inside their packages, so the
- * first source supplied for each wins and later ones are ignored.
+ * first source supplied for each wins and later ones are ignored, unless that
+ * source failed to initialise: then the next source supplied replaces it, so
+ * a corrected module takes effect without restarting the isolate. Until one
+ * arrives, renders retry the failed source, which recovers a transient fetch.
  */
-type WasmSlot = { source?: EdgeWasmSource; ready?: Promise<void> | undefined };
+type WasmSlot = { source?: EdgeWasmSource; ready?: Promise<void> | undefined; failed?: boolean };
 
 const resvgSlot: WasmSlot = {};
 const layoutSlot: WasmSlot = {};
 
 function provide(slot: WasmSlot, source: EdgeWasmSource | undefined): void {
-  if (source !== undefined) slot.source ??= source;
+  if (source === undefined) return;
+  if (slot.source === undefined || slot.failed) {
+    slot.source = source;
+    slot.failed = false;
+  }
 }
 
 async function resolveWasm(source: EdgeWasmSource): Promise<EdgeWasmModule> {
@@ -108,6 +115,7 @@ function initialise(
     .then(init)
     .catch((error: unknown) => {
       slot.ready = undefined;
+      slot.failed = true;
       throw error;
     });
   return slot.ready;
@@ -154,7 +162,7 @@ async function loadSatori(): Promise<SatoriRender> {
   }) as SatoriRender;
 }
 
-const EDGE_RUNTIMES_DOC = "https://github.com/lnorton89/metaplate#edge-runtimes-with-metaplateedge";
+const EDGE_RUNTIMES_DOC = "https://github.com/lnorton89/metaplate/blob/main/docs/edge.md#edge-runtimes-with-metaplateedge";
 
 /**
  * Satori's standalone build shapes text with a bundled HarfBuzz Emscripten

@@ -414,13 +414,30 @@ function selectTwitterImage(
  * `variants` add one `og:image` each after the default; the X Card image stays
  * the default unless `twitter.variant` or `twitter.image` selects another.
  */
-export function socialImageMetadata<
-  Card extends XCard = "summary_large_image",
->(
+export function socialImageMetadata<Card extends XCard>(
   route: string,
   alt: string,
-  options: SocialImageOptions<Card> = {},
-): SocialImageMetadata<Card> {
+  options: SocialImageOptions<Card> & { twitter: { card: Card } },
+): SocialImageMetadata<Card>;
+/**
+ * Without an explicit `twitter.card` the X Card is `summary_large_image`, so
+ * the return type is too; a `player` or `app` card must name itself and
+ * carry its payload through the overload above.
+ */
+export function socialImageMetadata<
+  Card extends "summary_large_image" = "summary_large_image",
+>(route: string, alt: string, options?: SocialImageOptions<Card>): SocialImageMetadata<Card>;
+/** Forwards options typed with the wide `XCard` union; the card stays a union. */
+export function socialImageMetadata(
+  route: string,
+  alt: string,
+  options?: SocialImageOptions,
+): SocialImageMetadata<XCard>;
+export function socialImageMetadata(
+  route: string,
+  alt: string,
+  options: SocialImageOptions = {},
+): SocialImageMetadata<XCard> {
   const image = socialImage(route, alt, options);
   const variants = variantImages(route, alt, image, options);
   const openGraphImages = options.openGraph
@@ -440,6 +457,6 @@ export function socialImageMetadata<
       ...(twitter?.creator ? { creator: twitter.creator } : {}),
       ...(twitter?.creatorId ? { creatorId: twitter.creatorId } : {}),
       ...cardFields,
-    } as XCardMetadata<Card>,
+    } as XCardMetadata,
   };
 }
