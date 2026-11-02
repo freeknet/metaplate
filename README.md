@@ -33,6 +33,7 @@ It works with plain Node, static build scripts, Next.js, Astro, React Router, Sv
   - [Teams, Slack, and Discord previews](#teams-slack-and-discord-previews)
   - [Schema.org image metadata](#schemaorg-image-metadata)
   - [Fonts](#fonts)
+  - [Emoji](#emoji)
   - [Verifying images](#verifying-images)
   - [Deployment routes](#deployment-routes)
 - [Entry points](#entry-points)
@@ -209,6 +210,15 @@ project files, Fontsource, other npm packages, or bytes you supply, and
 memoize one copy for every render.
 [Fonts guide](docs/fonts.md)
 
+### Emoji
+
+The `emoji` plate option draws emoji as images instead of missing-glyph boxes.
+`packageEmojiLoader` from `metaplate/fonts` reads them offline from a set the
+application installs, such as `@twemoji/svg`, and `emojiLoader` from
+`metaplate/emoji` takes any source, including your own origin on an edge
+runtime. Metaplate bundles no artwork; the guide covers each set's license.
+[Emoji guide](docs/emoji.md)
+
 ### Verifying images
 
 `metaplate verify` checks generated files for dimensions, format, structure,
@@ -250,7 +260,11 @@ every route is in [`deployment-evidence.json`](deployment-evidence.json).
 - `metaplate/font-data` — runtime-neutral normalization and memoization for
   application/framework-provided bytes. No peers or Node built-ins.
 - `metaplate/fonts` — project-file, Fontsource, generic npm-package, and
-  application-byte font loading for Node-compatible runtimes. No peers.
+  application-byte font loading, plus installed emoji packages
+  (`packageEmojiLoader`), for Node-compatible runtimes. No peers.
+- `metaplate/emoji` — runtime-neutral emoji images for the `emoji` plate
+  option (`emojiLoader`, `twemojiName`). No peers or Node built-ins; the
+  installed-package reader, `packageEmojiLoader`, is in `metaplate/fonts`.
 - `metaplate/png` — PNG header inspection and dimension verification. No peers.
 - `metaplate/image` — dimension and structural verification for SVG, PNG,
   JPEG, WebP, and GIF. No peers.

@@ -1,4 +1,5 @@
 import type { ImageSize } from "./core.js";
+import type { EmojiLoader } from "./emoji.js";
 import type { PlateContext, PlateVariants } from "./plate.js";
 import { loadSatori } from "./peers.js";
 import { createSvgPlate } from "./svg-plate.js";
@@ -118,6 +119,14 @@ export type SvgOgDefinition<Copy, Variant extends string = string> = {
   /** Scheme for absolute image URLs, such as `https://example.com`. */
   origin?: string;
   satori?: SatoriOptions;
+  /**
+   * Draws emoji as images: `packageEmojiLoader` from `metaplate/fonts` reads
+   * an installed SVG set, `emojiLoader` from `metaplate/emoji` wraps any
+   * source. Emoji without an image fall back to the plate's fonts. Takes
+   * precedence over `satori.loadAdditionalAsset` for emoji, which still
+   * receives every other script and any emoji the loader has no image for.
+   */
+  emoji?: EmojiLoader;
 };
 
 /** Defines a framework-neutral social image renderer that emits SVG text. */

@@ -239,6 +239,20 @@ All notable changes to Metaplate are documented in this file. The project uses
   run `npm run build` first.
 - A `runtimes` CI job runs that smoke on Bun (latest 1.x) and Deno 2.x on
   ubuntu-latest, after the same smoke under Node as a control.
+- Emoji render as images in `metaplate/render`, `metaplate/node`, and
+  `metaplate/edge` through a new `emoji` plate option.
+  `packageEmojiLoader("twemoji" | "openmoji" | { package, directory })` from
+  `metaplate/fonts` reads SVGs from an emoji package the application installs
+  (`@twemoji/svg` or `openmoji`), offline and without a network fetch at
+  render time; the runtime-neutral `metaplate/emoji` entry adds
+  `emojiLoader(source)` for edge functions that serve the images themselves,
+  plus `twemojiName`, `emojiKey`, and `emojiCodepoints`. Files are matched
+  ignoring U+FE0F, case, and zero padding, so fully-qualified and unqualified
+  copy, ZWJ sequences, skin tones, flags, and keycaps all resolve. Each emoji
+  is resolved once per loader; one without an image falls back to the plate's
+  fonts, and bytes that are not SVG or PNG are rejected rather than drawn as
+  nothing. Metaplate ships no emoji images and adds no dependency. See
+  [docs/emoji.md](docs/emoji.md) for sources and attribution duties.
 - `socialImageCompatibility` and `metaplate verify --target` add the
   `whatsapp`, `bluesky`, `telegram`, `threads`, and `pinterest` profiles,
   each limited to what the platform's own documentation states. `whatsapp`
