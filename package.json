@@ -19,8 +19,7 @@
   "files": [
     "dist",
     "README.md",
-    "docs/deployment.md",
-    "docs/render-cli.md",
+    "docs",
     "CHANGELOG.md",
     "LICENSE"
   ],
@@ -62,6 +61,11 @@
       "types": "./dist/font-data.d.ts",
       "import": "./dist/font-data.js",
       "default": "./dist/font-data.js"
+    },
+    "./emoji": {
+      "types": "./dist/emoji.d.ts",
+      "import": "./dist/emoji.js",
+      "default": "./dist/emoji.js"
     },
     "./png": {
       "types": "./dist/png.d.ts",

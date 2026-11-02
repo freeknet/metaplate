@@ -54,6 +54,23 @@ export type VerifyUrlInvocation = Omit<VerifyInvocation, "targets" | "url"> & {
   fetch: VerifyUrlFetchOptions;
 };
 
+export const VERIFY_PAGE_USAGE =
+  "Usage: metaplate verify-page [--json] [--target TARGET] [--max-file-size BYTES] [--max-html-bytes BYTES] [--max-images N] [--max-bytes BYTES] [--max-redirects N] [--timeout MS] [--allow-port PORT] [--allow-private] <url> [...]";
+
+/** Fetch limits for `verify-page`: the `verify-url` limits plus the page's own. */
+export type VerifyPageFetchOptions = VerifyUrlFetchOptions & {
+  maxHtmlBytes?: number;
+  maxImages?: number;
+};
+
+export type VerifyPageInvocation = {
+  urls: string[];
+  json: boolean;
+  socialTargets: SocialTarget[];
+  maxFileSize?: number;
+  fetch: VerifyPageFetchOptions;
+};
+
 function parseSize(value: string | undefined, usage: string): ImageSize {
   const match = /^(\d+)x(\d+)$/.exec(value ?? "");
   if (!match) throw new Error(`Invalid size. ${usage}`);
@@ -90,7 +107,7 @@ function parseInteger(
   return parsed;
 }
 
-type GroupEntry = { value: string; size: ImageSize; format?: ImageFormat };
+type GroupEntry = { value: string; size?: ImageSize; format?: ImageFormat };
 
 type ParsedGroups = {
   entries: GroupEntry[];
@@ -107,8 +124,12 @@ type CommandFlags = {
   switches?: Readonly<Record<string, () => void>>;
 };
 
-/** Parses the flags shared by `verify` and `verify-url` plus command-specific ones. */
-function parseGroups(args: string[], command: string, usage: string, flags: CommandFlags): ParsedGroups {
+/**
+ * Parses the flags shared by every verify command plus command-specific ones.
+ * `sized` commands take `--size` groups (and `--format`/`--alt`); the others
+ * take plain positional values.
+ */
+function parseGroups(args: string[], command: string, usage: string, flags: CommandFlags, sized = true): ParsedGroups {
   if (args[0] !== command) throw new Error(usage);
 
   const entries: GroupEntry[] = [];
@@ -136,6 +157,9 @@ function parseGroups(args: string[], command: string, usage: string, flags: Comm
       handler(value);
       index += 1;
       continue;
+    }
+    if (!sized && (argument === "--size" || argument === "--format" || argument === "--alt")) {
+      throw new Error(`${argument} is not accepted here. ${usage}`);
     }
     if (argument === "--size") {
       size = parseSize(value, usage);
@@ -169,8 +193,9 @@ function parseGroups(args: string[], command: string, usage: string, flags: Comm
       index += 1;
       continue;
     }
-    if (!size || !argument) throw new Error(usage);
-    entries.push(format ? { value: argument, size, format } : { value: argument, size });
+    // Unsized commands have no file operands, so an unknown flag is a typo.
+    if (!argument || (sized ? !size : argument.startsWith("--"))) throw new Error(usage);
+    entries.push({ value: argument, ...(size ? { size } : {}), ...(format ? { format } : {}) });
   }
 
   if (entries.length === 0) throw new Error(usage);
@@ -184,7 +209,8 @@ function parseGroups(args: string[], command: string, usage: string, flags: Comm
 }
 
 function entryTarget<Key extends string>(key: Key, { value, size, format }: GroupEntry) {
-  return { [key]: value, size, ...(format ? { format } : {}) } as Record<Key, string> & {
+  // Sized commands reject an entry before its first --size.
+  return { [key]: value, size: size!, ...(format ? { format } : {}) } as Record<Key, string> & {
     size: ImageSize;
     format?: ImageFormat;
   };
@@ -214,19 +240,24 @@ export function parseVerifyInvocation(args: string[]): VerifyInvocation {
   };
 }
 
+/** The remote fetch-limit flags shared by `verify-url` and `verify-page`. */
+function fetchLimitFlags(limits: VerifyUrlFetchOptions, usage: string) {
+  return {
+    switches: { "--allow-private": () => { limits.allowPrivate = true; } },
+    values: {
+      "--allow-port": (value: string | undefined) => { limits.allowedPorts.push(parseInteger(value, "port", usage, 1, 65_535)); },
+      "--max-bytes": (value: string | undefined) => { limits.maxBytes = parseInteger(value, "max bytes", usage, 1); },
+      "--max-redirects": (value: string | undefined) => { limits.maxRedirects = parseInteger(value, "max redirects", usage, 0, 20); },
+      "--timeout": (value: string | undefined) => { limits.timeoutMs = parseInteger(value, "timeout", usage, 1); },
+    },
+  };
+}
+
 /** Parses `verify-url`: the shared verify flags plus the remote fetch limits. */
 export function parseVerifyUrlInvocation(args: string[]): VerifyUrlInvocation {
   const limits: VerifyUrlFetchOptions = { allowPrivate: false, allowedPorts: [] };
   const usage = VERIFY_URL_USAGE;
-  const { entries, ...parsed } = parseGroups(args, "verify-url", usage, {
-    switches: { "--allow-private": () => { limits.allowPrivate = true; } },
-    values: {
-      "--allow-port": (value) => { limits.allowedPorts.push(parseInteger(value, "port", usage, 1, 65_535)); },
-      "--max-bytes": (value) => { limits.maxBytes = parseInteger(value, "max bytes", usage, 1); },
-      "--max-redirects": (value) => { limits.maxRedirects = parseInteger(value, "max redirects", usage, 0, 20); },
-      "--timeout": (value) => { limits.timeoutMs = parseInteger(value, "timeout", usage, 1); },
-    },
-  });
+  const { entries, ...parsed } = parseGroups(args, "verify-url", usage, fetchLimitFlags(limits, usage));
 
   if (parsed.alt !== undefined && parsed.socialTargets.length === 0) {
     throw new Error(`--alt requires at least one --target. ${usage}`);
@@ -234,6 +265,28 @@ export function parseVerifyUrlInvocation(args: string[]): VerifyUrlInvocation {
   return {
     targets: entries.map((entry) => entryTarget("url", entry)),
     ...parsed,
+    fetch: { ...limits, allowedPorts: [...new Set(limits.allowedPorts)] },
+  };
+}
+
+/** Parses `verify-page`: page URLs, target checks, and the fetch limits. */
+export function parseVerifyPageInvocation(args: string[]): VerifyPageInvocation {
+  const limits: VerifyPageFetchOptions = { allowPrivate: false, allowedPorts: [] };
+  const usage = VERIFY_PAGE_USAGE;
+  const shared = fetchLimitFlags(limits, usage);
+  const { entries, json, socialTargets, maxFileSize } = parseGroups(args, "verify-page", usage, {
+    switches: shared.switches,
+    values: {
+      ...shared.values,
+      "--max-html-bytes": (value) => { limits.maxHtmlBytes = parseInteger(value, "max HTML bytes", usage, 1); },
+      "--max-images": (value) => { limits.maxImages = parseInteger(value, "max images", usage, 1, 100); },
+    },
+  }, false);
+  return {
+    urls: entries.map(({ value }) => value),
+    json,
+    socialTargets,
+    ...(maxFileSize !== undefined ? { maxFileSize } : {}),
     fetch: { ...limits, allowedPorts: [...new Set(limits.allowedPorts)] },
   };
 }

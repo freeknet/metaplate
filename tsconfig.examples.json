@@ -12,6 +12,9 @@
       "metaplate/node": ["./src/node.ts"],
       "metaplate/render": ["./src/render.ts"],
       "metaplate/fonts": ["./src/fonts.ts"],
+      "metaplate/emoji": ["./src/emoji.ts"],
+      "metaplate/edge": ["./src/edge.ts"],
+      "metaplate/font-data": ["./src/font-data.ts"],
       "metaplate/png": ["./src/png.ts"],
       "metaplate/image": ["./src/image.ts"]
     }
