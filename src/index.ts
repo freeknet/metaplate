@@ -48,6 +48,17 @@ export {
 } from "./meta-tags.js";
 
 export {
+  X_APP_PLATFORMS,
+  type XAppCard,
+  type XAppPlatform,
+  type XAppStoreListing,
+  type XCardMetadata,
+  type XCardMetadataFields,
+  type XCardOptions,
+  type XPlayerCard,
+} from "./x-cards.js";
+
+export {
   ADAPTIVE_CARD_CONTENT_TYPE,
   ADAPTIVE_CARD_SCHEMA,
   ADAPTIVE_CARD_VERSION,
