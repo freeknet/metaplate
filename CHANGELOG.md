@@ -5,6 +5,8 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-01
+
 ### Added
 
 - The `languageFonts` plate option (`createSvgOg`, `createNodeOg`,
@@ -465,6 +467,10 @@ All notable changes to Metaplate are documented in this file. The project uses
   client uploads. Telegram, Threads, and Pinterest publish no link-preview
   image contract, so those profiles report `unknown`, as `instagram` does.
   `SocialTarget` includes the new names.
+- `metaplate/fonts` and `metaplate/font-data` export the `FontFace` type, the
+  base shape shared by `DataFont`, `FileFont`, `PackageFont`, and
+  `FontsourceFont`. Consumers that emit declarations referring to a font
+  descriptor could previously hit TS2742 because the type had no public name.
 
 ### Changed
 
@@ -494,7 +500,8 @@ All notable changes to Metaplate are documented in this file. The project uses
   versions, into a clean consumer, and the smoke imports `metaplate` by
   package name and fails unless every entry resolves into that consumer's
   `node_modules`. Bun and Deno are recorded as `certified` for the packed
-  package on linux-x64; no hosted Bun or Deno Deploy deployment is certified.
+  package on linux-x64. Deno Deploy is certified separately (`deno-deploy-edge`,
+  `deno-deploy-node`); no hosted Bun deployment is certified.
 - The packed-package verifier copies a dependency's installed optional
   dependencies with its lockfile-verified closure, so Next's SWC binaries and
   its optional sharp encoder (with sharp's platform binaries) arrive through
@@ -512,6 +519,27 @@ All notable changes to Metaplate are documented in this file. The project uses
 - `metaplate/node`'s renderer-independent code moved into internal modules
   shared with `metaplate/edge`. Its public API, types, and output are
   unchanged.
+- The Socket baseline moves from the historical 0.6.0 snapshot to a fresh
+  Socket CLI deep score of the published 0.7.0 package, with the importer and
+  verifier pins moved to 0.7.0. Both high alerts carry time-bounded
+  dispositions: the `string.prototype.codepointat` upgrade signal under Satori,
+  and the `unstableOwnership` signal on `tslib@2.9.1`, which the lockfile now
+  audits because Socket resolves it through the optional `next` peer.
+- The build and type checks now run on TypeScript 6.0, tsup 9, and vitest 5.
+  tsup 9 no longer injects the deprecated `baseUrl` option into its
+  declaration build, so TypeScript 6 needs no `ignoreDeprecations` escape
+  hatch, and vitest 5 clears the `@vitest/mocker` advisory. Both tools declare
+  Node 22 as their floor; the Node 20 compatibility job still runs them and
+  passes, so Node 20 stays in the matrix on that evidence.
+- The `satori` peer range widens from `>=0.33.3 <0.34` to `>=0.33.3 <1`, and
+  the audited release moves from 0.33.5 to 0.63.2. Satori's automated releases
+  bump a minor version per feature with no breaking changes recorded, so a
+  one-minor range forced a peer bump every few days. Satori 0.63 bundles its
+  layout engine, so `yoga-layout` leaves the dependency tree.
+- The certified React Router resource-route fixture now runs on React Router 8
+  and Vite 8, so the support table claims React Router 8 framework mode on
+  Node 22.22 or newer. The fixture still fails if React Router emits Vite's
+  deprecated `envFile` warning.
 
 ### Fixed
 
@@ -576,42 +604,6 @@ All notable changes to Metaplate are documented in this file. The project uses
   because SvelteKit 3 removed `$lib` in favor of `package.json` subpath
   imports, and notes that SvelteKit 3 configures its adapter in
   `vite.config.js`. The deployment guide's matrix lists the route.
-
-## [0.8.0] - 2026-10-31
-
-### Added
-
-- `metaplate/fonts` and `metaplate/font-data` export the `FontFace` type, the
-  base shape shared by `DataFont`, `FileFont`, `PackageFont`, and
-  `FontsourceFont`. Consumers that emit declarations referring to a font
-  descriptor could previously hit TS2742 because the type had no public name.
-
-### Changed
-
-- The Socket baseline moves from the historical 0.6.0 snapshot to a fresh
-  Socket CLI deep score of the published 0.7.0 package, with the importer and
-  verifier pins moved to 0.7.0. Both high alerts carry time-bounded
-  dispositions: the `string.prototype.codepointat` upgrade signal under Satori,
-  and the `unstableOwnership` signal on `tslib@2.9.1`, which the lockfile now
-  audits because Socket resolves it through the optional `next` peer.
-- The build and type checks now run on TypeScript 6.0, tsup 9, and vitest 5.
-  tsup 9 no longer injects the deprecated `baseUrl` option into its
-  declaration build, so TypeScript 6 needs no `ignoreDeprecations` escape
-  hatch, and vitest 5 clears the `@vitest/mocker` advisory. Both tools declare
-  Node 22 as their floor; the Node 20 compatibility job still runs them and
-  passes, so Node 20 stays in the matrix on that evidence.
-- The `satori` peer range widens from `>=0.33.3 <0.34` to `>=0.33.3 <1`, and
-  the audited release moves from 0.33.5 to 0.63.2. Satori's automated releases
-  bump a minor version per feature with no breaking changes recorded, so a
-  one-minor range forced a peer bump every few days. Satori 0.63 bundles its
-  layout engine, so `yoga-layout` leaves the dependency tree.
-- The certified React Router resource-route fixture now runs on React Router 8
-  and Vite 8, so the support table claims React Router 8 framework mode on
-  Node 22.22 or newer. The fixture still fails if React Router emits Vite's
-  deprecated `envFile` warning.
-
-### Documentation
-
 - Document that Satori releases before 0.38.2 lay a React fragment out as a
   box of its own, so absolutely positioned children of a fragment anchor to
   that box instead of the positioned parent, while 0.38.2 and newer flatten
