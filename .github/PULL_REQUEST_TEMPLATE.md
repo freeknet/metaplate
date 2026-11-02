@@ -10,7 +10,8 @@ List the commands you ran and the Node.js/OS combinations you exercised.
 
 - [ ] `npm run check` passes
 - [ ] `npm run check:package` passes
-- [ ] Public API or behavior changes are documented in `README.md`
+- [ ] Public API or behavior changes are documented in the `README.md` summary
+      and the relevant `docs/` guide
 - [ ] Framework examples link to the exact official upstream routing,
       metadata, build, or deployment reference they implement
 - [ ] User-facing changes are reflected in `CHANGELOG.md` and the current `.github/releases/vX.Y.Z.md`, or the summary explains why not

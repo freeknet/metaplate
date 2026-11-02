@@ -223,15 +223,18 @@ This applies to any module graph that reaches `metaplate/node`, including a
 page that imports the plate only to call `og.metadata()`: the renderer loads
 lazily at runtime, but the bundler still traces the import.
 
-Name the route folder after the file the plate writes. With
-`imagePath: "og-image.jpg"`, the handler lives at
+Define that plate with `createNodeOg` and a JPEG `output` encoder, as in
+[Other output formats](rendering.md#other-output-formats), in its own module
+(`@/lib/og-jpeg` below), apart from any `createNextOg` plate. Name the route
+folder after the file the plate writes. With `imagePath: "og-image.jpg"`, the
+handler lives at
 `app/<route>/og-image.jpg/route.ts`, so a static export emits a real
 `og-image.jpg` and static hosts serve it as `image/jpeg` without the
 per-path header rules in [Static hosts](deployment.md#static-hosts):
 
 ```ts
 // app/roadmap/og-image.jpg/route.ts
-import { og } from "@/lib/og";
+import { og } from "@/lib/og-jpeg";
 import { copy } from "../page";
 
 export const dynamic = "force-static";

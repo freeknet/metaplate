@@ -109,7 +109,8 @@ run with `--ignore-scripts`.
   the standalone renderer still imports on first use, so a lean install stays
   importable. Test behavior both with and without the renderer peers when
   changing package boundaries.
-- Public APIs need type coverage, behavior tests, and README documentation.
+- Public APIs need type coverage, behavior tests, and documentation: a README
+  summary and the relevant `docs/` guide.
 - `examples/` is documentation that compiles. It type-checks against `src/`
   through `tsconfig.examples.json`, so renaming or resigning a public export
   breaks the example rather than the consumer who copied it.
@@ -148,23 +149,14 @@ automatic malware findings.
 
 ## Releases
 
-1. Update `version` in `package.json` and `package-lock.json` in a pull request.
-2. Merge only after CI and CodeQL pass.
-3. Create a GitHub release from a matching semver tag such as `v0.2.0`.
-4. The publish workflow verifies that the tag matches the package version,
-   builds and tests the package without npm credentials, and uploads the exact
-   tarball to a separate publish job.
-5. Stable versions publish under npm's `latest` tag; prereleases publish under
-   `next`. The npm release includes provenance.
-
-The publish job uses the protected GitHub `npm` environment. Configure npm
-trusted publishing for that environment when possible. Until then, the job
-expects an environment secret named `NPM_TOKEN`; keep it scoped to this package
-and rotate it if it is ever exposed.
+Maintainers cut releases; [RELEASING.md](RELEASING.md) is the procedure, from
+the version bump and release notes through the evidence gates and the
+publish workflow.
 
 ## Pull requests and commits
 
 Explain what changed, why it changed, and what you ran. Add tests for behavior
-changes and update the README for public API changes. Focused commits with
+changes, and update the README summary and the relevant `docs/` guide for
+public API changes. Focused commits with
 conventional subjects such as `fix:`, `feat:`, `docs:`, `test:`, `build:`, or
 `ci:` keep release history readable.

@@ -77,8 +77,8 @@ provenance attestation. A release is not complete until **Verify published
 artifact** passes.
 
 Then update version-specific badges when applicable and confirm the GitHub
-release remains the best single overview of the version. For 0.7.0 deployment
-claims, retain the complete evidence bundle:
+release remains the best single overview of the version. For each release's
+deployment claims, retain the complete evidence bundle:
 `dependency-inventory.json`, `release-evidence-report.json`,
 `release-check-results.json`, `deployment-contract-evidence.json`,
 `deployment-evidence.json`, `socket-score-report.json`, and

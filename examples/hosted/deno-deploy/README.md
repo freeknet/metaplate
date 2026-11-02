@@ -1,8 +1,9 @@
 # Deno Deploy certification fixture
 
 The app deployed for the dated Deno Deploy evidence in
-`.planning/hosted-evidence/`, which `deployment-evidence.json` references
-from the `deno-deploy` route. One Deno Deploy app serves both entry points:
+[`.planning/hosted-evidence/deno-deploy-2026-11-01.json`](https://github.com/lnorton89/metaplate/blob/main/.planning/hosted-evidence/deno-deploy-2026-11-01.json),
+which `deployment-evidence.json` references from the `deno-deploy-edge` and
+`deno-deploy-node` routes. One Deno Deploy app serves both entry points:
 
 | Path | Entry point | Renderer |
 | --- | --- | --- |
@@ -55,8 +56,8 @@ then runs `npm run setup`, which builds metaplate, packs it as
 `metaplate.tgz`, and installs this app against that tarball. It then deletes
 the root `node_modules` and `dist`: they are only needed to build the tarball,
 and with them the deployment reaches about 940 MB on Linux, near Deno
-Deploy's documented 1 GB limit for a deployment's files. Without them it is
-about 56 MB. The build
+Deploy's documented 1 GB limit for a deployment's files. Without them the
+certified build's artifact was 26.6 MB. The build
 environment fetches the newest npm (12 at the time of writing), whose
 `npm pack --json` prints an object rather than an array;
 `scripts/package/npm-pack-result.mjs` at the repository root reads both.

@@ -17,6 +17,10 @@ entry:
 npm install @resvg/resvg-wasm
 ```
 
+`metaplate/edge` also needs Satori 0.35.2 or later, the first release that
+exports `satori/layout.wasm`. Metaplate's `satori` peer range starts lower,
+at 0.33.3, for the other entry points.
+
 **Cloudflare Workers are not supported.** Satori shapes text with a HarfBuzz
 build bundled into `satori/standalone`, which compiles its WebAssembly from
 embedded bytes on first use and, in a worker-shaped isolate, reads

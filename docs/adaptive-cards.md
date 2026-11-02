@@ -139,6 +139,6 @@ met:
 Office 365 Connectors, including connector-based Incoming Webhooks, were
 retired in May 2026; Teams webhooks are now created with the Workflows app,
 which accepts the same `{ type: "message", attachments: [...] }` body. See
-[`examples/api/adaptive-card.ts`](../examples/api/adaptive-card.ts). Metaplate makes no
+[`examples/api/adaptive-card.ts`](https://github.com/lnorton89/metaplate/blob/main/examples/api/adaptive-card.ts). Metaplate makes no
 network calls: posting the card, and keeping the webhook URL secret, stay with
 the caller.

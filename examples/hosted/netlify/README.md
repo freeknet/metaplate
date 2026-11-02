@@ -35,8 +35,10 @@ involved), then `npm run assets`, then
 `netlify deploy --prod --no-build --site <new site id> --dir public`. The CLI
 bundles `netlify/edge-functions` during a `--no-build` deploy.
 
-Then check two never-requested slugs per site with the packed CLI and a plain
-GET, and decode each image to confirm it is not uniform:
+Then, from the repository root after `npm run build`, check two
+never-requested slugs per site with the CLI and a plain GET, and decode each
+image to confirm it is not uniform. The Functions site serves `/og/<slug>`,
+the edge site `/og-edge/<slug>`:
 
 ```sh
 node dist/cli.js verify-url --json --size 1200x630 --format png https://<site>.netlify.app/og/<slug>

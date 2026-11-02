@@ -63,9 +63,9 @@ export type LanguageFontFace = {
    */
   unicodeRanges?: UnicodeRanges;
   /**
-   * The bytes of one file of the face (TTF, OTF, or WOFF; Satori does not
-   * read WOFF2). Called lazily, at most once per subset while it succeeds; a
-   * throw fails the render and is retried by the next one.
+   * The bytes of one file of the face (TTF, OTF, or WOFF; WOFF2 only with
+   * Satori 0.55.0 or later). Called lazily, at most once per subset while it
+   * succeeds; a throw fails the render and is retried by the next one.
    */
   data: (subset: string | undefined) => FontBytes | Promise<FontBytes>;
 };
