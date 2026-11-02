@@ -18,6 +18,7 @@ import type { SocialTarget } from "./compatibility-profiles.js";
 import type { ImageSize } from "./core.js";
 import { verifySocialImage } from "./social-verification.js";
 import { imageContentType, verifyImage, type ImageDimensions } from "./image.js";
+import type { RemotePageCrawlerReport } from "./page-crawlers.js";
 import { hasError, redactUrl } from "./internal.js";
 import { pngUniformColor } from "./png-content.js";
 import { verifyRemotePage, type RemotePageImageReport, type RemotePageVerification } from "./page-verification.js";
@@ -55,6 +56,8 @@ verify-url options:
 verify-page options (plus the verify-url fetch options, which apply to every request):
   --max-html-bytes N  Abort a page larger than N bytes (default 4 MiB)
   --max-images N      Fetch at most N distinct image URLs per page (default 8)
+  --crawler TOKEN     Also evaluate robots.txt for this crawler token (repeatable);
+                      the crawlers of each --target are evaluated automatically
 
 render options:
   --out DIR          Directory the site is published from (default public)
@@ -303,6 +306,19 @@ function reportIssues(lines: Lines, page: string, issues: readonly { severity: s
   }
 }
 
+/** One summary line per evaluated crawler; the findings themselves are printed as issues. */
+function crawlerLine(crawler: RemotePageCrawlerReport): string {
+  const who = crawler.platform ? `${crawler.token} (${crawler.platform})` : crawler.token;
+  const count = crawler.checks.length;
+  const urls = `${count} URL${count === 1 ? "" : "s"}`;
+  if (crawler.allowed === null) return `  ? robots.txt: could not evaluate ${who} for every one of ${urls}`;
+  if (crawler.allowed) return `  ✓ robots.txt allows ${who} on ${urls}`;
+  const denied = crawler.checks.filter((check) => check.allowed === false).length;
+  const symbol = crawler.robots === "honors" || crawler.robots === "requested" ? "✗" : "!";
+  const note = crawler.robots === "ignores" ? ", which documents that it ignores robots.txt" : "";
+  return `  ${symbol} robots.txt disallows ${who} on ${denied} of ${urls}${note}`;
+}
+
 function describePage(page: string, report: RemotePageVerification): Lines & { failed: boolean } {
   const compatible = Object.values(report.targets).every((target) => target.compatible);
   const failed = !report.valid || !compatible;
@@ -312,6 +328,7 @@ function describePage(page: string, report: RemotePageVerification): Lines & { f
     out: [`${failed ? "✗" : "✓"} ${page} (${count} image reference${count === 1 ? "" : "s"}${redirected})`],
     err: [],
   };
+  for (const crawler of report.robots?.crawlers ?? []) lines.out.push(crawlerLine(crawler));
   reportIssues(lines, page, report.globalIssues, "");
   for (const [target, targetReport] of Object.entries(report.targets)) {
     reportIssues(lines, page, targetReport.issues, `${target}: `);
@@ -339,6 +356,7 @@ async function verifyPages(args: string[]) {
       const report = await verifyRemotePage(raw, {
         ...invocation.fetch,
         targets: invocation.socialTargets,
+        ...(invocation.crawlers ? { crawlers: invocation.crawlers } : {}),
         ...(invocation.maxFileSize !== undefined ? { maxFileSize: invocation.maxFileSize } : {}),
       });
       reports.push(report);

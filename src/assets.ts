@@ -199,7 +199,7 @@ export function remoteImageLoader(options: RemoteImageLoaderOptions): RemoteImag
       remoteOptions,
       (address) => address,
       REMOTE_IMAGE_ACCEPT,
-      checkOrigin,
+      { checkHop: checkOrigin },
     );
     try {
       return imageAsset(remote.bytes, assetOptions);

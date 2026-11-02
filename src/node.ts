@@ -109,6 +109,7 @@ export {
 } from "./remote.js";
 
 export {
+  CRAWLER_HTML_LIMITS,
   REMOTE_PAGE_DEFAULTS,
   verifyRemotePage,
   type RemotePageDeclaredImage,
@@ -122,6 +123,34 @@ export {
   type RemotePageTargetReport,
   type RemotePageVerification,
 } from "./page-verification.js";
+
+export {
+  REMOTE_ROBOTS_DEFAULTS,
+  type RemotePageCrawlerCheck,
+  type RemotePageCrawlerReport,
+  type RemotePageRobotsFile,
+  type RemotePageRobotsReport,
+  type RemotePageRobotsStatus,
+  type RobotsIssueCode,
+} from "./page-crawlers.js";
+
+export {
+  evaluateRobots,
+  isRobotsProductToken,
+  parseRobotsTxt,
+  type RobotsDecision,
+  type RobotsGroup,
+  type RobotsGroupMatch,
+  type RobotsRule,
+  type RobotsTxt,
+} from "./robots.js";
+
+export {
+  SOCIAL_CRAWLERS,
+  findSocialCrawler,
+  type SocialCrawler,
+  type SocialCrawlerRobotsPolicy,
+} from "./social-crawlers.js";
 
 export {
   extractPageSocialMetadata,
