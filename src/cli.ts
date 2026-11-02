@@ -19,6 +19,8 @@ import type { ImageSize } from "./core.js";
 import { verifySocialImage } from "./social-verification.js";
 import { imageContentType, verifyImage, type ImageDimensions } from "./image.js";
 import type { RemotePageCrawlerReport } from "./page-crawlers.js";
+import { hasError, redactUrl } from "./internal.js";
+import { pngUniformColor } from "./png-content.js";
 import { verifyRemotePage, type RemotePageImageReport, type RemotePageVerification } from "./page-verification.js";
 import { RemoteImageError, verifyRemoteImage } from "./remote.js";
 import { METAPLATE_VERSION } from "./version.js";
@@ -42,6 +44,7 @@ Options:
   --url URL        Metadata image URL for target checks (verify only)
   --alt TEXT       Metadata alt text for target checks
   --max-file-size N  Reject images larger than N bytes
+  --require-content  Fail a PNG whose every pixel is one color (verify and verify-url)
 
 verify-url options:
   --max-bytes N      Abort a download larger than N bytes (default 16 MiB)
@@ -110,10 +113,6 @@ type Check = {
   size: ImageSize;
   load: () => Promise<Loaded>;
 };
-
-function hasError(issues: readonly CliIssue[]): boolean {
-  return issues.some((issue) => issue.severity === "error");
-}
 
 function messages(issues: readonly CliIssue[]): string {
   return issues.map(({ message }) => message ?? "verification failed").join("; ");
@@ -204,16 +203,22 @@ async function runChecks(checks: readonly Check[], options: SocialOptions, listK
   if (failures.length > 0) process.exitCode = 1;
 }
 
-/** Never echo embedded credentials back into logs or JSON reports. */
-function displayUrl(raw: string): string {
-  try {
-    const url = new URL(raw);
-    if (url.username === "" && url.password === "") return raw;
-    url.username = "";
-    url.password = "";
-    return url.href;
-  } catch {
-    return raw;
+/**
+ * `--require-content`: a card that decodes to one color is blank whatever its
+ * format and size checks say. Only PNG is decoded (Node ships zlib, not a
+ * JPEG, WebP, or GIF decoder), so another format fails rather than passing
+ * unchecked.
+ */
+function assertContent(bytes: Uint8Array, format: string): void {
+  if (format !== "png") {
+    throw new Error(`--require-content decodes PNG only; this image is ${format}`);
+  }
+  const color = pngUniformColor(bytes);
+  if (color) {
+    const [red, green, blue, alpha] = color;
+    throw new Error(
+      `image is blank: every pixel is rgba(${red}, ${green}, ${blue}, ${Math.round((alpha / 255) * 100) / 100})`,
+    );
   }
 }
 
@@ -228,6 +233,7 @@ function verifyFiles(args: string[]) {
       load: async () => {
         const bytes = await readFile(target.file);
         const dimensions = verifyImage(bytes, target.size, target.format);
+        if (invocation.requireContent) assertContent(bytes, dimensions.format);
         return { bytes, dimensions, ...(invocation.url !== undefined ? { metadataUrl: invocation.url } : {}) };
       },
     };
@@ -238,7 +244,8 @@ function verifyFiles(args: string[]) {
 function verifyUrls(args: string[]) {
   const invocation = parseVerifyUrlInvocation(args);
   const checks = invocation.targets.map((target): Check => {
-    const name = displayUrl(target.url);
+    // Never echo embedded credentials back into logs or JSON reports.
+    const name = redactUrl(target.url);
     return {
       name,
       identity: { url: name },
@@ -249,6 +256,7 @@ function verifyUrls(args: string[]) {
           { ...target.size, ...(target.format ? { format: target.format } : {}) },
           invocation.fetch,
         );
+        if (invocation.requireContent) assertContent(remote.bytes, remote.image.format);
         const redirected = remote.finalUrl !== remote.url ? `, final URL ${remote.finalUrl}` : "";
         return {
           bytes: remote.bytes,
@@ -343,7 +351,7 @@ async function verifyPages(args: string[]) {
   let failed = 0;
 
   for (const raw of invocation.urls) {
-    const page = displayUrl(raw);
+    const page = redactUrl(raw);
     try {
       const report = await verifyRemotePage(raw, {
         ...invocation.fetch,
@@ -396,8 +404,10 @@ async function main(args: string[]) {
 main(process.argv.slice(2)).catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
   process.stderr.write(`${message}\n`);
-  if (!(error instanceof ReportedError)) {
-    process.stderr.write(`${COMMANDS.get(process.argv[2] ?? "")?.usage ?? VERIFY_USAGE}\n`);
+  // Argument errors already end with the command's usage; print it only once.
+  const usage = COMMANDS.get(process.argv[2] ?? "")?.usage ?? VERIFY_USAGE;
+  if (!(error instanceof ReportedError) && !message.endsWith(usage)) {
+    process.stderr.write(`${usage}\n`);
   }
   process.exitCode = 1;
 });

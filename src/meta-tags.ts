@@ -1,11 +1,17 @@
 import { MAX_IMAGE_DIMENSION, type XCard } from "./core.js";
 import { xCardTags, type XAppCard, type XPlayerCard } from "./x-cards.js";
 import { openGraphMediaTags, type SocialMetaMediaInput } from "./og-media.js";
+import { isAbsoluteUrl, present } from "./internal.js";
+import { canonicalBase, pageTags, type SocialMetaOptions } from "./page-tags.js";
+
+export { canonicalBase };
+export type { SocialMetaArticle, SocialMetaDateTime, SocialMetaOptions } from "./page-tags.js";
 
 /**
- * One `<meta>` tag as a plain object. Open Graph tags carry `property`, X Card
- * tags carry `name`; exactly one of the two is set. The shape is what React
- * Router `meta` descriptors and Astro/Svelte `{#each}` loops consume directly.
+ * One `<meta>` tag as a plain object. Open Graph and `article:` tags carry
+ * `property`; X Card tags and `theme-color` carry `name`. Exactly one of the
+ * two is set. The shape is what React Router `meta` descriptors and
+ * Astro/Svelte `{#each}` loops consume directly.
  */
 export type SocialMetaTag =
   | { property: string; name?: never; content: string }
@@ -51,31 +57,6 @@ export type SocialMetaInput = {
     | undefined;
 };
 
-/**
- * Optional page-level Open Graph fields. An undefined or empty value emits no
- * tag. `<title>` and `<link rel="canonical">` are not meta tags and remain the
- * page's responsibility.
- */
-export type SocialMetaOptions = {
-  /** Emitted as `og:title`. */
-  title?: string | undefined;
-  /** Emitted as `og:description`. */
-  description?: string | undefined;
-  /**
-   * Absolute http(s) canonical page URL, emitted as `og:url`. When supplied,
-   * relative image URLs are resolved against it; absolute image URLs are
-   * never changed. Without it, image URLs are emitted exactly as given.
-   */
-  url?: string | undefined;
-  /** Emitted as `og:site_name`. */
-  siteName?: string | undefined;
-  /**
-   * Emitted as `og:type`. Defaults to `website` only when `title` or `url` is
-   * supplied, so metadata-only calls never gain page-level tags.
-   */
-  type?: string | undefined;
-};
-
 /** `socialMetaHtml` options: the page-level fields plus line indentation. */
 export type SocialMetaHtmlOptions = SocialMetaOptions & {
   /** Prefix for every line. Only spaces and tabs are accepted. */
@@ -83,16 +64,13 @@ export type SocialMetaHtmlOptions = SocialMetaOptions & {
 };
 
 /**
- * Every tag key this module can emit matches this pattern: an `og` or
- * `twitter` namespace followed by lowercase segments. Rendering re-checks it,
- * so a key can never carry quotes, spaces, or `>` into an attribute.
+ * Every tag key this module can emit matches this pattern: an `og`,
+ * `twitter`, or `article` namespace followed by lowercase segments, or exactly
+ * `theme-color`. Rendering re-checks it, so a key can never carry quotes,
+ * spaces, or `>` into an attribute.
  */
-const TAG_KEY = /^(?:og|twitter)(?::[a-z]+(?:_[a-z]+)*)+$/;
+const TAG_KEY = /^(?:(?:og|twitter|article)(?::[a-z]+(?:_[a-z]+)*)+|theme-color)$/;
 const INDENT = /^[ \t]*$/;
-
-export function present(value: string | undefined): value is string {
-  return value !== undefined && value !== "";
-}
 
 export function dimension(value: number, axis: string): string {
   if (!Number.isInteger(value) || value < 1 || value > MAX_IMAGE_DIMENSION) {
@@ -101,32 +79,6 @@ export function dimension(value: number, axis: string): string {
     );
   }
   return String(value);
-}
-
-function isAbsoluteUrl(value: string): boolean {
-  try {
-    new URL(value);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** Parses the canonical URL, accepting only credential-free http(s) URLs. */
-export function canonicalBase(url: string): URL {
-  let parsed: URL | undefined;
-  try {
-    parsed = new URL(url);
-  } catch {
-    parsed = undefined;
-  }
-  if (!parsed || (parsed.protocol !== "http:" && parsed.protocol !== "https:")) {
-    throw new Error(`Invalid url: expected an absolute http(s) URL; received ${url}`);
-  }
-  if (parsed.username || parsed.password) {
-    throw new Error(`Invalid url: must not contain credentials; received ${url}`);
-  }
-  return parsed;
 }
 
 export function imageUrl(image: SocialMetaImageInput, base: URL | undefined, label: string): string {
@@ -182,20 +134,6 @@ function twitterTags(
   return tags;
 }
 
-function pageTags(options: SocialMetaOptions): SocialMetaTag[] {
-  const tags: SocialMetaTag[] = [];
-  const add = (property: string, content: string | undefined) => {
-    if (present(content)) tags.push({ property, content });
-  };
-  add("og:title", options.title);
-  add("og:description", options.description);
-  add("og:url", options.url);
-  add("og:site_name", options.siteName);
-  const defaultType = present(options.title) || present(options.url) ? "website" : undefined;
-  add("og:type", present(options.type) ? options.type : defaultType);
-  return tags;
-}
-
 /**
  * Describes the `<meta>` tags for social image metadata, in a fixed order:
  *
@@ -216,7 +154,11 @@ function pageTags(options: SocialMetaOptions): SocialMetaTag[] {
  *    `iphone`, `ipad`, and `googleplay` in that order, then
  *    `twitter:app:country`.
  * 3. Page-level fields from `options`: `og:title`, `og:description`,
- *    `og:url`, `og:site_name`, `og:type`.
+ *    `og:url`, `og:site_name`, `og:type`, `og:locale`, each
+ *    `og:locale:alternate`, `article:published_time`,
+ *    `article:modified_time`, `article:expiration_time`, each
+ *    `article:author`, `article:section`, each `article:tag`, `og:pubdate`,
+ *    and last `<meta name="theme-color">`.
  *
  * Any tag whose value is undefined or empty is omitted. Dimensions are
  * stringified integers. When `options.url` is supplied, relative image URLs
@@ -224,7 +166,10 @@ function pageTags(options: SocialMetaOptions): SocialMetaTag[] {
  * are emitted unchanged.
  *
  * @throws When `options.url` is not an absolute, credential-free http(s) URL,
- *   when an image URL is empty, when a dimension is not an integer from 1
+ *   when a page field breaks its rule (see `SocialMetaOptions`: locales in
+ *   `language_TERRITORY` form, RFC 3339 dates, `#RRGGBB`/`#RRGGBBAA` theme
+ *   colors, and `type: "article"` with article fields), when an image URL is
+ *   empty, when a dimension is not an integer from 1
  *   to 65535, when a video or audio item fails the `openGraphMedia` checks,
  *   or when a player or app payload is missing, mismatched with its card, or
  *   invalid (see `xCardFields`).
@@ -280,7 +225,8 @@ export function renderMetaTags(tags: readonly SocialMetaTag[], indent = ""): str
  * per line, in the same order, with no trailing newline. The output contains
  * only `<meta>` elements. Each element has exactly two attributes, `property`
  * or `name` followed by `content`; the key is checked against a strict
- * `og:`/`twitter:` pattern, and the content is escaped for a double-quoted
+ * pattern (an `og:`, `twitter:`, or `article:` key, or exactly `theme-color`),
+ * and the content is escaped for a double-quoted
  * attribute (`&`, `<`, `>`, `"`, `'`, plus CR and LF so each element stays on
  * its own line). `<title>` and `<link rel="canonical">` are not emitted;
  * those belong to the page.

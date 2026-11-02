@@ -24,6 +24,7 @@ It works with plain Node, static build scripts, Next.js, Astro, React Router, Sv
 - [Guides](#guides)
   - [Rendering and routes](#rendering-and-routes)
   - [Static files with `metaplate render`](#static-files-with-metaplate-render)
+  - [Signed image routes](#signed-image-routes)
   - [Framework and runtime support](#framework-and-runtime-support)
   - [Edge runtimes](#edge-runtimes)
   - [Next.js](#nextjs)
@@ -38,7 +39,6 @@ It works with plain Node, static build scripts, Next.js, Astro, React Router, Sv
   - [Verifying images](#verifying-images)
   - [Deployment routes](#deployment-routes)
 - [Entry points](#entry-points)
-- [Design lineage](#design-lineage)
 - [License](#license)
 
 ## Install
@@ -135,7 +135,10 @@ Each guide below is a summary; the linked page has the full reference.
 or anything else from the same raw pixels. `handler` and `handlerFrom` plug
 into Fetch-based routes in Next.js, Astro, React Router, and SvelteKit, and
 `render` feeds Express or a build script. Plates are Satori layouts, not DOM,
-so read the plate constraints before designing one.
+so read the plate constraints before designing one. Opt-in render `guards`
+fail or report a card with text no font covers, text laid out off the canvas,
+or (Node and edge) a single-color image, instead of shipping it; they are off
+by default and unavailable through `metaplate/next`.
 [Rendering guide](docs/rendering.md)
 
 ### Static files with `metaplate render`
@@ -150,6 +153,17 @@ npx metaplate render og.render.mjs --out public
 ```
 
 [Render CLI guide](docs/render-cli.md)
+
+### Signed image routes
+
+A dynamic image route can refuse every URL your pages did not emit.
+`plate.signedMetadata(route, copy, { secret })` signs each image URL with
+HMAC-SHA-256 as an extra path segment, and
+`plate.handlerFrom(resolve, { signed: { secret } })` answers an unsigned or
+tampered path with 403 before resolving copy or rendering. It runs on Web
+Crypto in Node and on the edge, supports secret rotation, and is opt-in;
+static files need none of it.
+[Signed routes guide](docs/signed-routes.md)
 
 ### Framework and runtime support
 
@@ -185,7 +199,10 @@ size itself, and `plate.variant(name)` gives the full plate API for one size.
 The root `metaplate` entry builds Open Graph and X metadata with no renderer
 or framework, including per-channel images and Open Graph video and audio.
 `socialMetaTags` and `socialMetaHtml` emit the `<meta>` tags for pages that
-write their own `<head>`.
+write their own `<head>`, including validated `og:locale`, `article:`, and
+Discord accent-color and timestamp tags. An opt-in `version`, or a plate's
+`version: "copy"`, adds a `?v=` token to published image URLs so crawlers that
+cache images by URL fetch a changed card, while file paths stay unchanged.
 [Metadata guide](docs/metadata.md)
 
 ### X player and app cards
@@ -239,7 +256,8 @@ runtime. Metaplate bundles no artwork; the guide covers each set's license.
 and platform rules, and `metaplate verify-url` runs the same checks on a
 deployed URL under a hardened fetch policy. `metaplate verify-page` audits a
 whole page: it reads the page's `og:image`, `twitter:card`, `twitter:image`,
-and JSON-LD images and verifies every image they name.
+and JSON-LD images and verifies every image they name. `--require-content`
+decodes PNGs and fails one whose every pixel is the same color.
 [Verification guide](docs/verification.md) and
 [page audit guide](docs/verify-page.md)
 
@@ -256,25 +274,26 @@ every route is in [`deployment-evidence.json`](deployment-evidence.json).
 ## Entry points
 
 - `metaplate` — framework-free paths, dimensions, Open Graph and X metadata
-  (including video and audio, and X player and app cards), `<meta>` tag
-  serialization, Schema.org JSON-LD, Adaptive Cards, social compatibility
+  (including video and audio, and X player and app cards), cache-busting
+  image URL versions (`socialImageVersion`), `<meta>` tag serialization, Schema.org JSON-LD, Adaptive Cards, social compatibility
   profiles, and byte-level social image verification.
-- `metaplate/render` — Satori-based SVG generation. Satori is installed
-  automatically.
+- `metaplate/render` — Satori-based SVG generation, with the
+  `missingGlyphs` and `overflow` render guards (`RenderGuardError`). Satori is
+  installed automatically.
 - `metaplate/node` — SVG, PNG, raw pixels, and any format a supplied encoder
-  produces, plus Fetch API responses. Satori and Resvg are installed
-  automatically. Also the hardened remote fetcher behind `verify-url` and
-  `verify-page` (`fetchRemoteImage`, `verifyRemoteImage`, `verifyRemotePage`,
-  `extractPageSocialMetadata`).
-- `metaplate/edge` — PNG, raw pixels, and Fetch API responses through
-  `@resvg/resvg-wasm` for Deno-based edges such as Netlify Edge Functions,
-  and other runtimes that allow run-time Wasm compilation; not Cloudflare
-  Workers. No Node built-ins. Needs `@resvg/resvg-wasm` and the
-  caller-supplied `@resvg/resvg-wasm/index_bg.wasm` and `satori/layout.wasm`
-  modules.
-- `metaplate/next` — native Next.js `ImageResponse` adapter, and
-  `nextTwitterMetadata` for X player and app cards in Next metadata. Needs
-  `next`.
+  produces, plus Fetch API responses, with every render guard including
+  `blank`. Satori and Resvg are installed automatically. Also the hardened
+  remote fetcher behind `verify-url` and `verify-page` (`fetchRemoteImage`,
+  `verifyRemoteImage`, `verifyRemotePage`, `extractPageSocialMetadata`).
+- `metaplate/edge` — PNG, raw pixels, and Fetch API responses (with every
+  render guard) through `@resvg/resvg-wasm` for Deno-based edges such as
+  Netlify Edge Functions, and other runtimes that allow run-time Wasm
+  compilation; not Cloudflare Workers. No Node built-ins. Needs
+  `@resvg/resvg-wasm` and the caller-supplied
+  `@resvg/resvg-wasm/index_bg.wasm` and `satori/layout.wasm` modules.
+- `metaplate/next` — native Next.js `ImageResponse` adapter,
+  `nextTwitterMetadata` for X player and app cards in Next metadata, and
+  `nextPageMetadata`/`nextPageViewport` for page-level tags. Needs `next`.
 - `metaplate/font-data` — runtime-neutral normalization and memoization for
   application/framework-provided bytes. No peers or Node built-ins.
 - `metaplate/fonts` — project-file, Fontsource, generic npm-package, and
@@ -285,12 +304,11 @@ every route is in [`deployment-evidence.json`](deployment-evidence.json).
   installed-package reader, `packageEmojiLoader`, is in `metaplate/fonts`.
 - `metaplate/png` — PNG header inspection and dimension verification. No peers.
 - `metaplate/image` — dimension and structural verification for SVG, PNG,
-  JPEG, WebP, and GIF. No peers.
-
-## Design lineage
-
-Metaplate extracts the production patterns used by the GOLC and Cinnabar sites
-and the pre-rendered static-image pattern used by the AntikytheraOS showcase.
+  JPEG, WebP, and GIF, and `imageAsset`/`imageAssetLoader` for embedding
+  checked image bytes in a plate. No peers or Node built-ins.
+- `metaplate/assets` — Node readers for plate images: project files
+  (`readImageAsset`, `fileImageLoader`) and remote images fetched only
+  from allowlisted origins (`remoteImageLoader`). No renderer peers.
 
 ## License
 
