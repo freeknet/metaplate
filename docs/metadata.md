@@ -39,7 +39,7 @@ Metaplate configures two published webpage metadata channels, not one platform:
 
 | Metaplate option | Emitted/returned channel | Typical consumers |
 | --- | --- | --- |
-| `openGraph` / `OpenGraphImageOptions` | `og:image` and its structured properties | Facebook, LinkedIn, Slack, Mastodon, Discord, and other Open Graph readers |
+| `openGraph` / `OpenGraphImageOptions` | `og:image` and its structured properties | Facebook, LinkedIn, Slack, Mastodon, Discord, WhatsApp, Bluesky, Pinterest Rich Pins, and other Open Graph readers |
 | `twitter` / `XImageOptions` | `twitter:card`, `twitter:image`, and identity fields | X Cards |
 
 The public option remains named `twitter` because `twitter:*` is still the X
