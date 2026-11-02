@@ -95,6 +95,12 @@ One function rather than a spread per page is deliberate: the fields above have
 to be restated on every route that sets `openGraph` at all, and a route that
 forgets one loses it silently.
 
+To validate these page fields rather than write them by hand,
+`nextPageMetadata` maps `socialMetaTags`' page options (including `locale`,
+the `article:` fields, and Discord's `og:pubdate`) onto `openGraph` and
+`other`, and `nextPageViewport` puts `themeColor` in the `viewport` export,
+where Next 14 moved it. See [page-level tags](metadata.md#page-level-tags).
+
 If the layout sets no Open Graph fields and neither does the page, spreading
 the whole result stays correct:
 
@@ -231,3 +237,13 @@ import { copy } from "../page";
 export const dynamic = "force-static";
 export const GET = og.handler(copy);
 ```
+
+### Render guards in Next.js
+
+[Render guards](rendering.md#render-guards) are not available through
+`createNextOg`: `next/og`'s `ImageResponse` takes the element and options and
+returns the response, exposing neither Satori's `loadAdditionalAsset` and
+`onNodeDetected` callbacks nor the rendered pixels. `createNextOg` therefore
+rejects a `guards` option rather than ignoring it. A card that must be
+guarded renders through `createNodeOg` in a route handler, configured as
+above, with `guards` on that plate.

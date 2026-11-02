@@ -7,7 +7,18 @@ import {
   type OutputEncoder,
   type ResvgRenderOptions,
 } from "./raster.js";
+import type { RasterRenderGuards } from "./guards.js";
 import type { SvgOgDefinition } from "./render.js";
+
+export {
+  RenderGuardError,
+  type RasterRenderGuards,
+  type RenderGuardBox,
+  type RenderGuardIssue,
+  type RenderGuardLevel,
+  type RenderGuardName,
+  type RenderGuards,
+} from "./guards.js";
 
 export type {
   EncoderFormat,
@@ -18,10 +29,15 @@ export type {
 
 export type {
   PlateContext,
+  PlateElement,
   PlateMetadataOptions,
+  PlateRouteOptions,
+  PlateUrlOptions,
   PlateVariant,
   PlateVariants,
+  PlateVersioning,
   PlateView,
+  SignedRouteOptions,
 } from "./plate.js";
 
 export {
@@ -54,13 +70,10 @@ export type NodeOgDefinition<Copy, Variant extends string = string> = SvgOgDefin
   /** Adds a strong ETag derived from the final encoded bytes to responses. */
   etag?: boolean | "sha256";
   /**
-   * Names the design's current version, such as a hash of the plate's source
-   * file or a release number. It is part of `fingerprint()`, so changing it
-   * invalidates `metaplate render --incremental` and `cached()` entries when
-   * something the fingerprint cannot see has changed, such as a helper the
-   * component imports.
+   * Render guards, plus `blank`, which fails or reports a rasterised image
+   * whose every pixel is one color. All off by default.
    */
-  revision?: string;
+  guards?: RasterRenderGuards;
 };
 
 function sha256(bytes: Uint8Array): string {
@@ -108,6 +121,7 @@ export {
 } from "./remote.js";
 
 export {
+  CRAWLER_HTML_LIMITS,
   REMOTE_PAGE_DEFAULTS,
   verifyRemotePage,
   type RemotePageDeclaredImage,
@@ -121,6 +135,34 @@ export {
   type RemotePageTargetReport,
   type RemotePageVerification,
 } from "./page-verification.js";
+
+export {
+  REMOTE_ROBOTS_DEFAULTS,
+  type RemotePageCrawlerCheck,
+  type RemotePageCrawlerReport,
+  type RemotePageRobotsFile,
+  type RemotePageRobotsReport,
+  type RemotePageRobotsStatus,
+  type RobotsIssueCode,
+} from "./page-crawlers.js";
+
+export {
+  evaluateRobots,
+  isRobotsProductToken,
+  parseRobotsTxt,
+  type RobotsDecision,
+  type RobotsGroup,
+  type RobotsGroupMatch,
+  type RobotsRule,
+  type RobotsTxt,
+} from "./robots.js";
+
+export {
+  SOCIAL_CRAWLERS,
+  findSocialCrawler,
+  type SocialCrawler,
+  type SocialCrawlerRobotsPolicy,
+} from "./social-crawlers.js";
 
 export {
   extractPageSocialMetadata,

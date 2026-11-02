@@ -7,6 +7,86 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Added
 
+- Signed image routes. `signImagePath` and `verifyImageSignature` (from
+  `metaplate`) insert and check an HMAC-SHA-256 signature of the URL's
+  pathname as one 43-character base64url path segment before the file name,
+  through Web Crypto only, so they run in Node 20+, Deno, and
+  `metaplate/edge`. Secrets must be at least 32 bytes; pass several, newest
+  first, to rotate. Plates from `metaplate/node`, `metaplate/edge`, and
+  `metaplate/next`, and their variants, gain `signedMetadata(route, copy,
+  keys, options?)`, which signs every Open Graph and X Card image URL, and
+  `handlerFrom` and `fetchableFrom` take `{ signed: { secret | secrets,
+  status?, url? } }`, which answers a missing or invalid signature with 403
+  (or 404) and `Cache-Control: no-store` before the resolver or renderer
+  runs. Unsigned routes are unchanged. See
+  [`docs/signed-routes.md`](docs/signed-routes.md).
+- Plate components may be `async` in `createSvgOg`, `createNodeOg`,
+  `createEdgeOg`, and `createNextOg`, so a component can load per-page
+  data before returning its element tree; a synchronous component is not
+  awaited. The `PlateElement` type names either result.
+- `imageAsset` and `imageAssetLoader` in `metaplate/image` embed image
+  bytes as a `data:` URI with the intrinsic size Satori uses, in any
+  runtime. The format is detected from the bytes and walked structurally, so
+  truncated files, HTML error pages, and formats Satori rejects (AVIF, HEIC,
+  JPEG XL, TIFF, BMP, ICO) throw with the reason. Only PNG, JPEG, and SVG are
+  accepted by default, because the Resvg in `metaplate/node`,
+  `metaplate/edge`, and `next/og` draws WebP (and, in `next/og`, GIF)
+  as nothing; `formats` opts in. A viewBox-only SVG is sized from its
+  `viewBox`, and sources over `maxBytes` (default 4 MiB) are refused.
+- New `metaplate/assets` entry: `readImageAsset` and `fileImageLoader`
+  read project image files, and `remoteImageLoader` fetches per-page images
+  only from a required `origins` allowlist, re-checked on every redirect,
+  through the hardened `verify-url` fetcher, with a streaming byte cap and a
+  bounded per-URL cache. See
+  [Images and assets](docs/rendering.md#images-and-assets).
+
+- Opt-in render guards fail (`"error"`) or report (`"warn"`) a render that
+  would ship a broken card. A plate's `guards` option on `createSvgOg`,
+  `createNodeOg`, and `createEdgeOg` takes `missingGlyphs` (text no plate font
+  covers that the emoji loader and `satori.loadAdditionalAsset` resolved to
+  nothing, reported with its segment and Satori language code), `overflow`
+  (an element holding text whose laid-out box reaches outside the canvas,
+  read through a composed `satori.onNodeDetected`; elements without text may
+  bleed), and, on the two raster renderers, `blank` (every pixel one color,
+  checked on the raw pixels before encoding). Errors reject the render with a
+  `RenderGuardError` listing every issue, exported from `metaplate/render`,
+  `metaplate/node`, and `metaplate/edge`; warnings go to `guards.onWarning`,
+  or `console.warn` without one. Every guard defaults to `"off"`, which leaves
+  Satori's options and every output unchanged, so no existing plate breaks.
+  Both Satori hooks behave identically in every release probed, 0.33.3
+  through 0.63.2. `createNextOg` rejects `guards`, because `ImageResponse`
+  exposes no hooks or pixels, and `createSvgOg` rejects `blank`. `metaplate verify` and `verify-url` gain
+  `--require-content`, which decodes PNG files and URLs with `node:zlib` and
+  fails one whose every pixel is the same color; other formats fail with the
+  flag rather than passing unchecked. See
+  [`docs/rendering.md`](docs/rendering.md#render-guards).
+- `socialMetaTags` and `socialMetaHtml` accept validated page-level fields:
+  `locale` and `alternateLocales` (`og:locale`, `og:locale:alternate`, in
+  `language_TERRITORY` form), `article` (`article:published_time`,
+  `modified_time`, and `expiration_time` as calendar dates, RFC 3339
+  date-times with an offset, or `Date`s, plus `article:author`,
+  `article:section`, and `article:tag`; `og:type` then defaults to
+  `article`), `pubdate` (Discord's `og:pubdate`, a full RFC 3339 timestamp),
+  and `themeColor` (`<meta name="theme-color">`, `#RRGGBB` or `#RRGGBBAA`, the
+  accent color Discord reads). They follow the existing page tags, so output
+  without them is unchanged; the `socialMetaHtml` key allowlist now admits
+  `article:` keys and exactly `theme-color`. `metaplate/next` adds
+  `nextPageMetadata` (Next `openGraph` fields plus `og:pubdate` through
+  `other`), `nextPageViewport` (`themeColor` for Next's `viewport` export),
+  and `NEXT_OPEN_GRAPH_TYPES`. See `docs/metadata.md#page-level-tags`.
+- Opt-in cache-busting image URLs. `socialImageMetadata` and `socialImage`
+  accept `version`, a token of 1 to 64 URI-unreserved characters appended as
+  `?v=<version>` to every image URL they build (default and variants, Open
+  Graph and X), and so to `socialMetaTags`, JSON-LD, and Adaptive Cards.
+  `socialImageVersion(copy, revision?)` derives an eight-hex-digit token from
+  a stable serialization of the copy (32-bit FNV-1a, synchronous and
+  runtime-neutral). Plates take `version: "copy"` and a design `revision`
+  (valid on its own too, where it feeds `fingerprint()`), and
+  `metadata`, `image`, and `artifact` take a per-call `{ version }`; a
+  `metaplate render` page may name its own `version`, and the manifest `url`
+  carries the token. `socialImagePath`, `sitePath`, and rendered file paths
+  never do, and `route`, `basePath`, and `imagePath` still reject queries. See
+  [`docs/metadata.md`](docs/metadata.md#versioned-image-urls).
 - `metaplate render <module>` renders static social images as a build step.
   The module's default export is `{ plate, pages: [{ route?, copy }] }`, an
   array of those, or a function returning either; a `createNodeOg` or
@@ -43,10 +123,12 @@ All notable changes to Metaplate are documented in this file. The project uses
   `memoryRenderCache()`, is an LRU bounded to 32 MiB and 1000 entries; any
   sync or async `{ get, set }` store works, entries are re-hashed on the way
   out, a failing store degrades to rendering (`onStoreError`), `ttl` is
-  optional, and two plates with one fingerprint cannot share a store. `plate.fingerprint()` exposes the design hash (Metaplate version,
-  renderer, `revision`, size, format, font bytes, and the source text of the
-  definition's functions), and the new `revision` plate option names what
-  the fingerprint cannot see, such as a helper the component imports. See
+  optional, and two plates with one fingerprint cannot share a store.
+  `plate.fingerprint()` exposes the design hash (Metaplate version,
+  renderer, `revision`, size, format, font bytes, guard levels, and the source
+  text of the definition's functions). The plate `revision` option, which
+  needs no `version: "copy"`, names what the fingerprint cannot see, such as
+  a helper the component imports. See
   [`docs/rendering.md`](docs/rendering.md#caching-renders).
 - `metaplate verify-page <url>` audits a deployed page's social preview. It
   fetches the HTML with the same hardened fetcher as `verify-url` (its own
@@ -61,6 +143,36 @@ All notable changes to Metaplate are documented in this file. The project uses
   `{ "schemaVersion": 1, "pages": [...] }`. `verifyRemotePage` and
   `extractPageSocialMetadata` are exported from `metaplate/node`; see
   `docs/verify-page.md`.
+- `verify-page` checks crawler access. Each `--target` implies the
+  link-preview crawler its platform documents (`Twitterbot`,
+  `facebookexternalhit`, `LinkedInBot`, `Discordbot`, `WhatsApp`,
+  `Pinterestbot`, `Slackbot-LinkExpanding`), and `--crawler TOKEN` adds any
+  product token. robots.txt is read once per origin of the page, the images,
+  and their redirects, under RFC 9309 (five redirects, 4xx allows, 5xx
+  disallows, 500 KiB parsing limit), and each crawler's rules are evaluated
+  for every URL it would fetch; no request is sent with a crawler's user
+  agent. A disallow is an error for crawlers documented to obey robots.txt
+  and for requested tokens, a warning where the platform does not say, and
+  not reported for Slack, which documents that it ignores robots.txt. The
+  report gains `robots`; `parseRobotsTxt`, `evaluateRobots`, and
+  `SOCIAL_CRAWLERS` are exported from `metaplate/node`.
+- `verify-page` warns (`html-limit`) when Open Graph tags start after the
+  first 1 MB of HTML, which Meta's crawler does not read, and, under
+  `--target whatsapp`, when the `<head>` does not end within 300KB.
+- `verify-page` inspects at most 64 image references per page
+  (`maxImageReferences`), always including the first `og:image`, its
+  `og:image:secure_url`, and `twitter:image`, and parses each fetched image
+  once however many tags name it.
+
+- The `verify-page` extractor now reads `<noscript>` as raw text, as browsers do with
+  scripting enabled, so an analytics pixel's `<noscript><img></noscript>` in
+  the head no longer ends the head and drops every later Open Graph tag. It
+  ends the head where the HTML tree builder does (non-whitespace text,
+  `</body>`, `</html>`, `</br>`), keeps head elements between `</head>` and
+  `<body>`, skips `<template>` contents, closes comments at `--!>`, `<!-->`,
+  and `<!--->`, trims only ASCII whitespace, decodes a UTF-16
+  `Content-Type` charset as UTF-16, and deduplicates JSON-LD images in linear
+  time.
 - `metaplate/edge` renders plates to PNG through `@resvg/resvg-wasm` on
   Deno-based edges such as Netlify Edge Functions (hosted-certified on
   2026-11-01), and on other Fetch-shaped runtimes that allow WebAssembly to be
@@ -320,6 +432,10 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Changed
 
+- Built files keep the `node:` prefix on Node built-in imports (`node:crypto`,
+  `node:http`, ...). tsup 9 strips it by default, which lets a bundler remap a
+  bare `crypto` or `http` to a userland shim. The package check now fails if
+  any built file imports a bare built-in.
 - Development tooling now resolves `minimatch` 11 through an npm override,
   clearing the moderate globparts denial-of-service advisory (fixed in
   11.0.1) that eslint and typescript-eslint pulled in through their 10.x

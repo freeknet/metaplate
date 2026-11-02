@@ -15,7 +15,7 @@ import {
 } from "../src/cli-args.js";
 import { METAPLATE_VERSION } from "../src/version.js";
 import { bundleCli, runCli } from "./helpers/cli-bundle.js";
-import { closeLocalServers, localServer, redirectTo, routes, serveBytes } from "./helpers/http-fixtures.js";
+import { closeLocalServers, localServer, pathRoutes, redirectTo, routes, serveBytes } from "./helpers/http-fixtures.js";
 import { completePng } from "./helpers/image-fixtures.js";
 
 // The CLI runs against a freshly bundled build so spawn tests never go stale.
@@ -475,8 +475,14 @@ describe("verify-url CLI", () => {
     const result = await runAsync(["verify-url", "--timeout", "soon", "--size", "1x1", "https://example.com/og.png"]);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("Invalid timeout.");
-    expect(result.stderr).toContain(VERIFY_URL_USAGE);
+    expect(result.stderr.split(VERIFY_URL_USAGE)).toHaveLength(2);
   });
+});
+
+it("prints the usage once for an argument error that already names it", async () => {
+  const result = await runAsync(["verify", "--url", "x", "--size", "1200x630", "f.png"]);
+  expect(result.status).toBe(1);
+  expect(result.stderr).toBe(`--url and --alt require at least one --target. ${VERIFY_USAGE}\n`);
 });
 
 describe("parseVerifyPageInvocation", () => {
@@ -524,6 +530,12 @@ describe("parseVerifyPageInvocation", () => {
     });
   });
 
+  it("collects --crawler tokens, deduplicated case-insensitively", () => {
+    expect(parseVerifyPageInvocation([
+      "verify-page", "--crawler", "Twitterbot", "--crawler", "ExampleBot", "--crawler", "twitterbot", "https://example.com/",
+    ])).toMatchObject({ crawlers: ["Twitterbot", "ExampleBot"] });
+  });
+
   it("defaults to the strict policy", () => {
     expect(parseVerifyPageInvocation(["verify-page", "https://example.com/"])).toEqual({
       urls: ["https://example.com/"],
@@ -544,6 +556,8 @@ describe("parseVerifyPageInvocation", () => {
     { args: ["verify-page", "--max-html-bytes", "0", "https://example.com/"] },
     { args: ["verify-page", "--target", "myspace", "https://example.com/"] },
     { args: ["verify-page", "--bogus", "https://example.com/"] },
+    { args: ["verify-page", "--crawler", "Twitterbot/1.0", "https://example.com/"] },
+    { args: ["verify-page", "--crawler", "*", "https://example.com/"] },
   ] satisfies { args: string[] }[])("rejects invalid arguments: $args", ({ args }) => {
     expect(() => parseVerifyPageInvocation(args)).toThrow(VERIFY_PAGE_USAGE);
   });
@@ -568,6 +582,7 @@ describe("verify-page CLI", () => {
       "/moved": redirectTo("/", 302),
       "/wrong-size": html(head.replace('content="630"', 'content="600"')),
       "/og.png": serveBytes(card, "image/png"),
+      "/robots.txt": serveBytes(new TextEncoder().encode("User-agent: ExampleBot\nDisallow: /wrong-size\n"), "text/plain"),
     }));
     return { ...server, local: ["--allow-private", "--allow-port", String(server.port)] };
   }
@@ -585,6 +600,20 @@ describe("verify-page CLI", () => {
       `  ! og:image[0]: ${server.origin}/og.png is served over http; crawlers that require https will not load it.`,
       "",
     ]);
+  });
+
+  it("accepts a versioned og:image whose query the host ignores", async () => {
+    const versioned = head.replaceAll('content="/og.png"', 'content="/og.png?v=3f2a1b9c"');
+    const server = await localServer(pathRoutes({
+      "/": serveBytes(new TextEncoder().encode(`<html><head>${versioned}</head></html>`), "text/html"),
+      "/og.png": serveBytes(card, "image/png"),
+    }));
+    const result = await runAsync(["verify-page", "--allow-private", "--allow-port", String(server.port), `${server.origin}/`]);
+
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(`  ✓ og:image[0] ${server.origin}/og.png?v=3f2a1b9c 1200x630 png (${card.byteLength} bytes)`);
+    expect(server.requests.map(({ url }) => url)).toEqual(["/", "/og.png?v=3f2a1b9c"]);
   });
 
   it("sends errors to stderr and exits non-zero", async () => {
@@ -645,6 +674,20 @@ describe("verify-page CLI", () => {
     });
   });
 
+  it("evaluates robots.txt for --crawler tokens and prints one line per crawler", async () => {
+    const server = await pageServer();
+    const result = await runAsync([
+      "verify-page", ...server.local, "--crawler", "ExampleBot", `${server.origin}/`, `${server.origin}/wrong-size`,
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("  ✓ robots.txt allows ExampleBot on 2 URLs");
+    expect(result.stdout).toContain("  ✗ robots.txt disallows ExampleBot on 1 of 2 URLs");
+    expect(result.stderr).toContain(
+      `✗ ${server.origin}/wrong-size ${server.origin}/robots.txt disallows ${server.origin}/wrong-size for ExampleBot at line 2 (Disallow: /wrong-size).`,
+    );
+  });
+
   it("refuses a loopback page without --allow-private", async () => {
     const server = await pageServer();
     const result = await runAsync(["verify-page", "--allow-port", String(server.port), `${server.origin}/`]);
@@ -659,6 +702,6 @@ describe("verify-page CLI", () => {
     const result = await runAsync(["verify-page", "--size", "1x1", "https://example.com/"]);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("--size is not accepted here.");
-    expect(result.stderr).toContain(VERIFY_PAGE_USAGE);
+    expect(result.stderr.split(VERIFY_PAGE_USAGE)).toHaveLength(2);
   });
 });

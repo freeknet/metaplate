@@ -1,7 +1,14 @@
 import { OG_CONTENT_TYPE } from "./core.js";
+import {
+  assertRenderGuards,
+  checkBlank,
+  GuardReport,
+  guardLevel,
+  type RasterRenderGuards,
+} from "./guards.js";
 import { detectFormat, imageContentType, type ImageFormat, type OutputFormat } from "./image.js";
 import { isMediaType } from "./og-media.js";
-import { createPlateSocial } from "./plate.js";
+import { createPlateSocial, type PlateUrlOptions } from "./plate.js";
 import { createRenderCache, type RenderCacheOptions } from "./render-cache.js";
 import type { SvgOgDefinition } from "./render.js";
 import { stableSerialize } from "./stable-hash.js";
@@ -124,7 +131,7 @@ export type RasterPlateDefinition<Copy, Variant extends string = string> = SvgOg
   headers?: HeadersInit;
   output?: OutputEncoder;
   etag?: boolean | "sha256";
-  revision?: string;
+  guards?: RasterRenderGuards;
 };
 
 function assertDimensionPreservingResvgOptions(
@@ -225,7 +232,9 @@ export function createRasterPlate<Copy, Variant extends string = string>(
   definition: RasterPlateDefinition<Copy, Variant>,
   backend: RasterBackend,
 ) {
+  assertRenderGuards(definition.guards, ["missingGlyphs", "overflow", "blank"], "this renderer");
   const svg = createSvgPlate(definition, backend.satori);
+  const checksBlank = guardLevel(definition.guards, "blank") !== "off";
   // Every size the plate renders must survive Resvg unchanged, not only the
   // default: a `fitTo` width matching 1200 would rescale a 1080 square.
   for (const name of [undefined, ...svg.variants]) {
@@ -247,9 +256,6 @@ export function createRasterPlate<Copy, Variant extends string = string>(
     return definition.etag ? strongEtag(bytes) : undefined;
   }
 
-  if (definition.revision !== undefined && typeof definition.revision !== "string") {
-    throw new TypeError("revision must be a string");
-  }
   const encoder = new TextEncoder();
   const digestText = (text: string) => backend.sha256(encoder.encode(text));
   let plateFingerprint: Promise<string> | undefined;
@@ -283,6 +289,9 @@ export function createRasterPlate<Copy, Variant extends string = string>(
         emoji: definition.emoji,
         resvg: definition.resvg,
         output: definition.output,
+        // Guard levels decide which renders succeed, so a stricter guard
+        // must not let --incremental reuse a card it would now refuse.
+        guards: definition.guards,
       }, "plate"));
     })().catch((error: unknown) => {
       plateFingerprint = undefined;
@@ -305,6 +314,13 @@ export function createRasterPlate<Copy, Variant extends string = string>(
               `Renderer dimension mismatch: expected ${size.width}x${size.height}, ` +
                 `received ${image.width}x${image.height}`,
             );
+          }
+          if (checksBlank) {
+            // Checked on the raw pixels, before any encoder runs, so a blank
+            // frame fails (or warns) whatever format the plate emits.
+            const report = new GuardReport(definition.guards);
+            checkBlank(image.pixels, report, socialView.context);
+            report.settle();
           }
           return read(image);
         },
@@ -329,8 +345,11 @@ export function createRasterPlate<Copy, Variant extends string = string>(
       return encodeOutput(definition.output, await renderPixels(copy));
     }
 
-    /** Bytes plus metadata describing exactly those bytes and this size. */
-    async function artifact(route: string, copy: Copy) {
+    /**
+     * Bytes plus metadata describing exactly those bytes and this size. The
+     * metadata URL carries the plate's version, or `options.version`.
+     */
+    async function artifact(route: string, copy: Copy, options?: PlateUrlOptions) {
       const bytes = await render(copy);
       const format = definition.output && "format" in definition.output
         ? definition.output.format
@@ -343,7 +362,7 @@ export function createRasterPlate<Copy, Variant extends string = string>(
         format,
         size,
         image: Object.freeze({ width: size.width, height: size.height, format }),
-        metadata: socialView.ownMetadata(route, copy),
+        metadata: socialView.ownMetadata(route, copy, options),
         ...(etag === undefined ? {} : { etag }),
       });
     }
@@ -398,6 +417,8 @@ export function createRasterPlate<Copy, Variant extends string = string>(
       size,
       image: socialView.image,
       metadata: socialView.metadata,
+      /** `metadata` with every image URL signed for a `signed` route; see docs/signed-routes.md. */
+      signedMetadata: socialView.signedMetadata,
       /** The image path relative to the deployment root, without `basePath` or `origin`. */
       sitePath: socialView.sitePath,
       renderSvg: svgView.renderSvg,
