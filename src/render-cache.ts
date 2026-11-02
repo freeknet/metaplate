@@ -1,4 +1,4 @@
-import { stableSerialize } from "./stable-hash.js";
+import { taggedSerialize } from "./stable-hash.js";
 
 /**
  * Not an entry point: the runtime render cache behind `plate.cached()` in
@@ -284,7 +284,7 @@ export function createRenderCache<Copy>(plate: CacheablePlate<Copy>, options: Re
   async function key(copy: Copy): Promise<string> {
     const fingerprint = await plate.fingerprint();
     claim(store, fingerprint, identity);
-    const source = stableSerialize(
+    const source = taggedSerialize(
       { cache: "metaplate-render-cache/1", plate: fingerprint, copy },
       "copy",
     );

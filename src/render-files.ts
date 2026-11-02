@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import type { ImageSize } from "./core.js";
 import { verifyImage, type ImageFormat } from "./image.js";
 import { assertVersionToken } from "./image-version.js";
-import { stableSerialize } from "./stable-hash.js";
+import { taggedSerialize } from "./stable-hash.js";
 import { METAPLATE_VERSION } from "./version.js";
 
 /**
@@ -381,7 +381,7 @@ export async function inputHash(image: PlannedImage, peers: PeerVersions): Promi
   if (typeof image.plate.fingerprint !== "function") return null;
   let source: string;
   try {
-    source = stableSerialize({
+    source = taggedSerialize({
       input: "metaplate-render-input/1",
       metaplate: METAPLATE_VERSION,
       peers,
