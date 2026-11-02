@@ -19,7 +19,7 @@
   "files": [
     "dist",
     "README.md",
-    "docs/deployment.md",
+    "docs",
     "CHANGELOG.md",
     "LICENSE"
   ],
