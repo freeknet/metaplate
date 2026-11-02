@@ -352,3 +352,46 @@ export function parseRenderInvocation(args: string[]): RenderInvocation {
     json,
   };
 }
+
+export const PREVIEW_USAGE =
+  "Usage: metaplate preview [--host HOST] [--port N] [--target TARGET] [--max-file-size BYTES] <module>";
+
+/** Loopback only, so the gallery is reachable from this machine alone. */
+export const DEFAULT_PREVIEW_HOST = "127.0.0.1";
+
+/** Clear of the usual dev-server ports (3000, 4321, 5173, 8080), so it runs beside one. */
+export const DEFAULT_PREVIEW_PORT = 4323;
+
+export type PreviewInvocation = {
+  module: string;
+  host: string;
+  /** `0` asks the operating system for any free port. */
+  port: number;
+  socialTargets: SocialTarget[];
+  maxFileSize?: number;
+};
+
+/** Parses `preview`: one module path, the listen address, and target checks. */
+export function parsePreviewInvocation(args: string[]): PreviewInvocation {
+  const usage = PREVIEW_USAGE;
+  let host = DEFAULT_PREVIEW_HOST;
+  let port = DEFAULT_PREVIEW_PORT;
+  const { entries, json, socialTargets, maxFileSize } = parseGroups(args, "preview", usage, {
+    values: {
+      "--host": (value) => {
+        if (!value || value.startsWith("-")) throw new Error(`Invalid host. ${usage}`);
+        host = value;
+      },
+      "--port": (value) => { port = parseInteger(value, "port", usage, 0, 65_535); },
+    },
+  }, false);
+  if (json) throw new Error(`--json is not accepted here. ${usage}`);
+  if (entries.length !== 1) throw new Error(usage);
+  return {
+    module: entries[0]!.value,
+    host,
+    port,
+    socialTargets,
+    ...(maxFileSize !== undefined ? { maxFileSize } : {}),
+  };
+}

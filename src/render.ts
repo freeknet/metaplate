@@ -4,7 +4,7 @@ import type { PlateContext, PlateVariants } from "./plate.js";
 import { loadSatori } from "./peers.js";
 import { createSvgPlate } from "./svg-plate.js";
 
-export { SVG_CONTENT_TYPE } from "./svg-plate.js";
+export { SVG_CONTENT_TYPE, type SvgRenderOptions } from "./svg-plate.js";
 
 /**
  * A font face the standalone renderer passes through to Satori. Declared

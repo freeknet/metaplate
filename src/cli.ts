@@ -8,11 +8,14 @@ import {
   parseVerifyInvocation,
   parseVerifyPageInvocation,
   parseVerifyUrlInvocation,
+  DEFAULT_PREVIEW_PORT,
+  PREVIEW_USAGE,
   RENDER_USAGE,
   VERIFY_PAGE_USAGE,
   VERIFY_URL_USAGE,
   VERIFY_USAGE,
 } from "./cli-args.js";
+import { runPreview } from "./cli-preview.js";
 import { ReportedError, runRender } from "./cli-render.js";
 import type { SocialTarget } from "./compatibility-profiles.js";
 import type { ImageSize } from "./core.js";
@@ -26,12 +29,14 @@ const CLI_HELP = `${VERIFY_USAGE}
 ${VERIFY_URL_USAGE}
 ${VERIFY_PAGE_USAGE}
 ${RENDER_USAGE}
+${PREVIEW_USAGE}
 
 Commands:
   verify        Verify image dimensions, format, and optional social metadata
   verify-url    Fetch an http(s) image under a hardened policy, then verify it
   verify-page   Fetch an http(s) page, extract its social images, and verify each
   render        Write every page and size a render module declares as verified files
+  preview       Serve a live gallery of a render module's images that reloads on change
 
 Options:
   -h, --help       Show this help
@@ -57,6 +62,10 @@ render options:
   --out DIR          Directory the site is published from (default public)
   --manifest FILE    Manifest path (default DIR/metaplate-manifest.json)
   --concurrency N    Render at most N images at once (default ${DEFAULT_RENDER_CONCURRENCY})
+
+preview options (plus --target and --max-file-size, checked for every image):
+  --host HOST        Address to listen on (default 127.0.0.1; anything else warns)
+  --port N           Port to listen on (default ${DEFAULT_PREVIEW_PORT}; 0 picks a free one)
 `;
 
 type CliIssue = Readonly<{
@@ -360,6 +369,7 @@ const COMMANDS = new Map<string, { run: (args: string[]) => Promise<void>; usage
   ["verify-url", { run: verifyUrls, usage: VERIFY_URL_USAGE }],
   ["verify-page", { run: verifyPages, usage: VERIFY_PAGE_USAGE }],
   ["render", { run: runRender, usage: RENDER_USAGE }],
+  ["preview", { run: runPreview, usage: PREVIEW_USAGE }],
 ]);
 
 async function main(args: string[]) {
