@@ -47,8 +47,8 @@ describe("font loading", () => {
   });
 
   it("rejects bytes that are not a font instead of rendering blank text", async () => {
-    // A failed same-origin fetch on an edge runtime once returned non-font
-    // bytes; Satori then drew no glyphs and a CDN cached the blank card.
+    // A failed font fetch can return non-font bytes, such as an HTML error
+    // page; Satori would draw no glyphs and a CDN could cache the blank card.
     const html = new TextEncoder().encode("<!DOCTYPE html><html><body>Not found</body></html>");
     await expect(loadFonts([{ name: "Inter", weight: 700, data: html }])).rejects.toThrow(
       /Font "Inter" \(weight 700\) is not a TrueType, OpenType, WOFF, or WOFF2 file: received \d+ bytes starting 3c 21 44 4f \("<!DOCTYPE html><"\)/,

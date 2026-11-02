@@ -170,8 +170,7 @@ All notable changes to Metaplate are documented in this file. The project uses
   bytes it received. Satori renders text in an unreadable font as nothing, so
   previously a failed font fetch (an HTML error page, a placeholder, an empty
   body) produced a blank card that a CDN could cache; it now fails the render
-  and the memoized loader retries on the next request. This was observed on a
-  hosted Netlify Edge deployment during the site's first deploy.
+  and the memoized loader retries on the next request.
 
 - `Runtime smoke / bun` and `Runtime smoke / deno` are now blocking, required
   checks on `main`, and they run against the packed tarball:
@@ -278,6 +277,14 @@ All notable changes to Metaplate are documented in this file. The project uses
   certified.
 
 ### Documentation
+
+- Correct the Netlify Edge caveat. The blank cards on the edge site's first
+  deploy came from the fixture's layout, not from a first-deploy race on the
+  font fetch as first recorded. Satori sizes boxes as content-box, so a card
+  100% wide and tall with 64px padding grew past the canvas, and a one-line,
+  bottom-aligned title was drawn below it. The Netlify Edge and Cloudflare
+  fixtures now set `boxSizing: "border-box"`, and `netlify-edge` was
+  redeployed and re-certified with one-line titles.
 
 - Document why image responses are buffered rather than streamed: each
   response carries `Content-Length` and a strong `ETag` from the final bytes,

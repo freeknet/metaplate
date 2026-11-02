@@ -276,13 +276,15 @@ deployment IDs are in `.planning/hosted-evidence/netlify-2026-11-01.json`.
   `@resvg/resvg-wasm/index_bg.wasm`, `satori/layout.wasm`, and the font are
   static files in the publish directory, fetched as bytes from the request
   origin on first render and passed as `resvg.wasm`, `layout.wasm`, and font
-  data. The bundle is 1.10 MB gzip (limit 20 MB), and the documented 50 ms CPU limit did
+  data. The bundle is 462 KB gzip (limit 20 MB), and the documented 50 ms CPU limit did
   not stop any observed render (CPU time was not measured).
 - **Caveat.** The edge site's first deploy served two uniform, text-free cards
-  with valid format, size, and headers; later cold renders were correct, and
-  the cause, most likely a first-deploy propagation race on the same-origin
-  font fetch, was not reproduced. The evidence therefore also decodes each
-  image and requires it not to be uniform.
+  with valid format, size, and headers. The cause was the fixture's layout:
+  Satori sizes boxes as content-box, so a 100% card with 64px padding grew
+  past the canvas and a one-line, bottom-aligned title was drawn below it.
+  The fixture now sets `boxSizing: "border-box"`, and the site was redeployed
+  and re-certified with one-line titles. The evidence also decodes each image
+  and requires it not to be uniform.
 
 Each certification covers that dated deployment, its runtime, and the packed
 version; it is not a guarantee for later Netlify releases.
@@ -351,7 +353,7 @@ edges, which allow WebAssembly to be compiled at run time: it is tested in Node
 against the Wasm renderer and from the packed tarball, and hosted-certified on
 Netlify Edge Functions (see [Hosted Netlify evidence](#hosted-netlify-evidence)).
 A minimal edge function is about 1.6 MB gzip, mostly the two Wasm modules; the
-certified Netlify Edge bundle was 1.10 MB gzip against a 20 MB limit. See the
+certified Netlify Edge bundle was 462 KB gzip against a 20 MB limit. See the
 README section
 [Edge runtimes with `metaplate/edge`](../README.md#edge-runtimes-with-metaplateedge).
 
