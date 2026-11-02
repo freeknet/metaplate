@@ -5,16 +5,29 @@ import {
   createRasterPlate,
   type ResvgRenderOptions,
 } from "./raster.js";
+import type { RasterRenderGuards } from "./guards.js";
 import type { SvgOgDefinition } from "./render.js";
 import type { SatoriRender } from "./svg-plate.js";
 
 export type { RenderedPixels } from "./raster.js";
 
+export {
+  RenderGuardError,
+  type RasterRenderGuards,
+  type RenderGuardBox,
+  type RenderGuardIssue,
+  type RenderGuardLevel,
+  type RenderGuardName,
+  type RenderGuards,
+} from "./guards.js";
+
 export type {
   PlateContext,
   PlateMetadataOptions,
+  PlateUrlOptions,
   PlateVariant,
   PlateVariants,
+  PlateVersioning,
   PlateView,
 } from "./plate.js";
 
@@ -64,6 +77,11 @@ export type EdgeOgDefinition<Copy, Variant extends string = string> = SvgOgDefin
   headers?: HeadersInit;
   /** Adds a strong SHA-256 ETag, computed with Web Crypto, to responses. */
   etag?: boolean | "sha256";
+  /**
+   * Render guards, plus `blank`, which fails or reports a rasterised image
+   * whose every pixel is one color. All off by default.
+   */
+  guards?: RasterRenderGuards;
   /**
    * Not supported: `metaplate/edge` emits PNG only, because
    * `@resvg/resvg-wasm` has no JPEG or WebP encoder. Use `renderPixels` with

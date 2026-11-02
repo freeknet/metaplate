@@ -346,3 +346,125 @@ differences bite in practice:
   pixels, and encoded output must agree. Define the intended `size` on the
   plate, or declare another size as a
   [variant](variants.md), instead.
+
+## Render guards
+
+The constraints above fail silently: a card with its title drawn off the
+canvas, or with text no font covers, still has the right format and size, so
+`verifyImage` and `metaplate verify` accept it. This project's own Netlify Edge
+deployment served exactly such blank cards (see the CHANGELOG), and
+missing-glyph boxes from absent CJK or other-script fonts are a common Satori
+complaint ([vercel/satori#367](https://github.com/vercel/satori/issues/367)).
+Render guards check each render and fail it, or report it, instead of
+returning the broken card:
+
+```ts
+import { createNodeOg, RenderGuardError } from "metaplate/node";
+
+export const og = createNodeOg<Copy>({
+  alt: (copy) => copy.alt,
+  fonts,
+  component,
+  guards: { missingGlyphs: "error", overflow: "error", blank: "error" },
+});
+
+try {
+  await og.render(copy);
+} catch (error) {
+  if (error instanceof RenderGuardError) console.error(error.issues);
+  throw error;
+}
+```
+
+Each guard takes `"error"`, `"warn"`, or `"off"`:
+
+| Guard | Reports | Renderers |
+| --- | --- | --- |
+| `missingGlyphs` | Text that no plate font covers and that nothing resolved to a font or image | `createSvgOg`, `createNodeOg`, `createEdgeOg` |
+| `overflow` | An element holding text whose laid-out box reaches outside the canvas | `createSvgOg`, `createNodeOg`, `createEdgeOg` |
+| `blank` | A rasterised image in which every pixel is the same color | `createNodeOg`, `createEdgeOg` |
+
+`"error"` rejects the render (and so `render`, `renderPixels`, `artifact`,
+`response`, the route handlers, and `metaplate render`, which then exits `1`)
+with a `RenderGuardError`. Its `issues` lists every error-level problem the
+render step found, each with `guard`, `message`, the `variant` and `size`
+being rendered, and the guard's own details: `languageCode` and `segment`
+for missing glyphs, `element`, `text`, and `box` for overflow, `color` for a
+blank image. Its `name` is `"RenderGuardError"`; `instanceof` works when the
+class is imported from the same entry as the plate factory, because each
+entry is bundled separately.
+
+`"warn"` returns the image and passes each issue to `guards.onWarning`. Without
+`onWarning`, warnings go to `console.warn`, so a `"warn"` guard is never
+silent; pass `onWarning` to route them to the application's logger or
+metrics instead. Warnings are reported before an error is thrown, so a render
+with both reports all of them.
+
+### How each guard decides
+
+- **`missingGlyphs`** wraps Satori's `loadAdditionalAsset`. Satori calls it
+  for text that none of the plate's fonts covers, once per language code and
+  segment in a render, with the code it detected (such as
+  `ja-JP|zh-CN|zh-TW|zh-HK`, `emoji`, or `unknown`). The plate's `emoji`
+  loader and any `satori.loadAdditionalAsset` of its own still run first;
+  when the whole chain answers with no font and no image, Satori draws the
+  text from fonts that lack it, as missing-glyph boxes or nothing, and the
+  guard reports the segment and code. Graphemes listed in
+  `satori.graphemeImages` are drawn as images and are not reported. A font
+  that a loader returns is trusted: if it does not cover the segment either,
+  Satori still draws missing glyphs, and the guard cannot see that. Emoji
+  count, so an emoji with no image fails the guard; set the
+  [`emoji`](emoji.md) option. Recent Satori releases (0.63.2 checked) also
+  treat any character followed by U+FE0F as emoji, so a text symbol written
+  with that selector (such as `©️`) needs an emoji image or the selector
+  removed.
+- **`overflow`** composes with Satori's `onNodeDetected`, which reports every
+  laid-out element with its box in canvas pixels; a caller's own
+  `satori.onNodeDetected` still receives every node. Only elements holding
+  their own text are checked (a string or number child, or such children in
+  an array), so decorative shapes and images may bleed off the edge on
+  purpose. An element is reported when its box starts before the canvas or
+  ends past it by more than half a pixel. The box is the element's, before
+  any CSS `transform`, and includes its padding: a text element with padding
+  reaching outside is reported even when the glyphs themselves are visible.
+  Text deliberately set off the edge needs `"warn"` or `"off"`.
+- **`blank`** reads the raw RGBA pixels after Resvg rasterises them and
+  before any `output` encoder runs, stopping at the first pixel that differs
+  from the first; fully transparent pixels count as one color whatever their
+  RGB. It catches a solid-background card whose text never appeared. It does
+  not catch a gradient or photograph whose text is missing; `overflow` and
+  `missingGlyphs` cover those causes.
+
+Both Satori hooks have the same contract across the supported peer range:
+`loadAdditionalAsset(code, segment)` and `onNodeDetected` with
+`{ left, top, width, height, type, props, textContent }` behave identically in
+Satori 0.33.3, 0.38.2, 0.48.1, 0.55.5, and 0.63.2 (each probed with the same
+layout). The guards report what the installed Satori lays out: the
+content-box root above grows past the canvas from 0.48.1 in that probe, while
+0.33.3 and 0.38.2 lay it out at the canvas size, so the same plate can pass
+`overflow` on an older Satori and fail on a newer one.
+
+### Why guards are off by default
+
+Every guard defaults to `"off"`, and with every guard off the Satori options
+are passed through exactly as before, so upgrading changes no output.
+Turning them on by default would break renders that work today: a title
+with an emoji and no `emoji` loader, a CJK name rendered with the boxes a site
+has accepted, or a watermark deliberately set off the edge would start
+failing, and a `"warn"` default would log on every request of a live route.
+Fail loudly where a broken card would be published: set every guard to
+`"error"` in the plate a build (`metaplate render`) or a test renders, and use
+`"warn"` with `onWarning` on live routes that should keep serving while the
+problem is reported.
+
+`metaplate/next` cannot run guards: `next/og`'s `ImageResponse` exposes
+neither Satori's callbacks nor the pixels, so `createNextOg` rejects a
+`guards` option. Render through `createNodeOg` in a route handler when a Next
+card must be guarded (see [Render guards in Next.js](nextjs.md#render-guards-in-nextjs)
+for that route shape). `createSvgOg` has no pixels either, so it rejects
+`blank`. For images that already exist, `metaplate verify --require-content`
+runs the blank check on PNG files and URLs; see
+[the verification guide](verification.md#require-visible-content).
+
+[`examples/render-guards.ts`](../examples/render-guards.ts) is a type-checked
+version of a strict build plate and a lenient live one.

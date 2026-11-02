@@ -7,7 +7,18 @@ import {
   type OutputEncoder,
   type ResvgRenderOptions,
 } from "./raster.js";
+import type { RasterRenderGuards } from "./guards.js";
 import type { SvgOgDefinition } from "./render.js";
+
+export {
+  RenderGuardError,
+  type RasterRenderGuards,
+  type RenderGuardBox,
+  type RenderGuardIssue,
+  type RenderGuardLevel,
+  type RenderGuardName,
+  type RenderGuards,
+} from "./guards.js";
 
 export type {
   EncoderFormat,
@@ -19,8 +30,10 @@ export type {
 export type {
   PlateContext,
   PlateMetadataOptions,
+  PlateUrlOptions,
   PlateVariant,
   PlateVariants,
+  PlateVersioning,
   PlateView,
 } from "./plate.js";
 
@@ -42,6 +55,11 @@ export type NodeOgDefinition<Copy, Variant extends string = string> = SvgOgDefin
   output?: OutputEncoder;
   /** Adds a strong ETag derived from the final encoded bytes to responses. */
   etag?: boolean | "sha256";
+  /**
+   * Render guards, plus `blank`, which fails or reports a rasterised image
+   * whose every pixel is one color. All off by default.
+   */
+  guards?: RasterRenderGuards;
 };
 
 function strongEtag(bytes: Uint8Array): string {
