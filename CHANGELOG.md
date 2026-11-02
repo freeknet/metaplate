@@ -7,6 +7,26 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Added
 
+- Opt-in render guards fail (`"error"`) or report (`"warn"`) a render that
+  would ship a broken card. A plate's `guards` option on `createSvgOg`,
+  `createNodeOg`, and `createEdgeOg` takes `missingGlyphs` (text no plate font
+  covers that the emoji loader and `satori.loadAdditionalAsset` resolved to
+  nothing, reported with its segment and Satori language code), `overflow`
+  (an element holding text whose laid-out box reaches outside the canvas,
+  read through a composed `satori.onNodeDetected`; elements without text may
+  bleed), and, on the two raster renderers, `blank` (every pixel one color,
+  checked on the raw pixels before encoding). Errors reject the render with a
+  `RenderGuardError` listing every issue, exported from `metaplate/render`,
+  `metaplate/node`, and `metaplate/edge`; warnings go to `guards.onWarning`,
+  or `console.warn` without one. Every guard defaults to `"off"`, which leaves
+  Satori's options and every output unchanged, so no existing plate breaks.
+  Both Satori hooks behave identically in every release probed, 0.33.3
+  through 0.63.2. `createNextOg` rejects `guards`, because `ImageResponse`
+  exposes no hooks or pixels, and `createSvgOg` rejects `blank`. `metaplate verify` and `verify-url` gain
+  `--require-content`, which decodes PNG files and URLs with `node:zlib` and
+  fails one whose every pixel is the same color; other formats fail with the
+  flag rather than passing unchecked. See
+  [`docs/rendering.md`](docs/rendering.md#render-guards).
 - `metaplate render <module>` renders static social images as a build step.
   The module's default export is `{ plate, pages: [{ route?, copy }] }`, an
   array of those, or a function returning either; a `createNodeOg` or

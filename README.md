@@ -135,7 +135,10 @@ Each guide below is a summary; the linked page has the full reference.
 or anything else from the same raw pixels. `handler` and `handlerFrom` plug
 into Fetch-based routes in Next.js, Astro, React Router, and SvelteKit, and
 `render` feeds Express or a build script. Plates are Satori layouts, not DOM,
-so read the plate constraints before designing one.
+so read the plate constraints before designing one. Opt-in render `guards`
+fail or report a card with text no font covers, text laid out off the canvas,
+or (Node and edge) a single-color image, instead of shipping it; they are off
+by default and unavailable through `metaplate/next`.
 [Rendering guide](docs/rendering.md)
 
 ### Static files with `metaplate render`
@@ -239,7 +242,8 @@ runtime. Metaplate bundles no artwork; the guide covers each set's license.
 and platform rules, and `metaplate verify-url` runs the same checks on a
 deployed URL under a hardened fetch policy. `metaplate verify-page` audits a
 whole page: it reads the page's `og:image`, `twitter:card`, `twitter:image`,
-and JSON-LD images and verifies every image they name.
+and JSON-LD images and verifies every image they name. `--require-content`
+decodes PNGs and fails one whose every pixel is the same color.
 [Verification guide](docs/verification.md) and
 [page audit guide](docs/verify-page.md)
 
@@ -259,19 +263,20 @@ every route is in [`deployment-evidence.json`](deployment-evidence.json).
   (including video and audio, and X player and app cards), `<meta>` tag
   serialization, Schema.org JSON-LD, Adaptive Cards, social compatibility
   profiles, and byte-level social image verification.
-- `metaplate/render` — Satori-based SVG generation. Satori is installed
-  automatically.
+- `metaplate/render` — Satori-based SVG generation, with the
+  `missingGlyphs` and `overflow` render guards (`RenderGuardError`). Satori is
+  installed automatically.
 - `metaplate/node` — SVG, PNG, raw pixels, and any format a supplied encoder
-  produces, plus Fetch API responses. Satori and Resvg are installed
-  automatically. Also the hardened remote fetcher behind `verify-url` and
-  `verify-page` (`fetchRemoteImage`, `verifyRemoteImage`, `verifyRemotePage`,
-  `extractPageSocialMetadata`).
-- `metaplate/edge` — PNG, raw pixels, and Fetch API responses through
-  `@resvg/resvg-wasm` for Deno-based edges such as Netlify Edge Functions,
-  and other runtimes that allow run-time Wasm compilation; not Cloudflare
-  Workers. No Node built-ins. Needs `@resvg/resvg-wasm` and the
-  caller-supplied `@resvg/resvg-wasm/index_bg.wasm` and `satori/layout.wasm`
-  modules.
+  produces, plus Fetch API responses, with every render guard including
+  `blank`. Satori and Resvg are installed automatically. Also the hardened
+  remote fetcher behind `verify-url` and `verify-page` (`fetchRemoteImage`,
+  `verifyRemoteImage`, `verifyRemotePage`, `extractPageSocialMetadata`).
+- `metaplate/edge` — PNG, raw pixels, and Fetch API responses (with every
+  render guard) through `@resvg/resvg-wasm` for Deno-based edges such as
+  Netlify Edge Functions, and other runtimes that allow run-time Wasm
+  compilation; not Cloudflare Workers. No Node built-ins. Needs
+  `@resvg/resvg-wasm` and the caller-supplied
+  `@resvg/resvg-wasm/index_bg.wasm` and `satori/layout.wasm` modules.
 - `metaplate/next` — native Next.js `ImageResponse` adapter, and
   `nextTwitterMetadata` for X player and app cards in Next metadata. Needs
   `next`.

@@ -18,6 +18,7 @@ import type { SocialTarget } from "./compatibility-profiles.js";
 import type { ImageSize } from "./core.js";
 import { verifySocialImage } from "./social-verification.js";
 import { imageContentType, verifyImage, type ImageDimensions } from "./image.js";
+import { pngUniformColor } from "./png-content.js";
 import { verifyRemotePage, type RemotePageImageReport, type RemotePageVerification } from "./page-verification.js";
 import { RemoteImageError, verifyRemoteImage } from "./remote.js";
 import { METAPLATE_VERSION } from "./version.js";
@@ -41,6 +42,7 @@ Options:
   --url URL        Metadata image URL for target checks (verify only)
   --alt TEXT       Metadata alt text for target checks
   --max-file-size N  Reject images larger than N bytes
+  --require-content  Fail a PNG whose every pixel is one color (verify and verify-url)
 
 verify-url options:
   --max-bytes N      Abort a download larger than N bytes (default 16 MiB)
@@ -201,6 +203,25 @@ async function runChecks(checks: readonly Check[], options: SocialOptions, listK
   if (failures.length > 0) process.exitCode = 1;
 }
 
+/**
+ * `--require-content`: a card that decodes to one color is blank whatever its
+ * format and size checks say. Only PNG is decoded (Node ships zlib, not a
+ * JPEG, WebP, or GIF decoder), so another format fails rather than passing
+ * unchecked.
+ */
+function assertContent(bytes: Uint8Array, format: string): void {
+  if (format !== "png") {
+    throw new Error(`--require-content decodes PNG only; this image is ${format}`);
+  }
+  const color = pngUniformColor(bytes);
+  if (color) {
+    const [red, green, blue, alpha] = color;
+    throw new Error(
+      `image is blank: every pixel is rgba(${red}, ${green}, ${blue}, ${Math.round((alpha / 255) * 100) / 100})`,
+    );
+  }
+}
+
 /** Never echo embedded credentials back into logs or JSON reports. */
 function displayUrl(raw: string): string {
   try {
@@ -225,6 +246,7 @@ function verifyFiles(args: string[]) {
       load: async () => {
         const bytes = await readFile(target.file);
         const dimensions = verifyImage(bytes, target.size, target.format);
+        if (invocation.requireContent) assertContent(bytes, dimensions.format);
         return { bytes, dimensions, ...(invocation.url !== undefined ? { metadataUrl: invocation.url } : {}) };
       },
     };
@@ -246,6 +268,7 @@ function verifyUrls(args: string[]) {
           { ...target.size, ...(target.format ? { format: target.format } : {}) },
           invocation.fetch,
         );
+        if (invocation.requireContent) assertContent(remote.bytes, remote.image.format);
         const redirected = remote.finalUrl !== remote.url ? `, final URL ${remote.finalUrl}` : "";
         return {
           bytes: remote.bytes,

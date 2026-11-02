@@ -57,6 +57,12 @@ export type NextOgDefinition<Copy, Variant extends string = string> = {
   origin?: string;
   fonts?: FontLoader;
   response?: Omit<ImageResponseOptions, "width" | "height" | "fonts">;
+  /**
+   * Not supported: `ImageResponse` exposes neither Satori's layout callbacks
+   * nor the rendered pixels, so no render guard can run. Use `createNodeOg`
+   * (for example in a route handler) when a card must be guarded.
+   */
+  guards?: never;
 };
 
 /**
@@ -66,6 +72,12 @@ export type NextOgDefinition<Copy, Variant extends string = string> = {
 export function createNextOg<Copy, Variant extends string = string>(
   definition: NextOgDefinition<Copy, Variant>,
 ) {
+  if ((definition as { guards?: unknown }).guards !== undefined) {
+    throw new TypeError(
+      "metaplate/next cannot run render guards: next/og's ImageResponse exposes no layout " +
+        "callbacks or pixels. Remove guards, or render through metaplate/node in a route handler.",
+    );
+  }
   const social = createPlateSocial(definition, OG_CONTENT_TYPE);
 
   return createPlateViews(social.variants, (name) => {

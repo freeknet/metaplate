@@ -1,4 +1,11 @@
 import { OG_CONTENT_TYPE } from "./core.js";
+import {
+  assertRenderGuards,
+  checkBlank,
+  GuardReport,
+  guardLevel,
+  type RasterRenderGuards,
+} from "./guards.js";
 import { detectFormat, imageContentType, type ImageFormat, type OutputFormat } from "./image.js";
 import { isMediaType } from "./og-media.js";
 import { createPlateSocial } from "./plate.js";
@@ -119,6 +126,7 @@ export type RasterPlateDefinition<Copy, Variant extends string = string> = SvgOg
   headers?: HeadersInit;
   output?: OutputEncoder;
   etag?: boolean | "sha256";
+  guards?: RasterRenderGuards;
 };
 
 function assertDimensionPreservingResvgOptions(
@@ -219,7 +227,9 @@ export function createRasterPlate<Copy, Variant extends string = string>(
   definition: RasterPlateDefinition<Copy, Variant>,
   backend: RasterBackend,
 ) {
+  assertRenderGuards(definition.guards, ["missingGlyphs", "overflow", "blank"], "this renderer");
   const svg = createSvgPlate(definition, backend.satori);
+  const checksBlank = guardLevel(definition.guards, "blank") !== "off";
   // Every size the plate renders must survive Resvg unchanged, not only the
   // default: a `fitTo` width matching 1200 would rescale a 1080 square.
   for (const name of [undefined, ...svg.variants]) {
@@ -251,6 +261,13 @@ export function createRasterPlate<Copy, Variant extends string = string>(
               `Renderer dimension mismatch: expected ${size.width}x${size.height}, ` +
                 `received ${image.width}x${image.height}`,
             );
+          }
+          if (checksBlank) {
+            // Checked on the raw pixels, before any encoder runs, so a blank
+            // frame fails (or warns) whatever format the plate emits.
+            const report = new GuardReport(definition.guards);
+            checkBlank(image.pixels, report, socialView.context);
+            report.settle();
           }
           return read(image);
         },
