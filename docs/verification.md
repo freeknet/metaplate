@@ -152,8 +152,8 @@ public image:
 - **Limits.** The body is capped at `--max-bytes N` (default 16 MiB) while it
   streams, and the whole fetch, redirects included, must finish within
   `--timeout MS` (default 10000). Each connection, from connect to the last
-  body byte, is also held to 10 seconds or the total budget, whichever is
-  lower. Only a `200` response is verified.
+  body byte, has that same budget, so raising `--timeout` also lets one slow
+  connection use it. Only a `200` response is verified.
 
 `--allow-private` lifts the address check so you can verify a local server
 such as `http://127.0.0.1:3000`. It exists for local development only; do not
