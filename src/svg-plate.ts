@@ -1,5 +1,5 @@
 import { createPlateSocial, createPlateViews, type PlateContext } from "./plate.js";
-import type { SvgOgDefinition } from "./render.js";
+import type { SatoriOptions, SvgOgDefinition } from "./render.js";
 
 export const SVG_CONTENT_TYPE = "image/svg+xml" as const;
 
@@ -50,10 +50,34 @@ async function renderSvg<Copy, Variant extends string>(
   return satori(
     definition.component(copy, context) as Parameters<typeof satori>[0],
     {
-      ...(definition.satori as unknown as Parameters<typeof satori>[1]),
+      ...(satoriOptions(definition) as unknown as Parameters<typeof satori>[1]),
       width: context.size.width,
       height: context.size.height,
       fonts: [...fonts],
     } as unknown as Parameters<typeof satori>[1],
   );
+}
+
+/**
+ * Routes Satori's emoji requests through the plate's emoji loader. Every other
+ * language code, and an emoji the loader has no image for, goes to the
+ * caller's own `loadAdditionalAsset` when there is one; otherwise an empty
+ * font list tells Satori to draw the segment with the fonts it has.
+ */
+function satoriOptions<Copy, Variant extends string>(
+  definition: SvgOgDefinition<Copy, Variant>,
+): SatoriOptions | undefined {
+  const { emoji, satori } = definition;
+  if (!emoji) return satori;
+  const fallback = satori?.loadAdditionalAsset;
+  return {
+    ...satori,
+    loadAdditionalAsset: async (languageCode, segment) => {
+      if (languageCode === "emoji") {
+        const image = await emoji(segment);
+        if (image !== undefined) return image;
+      }
+      return fallback ? fallback(languageCode, segment) : [];
+    },
+  };
 }

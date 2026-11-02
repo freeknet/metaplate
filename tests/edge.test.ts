@@ -5,6 +5,7 @@ import path from "node:path";
 import { gzipSync } from "node:zlib";
 import { build as esbuild } from "esbuild";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
+import { emojiLoader, twemojiName } from "../src/emoji.js";
 import { fontLoader } from "../src/font-data.js";
 import { imageDimensions, verifyImage } from "../src/image.js";
 import { createNodeOg } from "../src/node.js";
@@ -84,6 +85,35 @@ it(
 
     const { pixels, width, height } = await plate.renderPixels({ title: "Edge pixels" });
     expect(pixels.length).toBe(width * height * 4);
+  },
+  30_000,
+);
+
+// An edge function serves emoji from its own origin through a fetch-shaped
+// source; here the "origin" is an in-memory map keyed by Twemoji file name.
+it(
+  "draws emoji from a caller-supplied source without Node built-ins",
+  async () => {
+    const { createEdgeOg } = await edgeEntry();
+    const origin = new Map([
+      ["1f44b-1f3fd", '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36"><rect width="36" height="36" fill="#ff0000"/></svg>'],
+    ]);
+    const requested: string[] = [];
+    const emoji = emojiLoader(async ({ grapheme }) => {
+      requested.push(twemojiName(grapheme));
+      const svg = origin.get(twemojiName(grapheme));
+      return svg === undefined ? undefined : new Response(svg).arrayBuffer();
+    });
+    const plate = createEdgeOg({ ...definition, ...wasm, emoji });
+
+    const { pixels } = await plate.renderPixels({ title: "Hi 👋🏽 🫨" });
+    let red = 0;
+    for (let offset = 0; offset < pixels.length; offset += 4) {
+      if (pixels[offset]! > 200 && pixels[offset + 1]! < 50 && pixels[offset + 2]! < 50) red += 1;
+    }
+    expect(red).toBeGreaterThan(1000);
+    expect(requested.sort()).toEqual(["1f44b-1f3fd", "1fae8"]);
+    expect(readFileSync(path.join(root, "src", "emoji.ts"), "utf8")).not.toMatch(/^import /m);
   },
   30_000,
 );

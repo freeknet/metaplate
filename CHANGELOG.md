@@ -164,6 +164,20 @@ All notable changes to Metaplate are documented in this file. The project uses
   against a canonical `url` validated exactly as for `socialMetaTags`. The
   script form, and the exported `serializeJsonLd`, escape `<`, `>`, `&`,
   U+2028, and U+2029 so the payload can never close its `<script>` element.
+- Emoji render as images in `metaplate/render`, `metaplate/node`, and
+  `metaplate/edge` through a new `emoji` plate option.
+  `packageEmojiLoader("twemoji" | "openmoji" | { package, directory })` from
+  `metaplate/fonts` reads SVGs from an emoji package the application installs
+  (`@twemoji/svg` or `openmoji`), offline and without a network fetch at
+  render time; the runtime-neutral `metaplate/emoji` entry adds
+  `emojiLoader(source)` for edge functions that serve the images themselves,
+  plus `twemojiName`, `emojiKey`, and `emojiCodepoints`. Files are matched
+  ignoring U+FE0F, case, and zero padding, so fully-qualified and unqualified
+  copy, ZWJ sequences, skin tones, flags, and keycaps all resolve. Each emoji
+  is resolved once per loader; one without an image falls back to the plate's
+  fonts, and bytes that are not SVG or PNG are rejected rather than drawn as
+  nothing. Metaplate ships no emoji images and adds no dependency. See
+  [docs/emoji.md](docs/emoji.md) for sources and attribution duties.
 
 ### Changed
 

@@ -39,6 +39,7 @@ It works with plain Node, static build scripts, Next.js, and Node-compatible fra
   - [Next.js static export and `basePath`](#nextjs-static-export-and-basepath)
   - [JPEG or WebP cards in Next.js](#jpeg-or-webp-cards-in-nextjs)
 - [Fonts](#fonts)
+- [Emoji](#emoji)
 - [Plate constraints](#plate-constraints)
 - [Static hosts](#static-hosts)
 - [Deployment routes](#deployment-routes)
@@ -1668,6 +1669,18 @@ const fonts = packageFontLoader([
 
 Return `undefined` to fall back to the default resolution.
 
+## Emoji
+
+The `emoji` option draws emoji as images instead of missing-glyph boxes, read
+offline from a set the application installs and credits (`npm install @twemoji/svg`;
+Twemoji graphics are CC-BY 4.0). Metaplate bundles no artwork:
+
+```ts
+createNodeOg({ ...definition, emoji: packageEmojiLoader("twemoji") }); // from "metaplate/fonts"
+```
+
+See [docs/emoji.md](docs/emoji.md) for OpenMoji, Noto, edge runtimes, attribution, and fallback behavior.
+
 ## Plate constraints
 
 A plate is a Satori layout that rasterises to an image, not a DOM tree. Five
@@ -1927,7 +1940,11 @@ ceiling and `resolve` to replace `dns.lookup` (its answers are still checked).
 - `metaplate/font-data` — runtime-neutral normalization and memoization for
   application/framework-provided bytes. No peers or Node built-ins.
 - `metaplate/fonts` — project-file, Fontsource, generic npm-package, and
-  application-byte font loading for Node-compatible runtimes. No peers.
+  application-byte font loading, plus installed emoji packages
+  (`packageEmojiLoader`), for Node-compatible runtimes. No peers.
+- `metaplate/emoji` — runtime-neutral emoji images for the `emoji` plate
+  option (`emojiLoader`, `twemojiName`). No peers or Node built-ins; the
+  installed-package reader, `packageEmojiLoader`, is in `metaplate/fonts`.
 - `metaplate/png` — PNG header inspection and dimension verification. No peers.
 - `metaplate/image` — dimension and structural verification for SVG, PNG,
   JPEG, WebP, and GIF. No peers.
