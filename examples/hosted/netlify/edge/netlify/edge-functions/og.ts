@@ -33,6 +33,10 @@ const og = createEdgeOg({
     type: "div",
     props: {
       style: {
+        // Satori sizes boxes as content-box by default, so without border-box
+        // the 64px padding grows the card past the canvas and a one-line
+        // title lands below it, leaving a blank card.
+        boxSizing: "border-box",
         width: "100%",
         height: "100%",
         display: "flex",
