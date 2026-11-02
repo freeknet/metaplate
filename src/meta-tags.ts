@@ -1,4 +1,5 @@
 import { MAX_IMAGE_DIMENSION, type XCard } from "./core.js";
+import { xCardTags, type XAppCard, type XPlayerCard } from "./x-cards.js";
 
 /**
  * One `<meta>` tag as a plain object. Open Graph tags carry `property`, X Card
@@ -37,6 +38,12 @@ export type SocialMetaInput = {
         siteId?: string | undefined;
         creator?: string | undefined;
         creatorId?: string | undefined;
+        /** Required with, and only with, `card: "player"`. */
+        player?: XPlayerCard | undefined;
+        /** Required with, and only with, `card: "app"`. */
+        app?: XAppCard | undefined;
+        /** Player or App Card description, emitted as `twitter:description`. */
+        description?: string | undefined;
       }
     | undefined;
 };
@@ -168,6 +175,7 @@ function twitterTags(
   named("twitter:site:id", twitter.siteId);
   named("twitter:creator", twitter.creator);
   named("twitter:creator:id", twitter.creatorId);
+  tags.push(...xCardTags(twitter));
   return tags;
 }
 
@@ -193,7 +201,13 @@ function pageTags(options: SocialMetaOptions): SocialMetaTag[] {
  *    is how Open Graph expresses multiple images; a group whose URL repeats an
  *    earlier one is dropped.
  * 2. `twitter:card`, `twitter:image`, `twitter:image:alt`, `twitter:site`,
- *    `twitter:site:id`, `twitter:creator`, `twitter:creator:id`.
+ *    `twitter:site:id`, `twitter:creator`, `twitter:creator:id`, then the
+ *    card-specific tags: for `player`, `twitter:description`,
+ *    `twitter:player`, `twitter:player:width`, `twitter:player:height`,
+ *    `twitter:player:stream`; for `app`, `twitter:description`, then
+ *    `twitter:app:name:<p>`, `twitter:app:id:<p>`, `twitter:app:url:<p>` for
+ *    `iphone`, `ipad`, and `googleplay` in that order, then
+ *    `twitter:app:country`.
  * 3. Page-level fields from `options`: `og:title`, `og:description`,
  *    `og:url`, `og:site_name`, `og:type`.
  *
@@ -203,8 +217,9 @@ function pageTags(options: SocialMetaOptions): SocialMetaTag[] {
  * are emitted unchanged.
  *
  * @throws When `options.url` is not an absolute, credential-free http(s) URL,
- *   when an image URL is empty, or when a dimension is not an integer from 1
- *   to 65535.
+ *   when an image URL is empty, when a dimension is not an integer from 1
+ *   to 65535, or when a player or app payload is missing, mismatched with its
+ *   card, or invalid (see `xCardFields`).
  */
 export function socialMetaTags(
   metadata: SocialMetaInput,

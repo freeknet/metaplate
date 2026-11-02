@@ -94,6 +94,26 @@ All notable changes to Metaplate are documented in this file. The project uses
 - `verify-deployment-evidence.mjs` now allows a `certified` edge route only
   when its `api` names `metaplate/edge`. The native renderer still cannot be
   certified on an edge runtime.
+- X player and app cards. `XCard` (and its `TwitterCard` alias) now also
+  accepts `"player"` and `"app"`, and `twitter` options are discriminated by
+  card: `card: "player"` requires `player` (`url`, `width`, `height`,
+  optional `stream`) and `site` or `siteId`; `card: "app"` requires `app`
+  with at least one of `iphone`, `ipad`, or `googleplay` (`id`, optional
+  `name` and `url`), optional `country`, and `site`. Both accept a
+  `description`. Missing or mismatched payloads fail to compile, and every
+  rule from X's card references also throws at runtime: HTTPS-only,
+  credential-free player and stream URLs, player dimensions from 1 to 65535,
+  a player image of at least 68,600 pixels, non-empty app ids, names, and
+  URLs, numeric App Store ids, `://` in app URLs, two-letter country codes,
+  and descriptions of at most 200 characters. `socialMetaTags` and
+  `socialMetaHtml` append `twitter:description`, then `twitter:player`,
+  `twitter:player:width`, `twitter:player:height`, `twitter:player:stream`,
+  or `twitter:app:name|id|url:<platform>` per platform followed by
+  `twitter:app:country`, after `twitter:creator:id`. `nextTwitterMetadata`
+  in `metaplate/next` maps the metadata onto Next's `players` and `app`
+  fields and throws for what Next cannot render: a player without `stream`,
+  an app `country`, or differing per-platform app names. Summary-card
+  metadata and tags are unchanged.
 
 ### Changed
 
