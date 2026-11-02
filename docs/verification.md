@@ -154,3 +154,7 @@ try {
 Options mirror the CLI flags: `allowPrivate`, `allowedPorts`, `maxRedirects`,
 `maxBytes`, `timeoutMs`, plus `connectionTimeoutMs` for the per-connection
 ceiling and `resolve` to replace `dns.lookup` (its answers are still checked).
+
+To audit a whole page rather than one image URL, `metaplate verify-page` reads
+the page's social tags and verifies every image they name; see
+[the page audit guide](verify-page.md).

@@ -366,7 +366,13 @@ type Exchange =
   | { kind: "redirect"; status: number; location: string | undefined }
   | { kind: "body"; status: number; contentType: string | undefined; bytes: Uint8Array };
 
-function exchange(url: URL, dialed: RemoteAddress, settings: Settings, signal: AbortSignal): Promise<Exchange> {
+function exchange(
+  url: URL,
+  dialed: RemoteAddress,
+  settings: Settings,
+  signal: AbortSignal,
+  accept: string,
+): Promise<Exchange> {
   return new Promise<Exchange>((resolve, reject) => {
     const hostname = bareHostname(url);
     const secure = url.protocol === "https:";
@@ -384,7 +390,7 @@ function exchange(url: URL, dialed: RemoteAddress, settings: Settings, signal: A
       headers: {
         Host: url.host,
         "User-Agent": REMOTE_USER_AGENT,
-        Accept: "image/*",
+        Accept: accept,
         "Accept-Encoding": "identity",
         Connection: "close",
       },
@@ -484,14 +490,31 @@ function networkError(url: URL, error: Error): RemoteImageError {
 // ---------------------------------------------------------------------------
 // Public API
 
+/** The `Accept` header sent for image fetches. */
+export const REMOTE_IMAGE_ACCEPT = "image/*";
+
 /**
  * Fetch seam used by the public functions. `dial` maps a checked address to
  * the one actually connected to; production callers use the identity.
  */
-export async function fetchRemoteImageVia(
+export function fetchRemoteImageVia(
   input: string | URL,
   options: RemoteFetchOptions,
   dial: RemoteDialer,
+): Promise<RemoteImage> {
+  return fetchRemoteResourceVia(input, options, dial, REMOTE_IMAGE_ACCEPT);
+}
+
+/**
+ * The one hardened fetch loop behind every remote check. Only the `Accept`
+ * header varies by caller; every scheme, credential, port, address,
+ * redirect, byte, and time limit is applied identically.
+ */
+export async function fetchRemoteResourceVia(
+  input: string | URL,
+  options: RemoteFetchOptions,
+  dial: RemoteDialer,
+  accept: string,
 ): Promise<RemoteImage> {
   const settings = settingsFrom(options);
   const requested = parseUrl(String(input), undefined, "URL");
@@ -503,7 +526,7 @@ export async function fetchRemoteImageVia(
     for (;;) {
       checkUrl(current, settings, redirects.length === 0 ? "URL" : "Redirect to");
       const address = await vetAddress(current, settings, controller.signal);
-      const result = await exchange(current, dial(address), settings, controller.signal);
+      const result = await exchange(current, dial(address), settings, controller.signal, accept);
       if (result.kind === "body") {
         return Object.freeze({
           url: requested.href,
