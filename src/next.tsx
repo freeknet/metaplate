@@ -1,6 +1,8 @@
+import type { Metadata } from "next";
 import type { ReactElement } from "react";
-import { OG_CONTENT_TYPE, type ImageSize } from "./core.js";
+import { OG_CONTENT_TYPE, type ImageSize, type XCardMetadata } from "./core.js";
 import { optionalPeer } from "./optional-peer.js";
+import { nextTwitterShape } from "./x-cards.js";
 import {
   createPlateHandlers,
   createPlateSocial,
@@ -90,4 +92,17 @@ export function createNextOg<Copy, Variant extends string = string>(
       ...createPlateHandlers(render),
     };
   });
+}
+
+/**
+ * Maps `socialImageMetadata(...).twitter` onto Next's `Metadata.twitter` for
+ * every X Card: summary cards pass through, a player card becomes `players`,
+ * and an app card becomes `app` plus `description`. Throws instead of
+ * dropping what Next cannot express: a player without `stream`, an app with
+ * `country`, or per-platform app names that differ.
+ */
+export function nextTwitterMetadata(
+  twitter: XCardMetadata,
+): NonNullable<Metadata["twitter"]> {
+  return nextTwitterShape(twitter);
 }

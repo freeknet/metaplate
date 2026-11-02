@@ -46,3 +46,14 @@ export {
   type SocialMetaOptions,
   type SocialMetaTag,
 } from "./meta-tags.js";
+
+export {
+  X_APP_PLATFORMS,
+  type XAppCard,
+  type XAppPlatform,
+  type XAppStoreListing,
+  type XCardMetadata,
+  type XCardMetadataFields,
+  type XCardOptions,
+  type XPlayerCard,
+} from "./x-cards.js";
