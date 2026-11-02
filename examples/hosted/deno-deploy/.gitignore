@@ -1,0 +1,7 @@
+# Written by npm run setup (pack:metaplate, then npm install)
+metaplate.tgz
+metaplate-pack.json
+node_modules/
+package-lock.json
+# Written by npm start
+deno.lock
