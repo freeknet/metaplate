@@ -287,6 +287,20 @@ tree rather than React's `ReactNode`, so a TypeScript consumer does not need
 React types to author a plain-object plate. The Next adapter keeps React's own
 types because Next itself is intrinsic to it.
 
+### Layout debug boxes
+
+`renderSvg` takes an optional second argument. `{ debug: true }` turns on
+Satori's `debug` option for that call only, outlining every element's layout
+box in red and every line of text in blue, without changing the plate's own
+`satori` options:
+
+```ts
+const outlined: string = await og.renderSvg(copy, { debug: true });
+```
+
+[`metaplate preview`](preview.md#satori-debug-boxes) shows the same view for
+every page and size behind a switch.
+
 ### SVG-only rendering
 
 Use `createSvgOg` from `metaplate/render` when the consumer only needs SVG. It

@@ -5,7 +5,7 @@ import type { PlateContext, PlateElement, PlateVariants, PlateVersioning } from 
 import { loadSatori } from "./peers.js";
 import { createSvgPlate } from "./svg-plate.js";
 
-export { SVG_CONTENT_TYPE } from "./svg-plate.js";
+export { SVG_CONTENT_TYPE, type SvgRenderOptions } from "./svg-plate.js";
 
 export {
   RenderGuardError,

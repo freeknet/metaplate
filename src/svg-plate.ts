@@ -15,6 +15,16 @@ import type { SatoriOptions, SvgOgDefinition } from "./render.js";
 
 export const SVG_CONTENT_TYPE = "image/svg+xml" as const;
 
+/** Per-call controls for `renderSvg`, layered over the plate's `satori` options. */
+export type SvgRenderOptions = {
+  /**
+   * Overrides the plate's `satori.debug` for this call: Satori outlines every
+   * element's layout box in red and every line of text in blue, which is how
+   * `metaplate preview` shows a plate's boxes without editing the plate.
+   */
+  debug?: boolean;
+};
+
 /** The Satori render function, whichever Satori build provides it. */
 export type SatoriRender = typeof import("satori").default;
 
@@ -38,7 +48,8 @@ export function createSvgPlate<Copy, Variant extends string = string>(
       /** The image path relative to the deployment root, without `basePath` or `origin`. */
       sitePath: view.sitePath,
       contentType: SVG_CONTENT_TYPE,
-      renderSvg: (copy: Copy) => renderSvg(definition, loadSatori, copy, view.context),
+      renderSvg: (copy: Copy, options?: SvgRenderOptions) =>
+        renderSvg(definition, loadSatori, copy, view.context, options),
     };
   });
 }
@@ -48,6 +59,7 @@ async function renderSvg<Copy, Variant extends string>(
   loadSatori: () => Promise<SatoriRender>,
   copy: Copy,
   context: PlateContext<Variant>,
+  options: SvgRenderOptions | undefined,
 ) {
   const satori = await loadSatori();
   const fonts = await definition.fonts();
@@ -69,6 +81,7 @@ async function renderSvg<Copy, Variant extends string>(
     element as Parameters<typeof satori>[0],
     {
       ...(satoriOptions(definition, report, target) as unknown as Parameters<typeof satori>[1]),
+      ...(options?.debug === undefined ? {} : { debug: options.debug }),
       width: context.size.width,
       height: context.size.height,
       fonts: [...fonts],

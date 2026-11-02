@@ -1894,6 +1894,30 @@ export const GET: RequestHandler = og.handlerFrom(({ params }) => ({
     verifyRenderedSite("ts", "og.render.ts");
   }
 
+  // `metaplate preview` from the packed bin serves the same module as a
+  // gallery: every page and size as a card, real PNG bytes per image, and the
+  // Satori debug SVG, all from the installed renderer peers.
+  await withProductionServer({
+    label: "Packed metaplate preview",
+    cwd: standalone,
+    readyPath: "/",
+    start: (port) => ({ args: [renderCliPath, "preview", "--port", String(port), "og.render.mjs"], env: {} }),
+  }, async (base) => {
+    const html = await (await fetch(base)).text();
+    const cards = html.match(/<article class="card"/g) ?? [];
+    if (cards.length !== expectedRenderImages.length || html.includes("module-error")) {
+      throw new Error(`Gallery listed ${cards.length} rendered cards: ${html}`);
+    }
+    const [path, , size] = expectedRenderImages[3];
+    if (!html.includes(`data-key="${path}"`)) throw new Error(`Gallery has no card for ${path}.`);
+    const image = await fetch(`${base}/image/3`);
+    packedVerifyImage(new Uint8Array(await image.arrayBuffer()), size, "png");
+    const debug = await (await fetch(`${base}/debug/3.svg`)).text();
+    if (!debug.startsWith("<svg") || !debug.includes("#ff5757")) {
+      throw new Error("Packed preview debug view did not draw Satori's layout boxes.");
+    }
+  });
+
   writeFileSync(
     join(standalone, "escape.render.mjs"),
     `import { og } from "./og-plate.mjs";
