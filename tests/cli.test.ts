@@ -15,7 +15,7 @@ import {
 } from "../src/cli-args.js";
 import { METAPLATE_VERSION } from "../src/version.js";
 import { bundleCli, runCli } from "./helpers/cli-bundle.js";
-import { closeLocalServers, localServer, redirectTo, routes, serveBytes } from "./helpers/http-fixtures.js";
+import { closeLocalServers, localServer, pathRoutes, redirectTo, routes, serveBytes } from "./helpers/http-fixtures.js";
 import { completePng } from "./helpers/image-fixtures.js";
 
 // The CLI runs against a freshly bundled build so spawn tests never go stale.
@@ -585,6 +585,20 @@ describe("verify-page CLI", () => {
       `  ! og:image[0]: ${server.origin}/og.png is served over http; crawlers that require https will not load it.`,
       "",
     ]);
+  });
+
+  it("accepts a versioned og:image whose query the host ignores", async () => {
+    const versioned = head.replaceAll('content="/og.png"', 'content="/og.png?v=3f2a1b9c"');
+    const server = await localServer(pathRoutes({
+      "/": serveBytes(new TextEncoder().encode(`<html><head>${versioned}</head></html>`), "text/html"),
+      "/og.png": serveBytes(card, "image/png"),
+    }));
+    const result = await runAsync(["verify-page", "--allow-private", "--allow-port", String(server.port), `${server.origin}/`]);
+
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(`  ✓ og:image[0] ${server.origin}/og.png?v=3f2a1b9c 1200x630 png (${card.byteLength} bytes)`);
+    expect(server.requests.map(({ url }) => url)).toEqual(["/", "/og.png?v=3f2a1b9c"]);
   });
 
   it("sends errors to stderr and exits non-zero", async () => {

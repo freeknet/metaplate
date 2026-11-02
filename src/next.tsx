@@ -11,13 +11,16 @@ import {
   type PlateContext,
   type PlateMetadataOptions,
   type PlateVariants,
+  type PlateVersioning,
 } from "./plate.js";
 
 export type {
   PlateContext,
   PlateMetadataOptions,
+  PlateUrlOptions,
   PlateVariant,
   PlateVariants,
+  PlateVersioning,
   PlateView,
 } from "./plate.js";
 
@@ -57,7 +60,7 @@ export type NextOgDefinition<Copy, Variant extends string = string> = {
   origin?: string;
   fonts?: FontLoader;
   response?: Omit<ImageResponseOptions, "width" | "height" | "fonts">;
-};
+} & PlateVersioning;
 
 /**
  * Defines one branded image system and returns the renderer, route handler,

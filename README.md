@@ -184,7 +184,9 @@ size itself, and `plate.variant(name)` gives the full plate API for one size.
 The root `metaplate` entry builds Open Graph and X metadata with no renderer
 or framework, including per-channel images and Open Graph video and audio.
 `socialMetaTags` and `socialMetaHtml` emit the `<meta>` tags for pages that
-write their own `<head>`.
+write their own `<head>`. An opt-in `version`, or a plate's `version: "copy"`,
+adds a `?v=` token to published image URLs so crawlers that cache images by
+URL fetch a changed card, while file paths stay unchanged.
 [Metadata guide](docs/metadata.md)
 
 ### X player and app cards
@@ -255,8 +257,8 @@ every route is in [`deployment-evidence.json`](deployment-evidence.json).
 ## Entry points
 
 - `metaplate` — framework-free paths, dimensions, Open Graph and X metadata
-  (including video and audio, and X player and app cards), `<meta>` tag
-  serialization, Schema.org JSON-LD, Adaptive Cards, social compatibility
+  (including video and audio, and X player and app cards), cache-busting
+  image URL versions (`socialImageVersion`), `<meta>` tag serialization, Schema.org JSON-LD, Adaptive Cards, social compatibility
   profiles, and byte-level social image verification.
 - `metaplate/render` — Satori-based SVG generation. Satori is installed
   automatically.
