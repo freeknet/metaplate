@@ -134,6 +134,10 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Changed
 
+- Development tooling now resolves `minimatch` 11 through an npm override,
+  clearing the moderate globparts denial-of-service advisory (fixed in
+  11.0.1) that eslint and typescript-eslint pulled in through their 10.x
+  ranges. Development-only; the published package has no dependencies.
 - The `discord` compatibility profile now checks the image formats Discord's
   published link-preview contract supports (PNG, GIF, JPEG, WebP, and AVIF)
   instead of reporting an unknown contract. Discord sets no image size limit
