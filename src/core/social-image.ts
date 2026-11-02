@@ -301,7 +301,11 @@ export function socialImagePath(
     throw new Error("imagePath must contain at least one non-slash character");
   }
 
-  const path = `/${[basePart, routePart, imagePart].filter(Boolean).join("/")}`;
+  // Serialize the pathname as URL parsing would, so a relative path is the
+  // same string an origin's absolute URL carries: spaces, control
+  // characters, and non-ASCII are percent-encoded, existing escapes kept.
+  const joined = `/${[basePart, routePart, imagePart].filter(Boolean).join("/")}`;
+  const path = new URL(joined, "http://metaplate.invalid").pathname;
   return origin ? absoluteImageUrl(origin, path) : path;
 }
 

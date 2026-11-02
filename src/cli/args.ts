@@ -144,6 +144,9 @@ function parseGroups(args: string[], command: string, usage: string, flags: Comm
   let json = false;
   let alt: string | undefined;
   let maxFileSize: number | undefined;
+  // The last --size or --format given since the previous file, if any: it
+  // applies only to files after it, so one at the very end applies to none.
+  let openGroup: string | undefined;
 
   for (let index = 1; index < args.length; index += 1) {
     const argument = args[index];
@@ -168,6 +171,7 @@ function parseGroups(args: string[], command: string, usage: string, flags: Comm
     }
     if (argument === "--size") {
       size = parseSize(value, usage);
+      openGroup = argument;
       index += 1;
       continue;
     }
@@ -176,6 +180,7 @@ function parseGroups(args: string[], command: string, usage: string, flags: Comm
         throw new Error(`Invalid format. ${usage}`);
       }
       format = value as ImageFormat;
+      openGroup = argument;
       index += 1;
       continue;
     }
@@ -201,9 +206,14 @@ function parseGroups(args: string[], command: string, usage: string, flags: Comm
     // Unsized commands have no file operands, so an unknown flag is a typo.
     if (!argument || (sized ? !size : argument.startsWith("--"))) throw new Error(usage);
     entries.push({ value: argument, ...(size ? { size } : {}), ...(format ? { format } : {}) });
+    openGroup = undefined;
   }
 
   if (entries.length === 0) throw new Error(usage);
+  if (openGroup !== undefined) {
+    const operands = command === "verify" ? "files" : "URLs";
+    throw new Error(`${openGroup} applies to the ${operands} after it, but none follow it. ${usage}`);
+  }
   return {
     entries,
     json,

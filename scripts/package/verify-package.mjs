@@ -667,8 +667,9 @@ try {
   (await import("./package-fixtures-edge.mjs")).verifyEdgeFixture({ archive, consumer, temporary, manifest, lockfile, install, runModule, linkLockedDependency });
 
   // The Next adapter must work in an actual static export, not merely in a
-  // mocked response or a plain Node process (which cannot resolve Next's
-  // extensionless `next/og` module). Install only the packed tarball, then
+  // mocked response, and in a plain Node process that does not bundle (a
+  // script or test runner), which resolves only `next/og.js`, never the
+  // extensionless `next/og`. Install only the packed tarball, then
   // copy the exact local runtime closure `npm ci` already verified from the
   // lockfile. Turbopack deliberately does not follow dependencies linked
   // outside its workspace root.
@@ -762,6 +763,23 @@ export default function Image() {
       );
       if (result.format !== "png" || result.width !== ${cardSize.width} || result.height !== ${cardSize.height}) {
         throw new Error("Next static export image dimensions or content type were incorrect.");
+      }
+    `,
+    nextApp,
+  );
+  runModule(
+    `
+      import { createElement as h } from "react";
+      import { createNextOg } from "metaplate/next";
+      import { verifyImage } from "metaplate/image";
+      const og = createNextOg({
+        component: (value) => h("div", { style: { display: "flex", width: "100%", height: "100%" } }, value.title),
+        alt: (value) => value.title,
+      });
+      const response = await og.render({ title: "Plain Node" });
+      const result = verifyImage(new Uint8Array(await response.arrayBuffer()), og.size, "png");
+      if (response.headers.get("content-type") !== "image/png" || result.format !== "png") {
+        throw new Error("metaplate/next did not render a PNG in a plain Node process.");
       }
     `,
     nextApp,
