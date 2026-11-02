@@ -380,7 +380,27 @@ function charsetParameter(contentType: string): string | undefined {
   return undefined;
 }
 
-function decoderFor(label: string | undefined, fromMeta = false): TextDecoder | undefined {
+type HtmlDecoder = { decode(bytes: Uint8Array): string };
+
+/** What windows-1252 maps bytes 0x80-0x9F to; five bytes map to themselves. */
+const WINDOWS_1252_HIGH =
+  "€‚ƒ„…†‡ˆ‰Š‹ŒŽ" +
+  "‘’“”•–—˜™š›œžŸ";
+
+/**
+ * Node 20 decodes windows-1252 as ISO-8859-1, leaving bytes 0x80-0x9F as C1
+ * controls; this maps them as the Encoding Standard does. A correct decoder
+ * is returned unchanged.
+ */
+function windows1252(decoder: TextDecoder): HtmlDecoder {
+  if (decoder.decode(Uint8Array.of(0x80)) === "€") return decoder;
+  return {
+    decode: (bytes) =>
+      decoder.decode(bytes).replace(/[-]/g, (c) => WINDOWS_1252_HIGH[c.charCodeAt(0) - 0x80]!),
+  };
+}
+
+function decoderFor(label: string | undefined, fromMeta = false): HtmlDecoder | undefined {
   if (label === undefined) return undefined;
   try {
     // The <meta> prescan cannot have read a UTF-16 document as ASCII, so a
@@ -389,11 +409,11 @@ function decoderFor(label: string | undefined, fromMeta = false): TextDecoder | 
     // x-user-defined is matched by its one label, before construction,
     // because Node releases before 24 reject it.
     if (fromMeta && label.trim().toLowerCase() === "x-user-defined") {
-      return new TextDecoder("windows-1252");
+      return windows1252(new TextDecoder("windows-1252"));
     }
     const decoder = new TextDecoder(label);
     if (fromMeta && decoder.encoding.startsWith("utf-16")) return new TextDecoder("utf-8");
-    return decoder;
+    return decoder.encoding === "windows-1252" ? windows1252(decoder) : decoder;
   } catch {
     return undefined;
   }
