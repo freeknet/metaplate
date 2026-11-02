@@ -60,11 +60,28 @@ describe("socialImageCompatibility", () => {
   });
 
   it("labels undocumented platform behavior as unknown rather than supported", () => {
-    const report = socialImageCompatibility(png, { targets: ["discord", "instagram"] });
+    const report = socialImageCompatibility(png, { targets: ["instagram"] });
 
     expect(report.compatible).toBe(true);
-    expect(report.issues).toHaveLength(2);
-    expect(report.issues.every(({ severity }) => severity === "unknown")).toBe(true);
+    expect(report.issues).toHaveLength(1);
+    expect(report.issues[0]?.severity).toBe("unknown");
+  });
+
+  it("checks Discord's documented link-preview formats", () => {
+    // https://docs.discord.com/developers/link-previews/overview
+    for (const type of ["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"]) {
+      const report = socialImageCompatibility({ ...png, type }, { targets: ["discord"] });
+      expect(report.compatible).toBe(true);
+      expect(report.issues).toEqual([]);
+    }
+
+    const svg = socialImageCompatibility({ ...png, type: "image/svg+xml" }, { targets: ["discord"] });
+    expect(svg.compatible).toBe(false);
+    expect(svg.issues[0]).toMatchObject({ target: "discord", code: "format" });
+
+    // Discord accepts root-relative image URLs, so it does not demand crawler-ready ones.
+    const relative = socialImageCompatibility({ ...png, url: "/card.png" }, { targets: ["discord"] });
+    expect(relative.compatible).toBe(true);
   });
 
   it("can opt generic Open Graph checks into crawler-ready URLs", () => {
