@@ -1,4 +1,5 @@
 import { xCardFields, type XAppCard, type XPlayerCard } from "./x-cards.js";
+import { versionedImageUrl } from "./image-version.js";
 import {
   openGraphMedia,
   type OpenGraphAudio,
@@ -159,6 +160,16 @@ export type SocialImageOptions<Card extends XCard = XCard> = {
   origin?: string;
   /** Media type of the image, carried into `og:image:type` where used. */
   type?: string;
+  /**
+   * Cache-busting token appended as `?v=<version>` to every image URL this
+   * call builds (the default and each variant), so a crawler that caches
+   * images by URL fetches a changed card again. 1 to 64 characters from
+   * `A-Z a-z 0-9 . _ ~ -`; `socialImageVersion(copy)` derives one from the
+   * card's copy. File paths are unaffected: `socialImagePath` and a plate's
+   * `sitePath` never carry it. Descriptors passed in `openGraph.images` or
+   * `twitter.image` are emitted exactly as given.
+   */
+  version?: string;
   /**
    * Named size variants. Each adds one `og:image` descriptor after the
    * default, in declaration order. Names are lowercase kebab-case.
@@ -338,7 +349,10 @@ export function socialImage(
   const size = options.size ?? OG_SIZE;
   if (options.size) assertImageSize(size);
   return {
-    url: socialImagePath(route, options.imagePath, options.basePath, options.origin),
+    url: versionedImageUrl(
+      socialImagePath(route, options.imagePath, options.basePath, options.origin),
+      options.version,
+    ),
     width: size.width,
     height: size.height,
     alt,
@@ -382,6 +396,7 @@ function variantImages(
       imagePath: variant.imagePath ?? variantImagePath(imagePath, name),
       ...(options.basePath === undefined ? {} : { basePath: options.basePath }),
       ...(options.origin === undefined ? {} : { origin: options.origin }),
+      ...(options.version === undefined ? {} : { version: options.version }),
       ...((variant.type ?? options.type) ? { type: variant.type ?? options.type } : {}),
     });
     if (urls.has(image.url)) {
