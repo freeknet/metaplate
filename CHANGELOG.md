@@ -342,6 +342,10 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Changed
 
+- Built files keep the `node:` prefix on Node built-in imports (`node:crypto`,
+  `node:http`, ...). tsup 9 strips it by default, which lets a bundler remap a
+  bare `crypto` or `http` to a userland shim. The package check now fails if
+  any built file imports a bare built-in.
 - Development tooling now resolves `minimatch` 11 through an npm override,
   clearing the moderate globparts denial-of-service advisory (fixed in
   11.0.1) that eslint and typescript-eslint pulled in through their 10.x
