@@ -188,6 +188,90 @@ Deno-based edge such as Netlify Edge Functions, use
 [`metaplate/edge`](edge.md#edge-runtimes-with-metaplateedge), which does not run on
 Cloudflare Workers.
 
+### Caching renders
+
+A dynamic route renders on every request: a crawler fetching the same card
+twice pays for Satori and Resvg twice, and a CDN that revalidates gets the
+full bytes back each time. `plate.cached()` puts a render cache in front of
+one size of a plate and answers conditional requests:
+
+```ts
+const cached = og.cached();
+
+export const GET = cached.handlerFrom(({ params }) => ({
+  title: titleFor(params.slug),
+  alt: `${params.slug} card`,
+}));
+```
+
+The cached view has the same route forms as the plate (`render`, `response`,
+`handler`, `handlerFrom`, `fetchable`, `fetchableFrom`; `metaplate/edge`
+omits `handler`, as its plates do), plus `entry(copy)` and `key(copy)`.
+
+- **Keys.** Each entry is keyed by the SHA-256 of the plate size's
+  `fingerprint()` and the copy, serialized with object keys sorted. The
+  fingerprint covers the Metaplate version, the renderer, `revision`, size,
+  output format, font bytes, the source text of `component` and the
+  definition's other functions, and the `satori`, `emoji`, and `resvg`
+  options. Different copy can never share an entry, and a changed design
+  misses rather than serving the old card. Copy must be plain data (objects,
+  arrays, strings, numbers, booleans, `Date`, `URL`, byte arrays); anything
+  else rejects the request with a `TypeError` naming the field.
+- **What the key cannot see.** A function's source text excludes what it
+  imports or closes over, and images fetched during the render are not
+  hashed. Set the plate's `revision` and change it when such a dependency
+  changes; deploying new code usually starts a fresh process anyway. For the
+  same reason, two plates made by one factory that differ only in a
+  closed-over value (a theme, say) fingerprint alike; attaching both to one
+  store throws on the first request rather than letting them serve each
+  other's cards. Give each a distinct `revision`.
+- **ETags and 304s.** Every cached response carries a strong `ETag`, the
+  quoted SHA-256 of the bytes, whatever the plate's `etag` option. When the
+  handler is given the request (the argument itself, as in a Next.js route
+  handler or `fetch(request)`, or its `request` property, as in Astro,
+  SvelteKit, and React Router), a matching `If-None-Match` is answered with
+  `304 Not Modified` and no body for `GET` and `HEAD`, and `412` for other
+  methods, as [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110#name-if-none-match)
+  requires. Matching uses the weak comparison, so `W/"…"` from a proxy that
+  recompressed the image still matches, and `*` matches any card. A 304
+  keeps the 200's headers, such as `Cache-Control` and `Vary`, and drops
+  `Content-Type` and `Content-Length`.
+- **Concurrent requests** for one uncached card share a single render.
+- **Expiry.** Entries do not expire by default, because the key changes with
+  every known input. `ttl` (seconds) bounds how long one is served, for
+  example to pick up a changed remote image.
+- **Stores.** The default store is `memoryRenderCache()`: an in-process LRU
+  holding at most 32 MiB of encoded images and 1000 entries
+  (`og.cached({ maxBytes, maxEntries })`). Pass one store to several sizes or
+  plates to share the budget. Any object with `get(key)` and `set(key, entry)`,
+  synchronous or asynchronous, works as a store, so a shared key-value
+  service fits in a few lines. Here `kv` stands for any client that stores
+  bytes with a little metadata:
+
+  ```ts
+  import type { RenderCacheStore } from "metaplate/node";
+
+  const store: RenderCacheStore = {
+    async get(key) {
+      const found = await kv.get(key);
+      return found && { bytes: found.value, ...found.metadata };
+    },
+    set: (key, { bytes, ...metadata }) => kv.put(key, bytes, metadata),
+  };
+
+  export const cached = og.cached({ store, ttl: 7 * 24 * 60 * 60 });
+  ```
+
+  An entry a store returns is used only if it is fresh, has the plate's
+  content type, and its bytes still hash to its ETag; otherwise the card is
+  rendered again. A store that throws is treated as a miss (or a skipped
+  write) and reported to `onStoreError`, so an outage slows responses rather
+  than failing them.
+
+A cache in the process does not replace a CDN: keep a `Cache-Control` header
+on the plate so the edge serves repeats without reaching the function, and let
+`cached()` absorb the requests that do.
+
 ### Express and build scripts
 
 Express can send the bytes returned by `render` — PNG by default, or whatever

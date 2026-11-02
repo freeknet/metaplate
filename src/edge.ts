@@ -5,10 +5,23 @@ import {
   createRasterPlate,
   type ResvgRenderOptions,
 } from "./raster.js";
+import type { RenderCacheOptions } from "./render-cache.js";
 import type { SvgOgDefinition } from "./render.js";
+import { toHex } from "./stable-hash.js";
 import type { SatoriRender } from "./svg-plate.js";
 
 export type { RenderedPixels } from "./raster.js";
+
+export {
+  MEMORY_RENDER_CACHE_DEFAULTS,
+  memoryRenderCache,
+  type CachedPlate,
+  type MemoryRenderCache,
+  type MemoryRenderCacheOptions,
+  type RenderCacheEntry,
+  type RenderCacheOptions,
+  type RenderCacheStore,
+} from "./render-cache.js";
 
 export type {
   PlateContext,
@@ -64,6 +77,11 @@ export type EdgeOgDefinition<Copy, Variant extends string = string> = SvgOgDefin
   headers?: HeadersInit;
   /** Adds a strong SHA-256 ETag, computed with Web Crypto, to responses. */
   etag?: boolean | "sha256";
+  /**
+   * Names the design's current version; part of `fingerprint()`, so changing
+   * it invalidates `cached()` entries (see `NodeOgDefinition.revision`).
+   */
+  revision?: string;
   /**
    * Not supported: `metaplate/edge` emits PNG only, because
    * `@resvg/resvg-wasm` has no JPEG or WebP encoder. Use `renderPixels` with
@@ -269,10 +287,9 @@ export function createEdgeOg<Copy, Variant extends string = string>(
           renderer.free();
         }
       },
-      etag: async (bytes) => {
-        const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes as Uint8Array<ArrayBuffer>));
-        return `"${Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("")}"`;
-      },
+      sha256: async (bytes) =>
+        toHex(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes as Uint8Array<ArrayBuffer>))),
+      renderer: "edge",
     },
   );
 
@@ -287,6 +304,20 @@ export function createEdgeOg<Copy, Variant extends string = string>(
       handlerFrom,
       fetchable,
       fetchableFrom,
+      /** This size with a render cache in front: Fetch-shaped, like the plate. */
+      cached: (options?: RenderCacheOptions) => {
+        const cache = view.cached(options);
+        return Object.freeze({
+          store: cache.store,
+          key: cache.key,
+          entry: cache.entry,
+          render: cache.render,
+          response: cache.response,
+          handlerFrom: cache.handlerFrom,
+          fetchable: cache.fetchable,
+          fetchableFrom: cache.fetchableFrom,
+        });
+      },
     };
   });
 }

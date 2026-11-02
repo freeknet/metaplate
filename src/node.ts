@@ -24,6 +24,17 @@ export type {
   PlateView,
 } from "./plate.js";
 
+export {
+  MEMORY_RENDER_CACHE_DEFAULTS,
+  memoryRenderCache,
+  type CachedPlate,
+  type MemoryRenderCache,
+  type MemoryRenderCacheOptions,
+  type RenderCacheEntry,
+  type RenderCacheOptions,
+  type RenderCacheStore,
+} from "./render-cache.js";
+
 /** The render-module contract `metaplate render` loads; see docs/render-cli.md. */
 export type {
   RenderablePlate,
@@ -42,10 +53,18 @@ export type NodeOgDefinition<Copy, Variant extends string = string> = SvgOgDefin
   output?: OutputEncoder;
   /** Adds a strong ETag derived from the final encoded bytes to responses. */
   etag?: boolean | "sha256";
+  /**
+   * Names the design's current version, such as a hash of the plate's source
+   * file or a release number. It is part of `fingerprint()`, so changing it
+   * invalidates `metaplate render --incremental` and `cached()` entries when
+   * something the fingerprint cannot see has changed, such as a helper the
+   * component imports.
+   */
+  revision?: string;
 };
 
-function strongEtag(bytes: Uint8Array): string {
-  return `"${createHash("sha256").update(bytes).digest("hex")}"`;
+function sha256(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex");
 }
 
 /**
@@ -63,7 +82,8 @@ export function createNodeOg<Copy, Variant extends string = string>(
       const [, Resvg] = await loadPeerPair(loadSatori, loadResvg, "metaplate/node");
       return read(new Resvg(await source(), definition.resvg).render());
     },
-    etag: strongEtag,
+    sha256,
+    renderer: "node",
   });
 
   return createPlateViews(raster.variants, (name) => {

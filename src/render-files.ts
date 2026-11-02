@@ -1,9 +1,12 @@
-import { createHash } from "node:crypto";
-import { lstat, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { lstat, mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { ImageSize } from "./core.js";
 import { verifyImage, type ImageFormat } from "./image.js";
+import { stableSerialize } from "./stable-hash.js";
+import { METAPLATE_VERSION } from "./version.js";
 
 /**
  * Not an entry point: the engine behind `metaplate render`. Its public types
@@ -32,6 +35,14 @@ export type RenderablePlate<Copy> = {
   variant(name: string): RenderablePlate<Copy>;
   sitePath(route: string): string;
   artifact(route: string, copy: Copy): Promise<RenderFileArtifact>;
+  /**
+   * What this size renders, independent of copy. Plates from `createNodeOg`
+   * and `createEdgeOg` have it; without it an image gets no `inputHash` and
+   * `--incremental` always renders it.
+   */
+  fingerprint?(): Promise<string>;
+  /** The image descriptor, whose URL a reused file is recorded under. */
+  image?(route: string, copy: Copy): { readonly url: string };
 };
 
 /** One page to render: its route and the copy the plate renders for it. */
@@ -87,12 +98,18 @@ export type ManifestImage = {
   sha256: string;
   /** False only for an encoder format the verifier cannot recognize. */
   verified: boolean;
+  /**
+   * SHA-256 of everything known to determine the bytes, which
+   * `--incremental` compares; `null` when the plate has no `fingerprint()`
+   * or the copy cannot be serialized.
+   */
+  inputHash: string | null;
 };
 
 export type RenderIssue = { severity: "error"; message: string };
 
 export type RenderOutcome =
-  | (ManifestImage & { valid: true; issues: RenderIssue[] })
+  | (ManifestImage & { valid: true; issues: RenderIssue[]; reused: boolean })
   | { path: string; route: string; variant: string | null; valid: false; issues: RenderIssue[] };
 
 function fail(message: string): never {
@@ -255,22 +272,126 @@ function isInside(root: string, candidate: string): boolean {
 }
 
 /**
- * Writes one image and proves the file on disk: the directory chain must not
- * leave the output directory through a symbolic link, an existing link is
- * never written through, and the bytes read back must hash identically and
- * pass `verifyImage` at the artifact's own size and format.
+ * Holds an image's target to the output directory: its directory chain must
+ * not leave it through a symbolic link, and an existing link at the target is
+ * never written through or read.
  */
-async function writeImage(image: PlannedImage, realRoot: string): Promise<ManifestImage> {
-  const artifact = await image.plate.artifact(image.route, image.copy);
+async function assertSafeTarget(image: PlannedImage, realRoot: string, action: string): Promise<void> {
   const directory = path.dirname(image.target);
   await mkdir(directory, { recursive: true });
   if (!isInside(realRoot, await realpath(directory))) {
-    throw new Error(`Refusing to write ${image.path}: its directory resolves outside the output directory`);
+    throw new Error(`Refusing to ${action} ${image.path}: its directory resolves outside the output directory`);
   }
   const existing = await lstat(image.target).catch(() => undefined);
   if (existing?.isSymbolicLink()) {
-    throw new Error(`Refusing to write ${image.path}: it is a symbolic link`);
+    throw new Error(`Refusing to ${action} ${image.path}: it is a symbolic link`);
   }
+}
+
+/** The peer packages whose releases change rendered bytes. */
+export const RENDER_PEERS = ["satori", "@resvg/resvg-js", "@resvg/resvg-wasm"] as const;
+
+export type PeerVersions = Readonly<Record<(typeof RENDER_PEERS)[number], string | null>>;
+
+/** Finds `name`'s package.json from its resolved entry when the package does not export it. */
+async function versionNear(resolved: string, name: string): Promise<string | null> {
+  let directory = path.dirname(resolved);
+  for (;;) {
+    const manifest = await readFile(path.join(directory, "package.json"), "utf8").then(
+      (text) => JSON.parse(text) as { name?: unknown; version?: unknown },
+      () => undefined,
+    );
+    if (manifest?.name === name) return typeof manifest.version === "string" ? manifest.version : null;
+    const parent = path.dirname(directory);
+    if (parent === directory) return null;
+    directory = parent;
+  }
+}
+
+/**
+ * The installed peer versions, resolved from the render module's location as
+ * its own `metaplate/node` import resolves them; `null` for one that is not
+ * installed there.
+ */
+export async function peerVersions(moduleFile: string): Promise<PeerVersions> {
+  const require = createRequire(path.resolve(moduleFile));
+  const versions = await Promise.all(RENDER_PEERS.map(async (name) => {
+    try {
+      const manifest = JSON.parse(await readFile(require.resolve(`${name}/package.json`), "utf8")) as { version?: unknown };
+      return typeof manifest.version === "string" ? manifest.version : null;
+    } catch {
+      try {
+        return await versionNear(require.resolve(name), name);
+      } catch {
+        return null;
+      }
+    }
+  }));
+  return Object.fromEntries(RENDER_PEERS.map((name, index) => [name, versions[index]!])) as PeerVersions;
+}
+
+/**
+ * Hashes everything known to determine an image's bytes: the CLI's Metaplate
+ * version, the peer versions, the route, size, and output path, the plate's
+ * own fingerprint (its version, `revision`, size, fonts, and component
+ * source), and the stable-serialized copy. `null` when the plate has no
+ * fingerprint or the copy cannot be serialized.
+ */
+export async function inputHash(image: PlannedImage, peers: PeerVersions): Promise<string | null> {
+  if (typeof image.plate.fingerprint !== "function") return null;
+  let source: string;
+  try {
+    source = stableSerialize({
+      input: "metaplate-render-input/1",
+      metaplate: METAPLATE_VERSION,
+      peers,
+      path: image.path,
+      route: image.route,
+      variant: image.variant,
+      plate: await image.plate.fingerprint(),
+      copy: image.copy,
+    }, "copy");
+  } catch (error) {
+    if (error instanceof TypeError) return null;
+    throw error;
+  }
+  return createHash("sha256").update(source).digest("hex");
+}
+
+/**
+ * Reuses the file a previous run wrote when its input hash is unchanged and
+ * the file still hashes to what that run recorded and still passes
+ * `verifyImage`. Returns `undefined` whenever it cannot prove that, so the
+ * image renders instead.
+ */
+async function reuseImage(
+  image: PlannedImage,
+  previous: ManifestImage | undefined,
+  hash: string | null,
+  realRoot: string,
+): Promise<ManifestImage | undefined> {
+  if (hash === null || previous?.inputHash !== hash || typeof image.plate.image !== "function") return undefined;
+  await assertSafeTarget(image, realRoot, "reuse");
+  const existing = await readFile(image.target).catch(() => undefined);
+  if (!existing || existing.byteLength !== previous.bytes || sha256(existing) !== previous.sha256) return undefined;
+  if (previous.format !== null) {
+    try {
+      verifyImage(existing, previous.size, previous.format);
+    } catch {
+      return undefined;
+    }
+  }
+  return { ...copyManifestImage(previous), url: image.plate.image(image.route, image.copy).url };
+}
+
+/**
+ * Writes one image and proves the file on disk: the target must pass
+ * `assertSafeTarget`, and the bytes read back must hash identically and pass
+ * `verifyImage` at the artifact's own size and format.
+ */
+async function writeImage(image: PlannedImage, realRoot: string, hash: string | null): Promise<ManifestImage> {
+  const artifact = await image.plate.artifact(image.route, image.copy);
+  await assertSafeTarget(image, realRoot, "write");
   await writeFile(image.target, artifact.bytes);
 
   const written = await readFile(image.target);
@@ -293,6 +414,7 @@ async function writeImage(image: PlannedImage, realRoot: string): Promise<Manife
     bytes: written.byteLength,
     sha256: digest,
     verified: format !== null,
+    inputHash: hash,
   };
 }
 
@@ -301,7 +423,13 @@ export type RenderFilesOptions = {
   concurrency: number;
   /** Called as each image settles, in completion order. */
   onOutcome?: (outcome: RenderOutcome) => void;
+  /** Entries of the previous manifest by path; given, unchanged images are reused. */
+  previous?: ReadonlyMap<string, ManifestImage>;
+  /** Installed peer versions for `inputHash`; default all `null`. */
+  peers?: PeerVersions;
 };
+
+const NO_PEERS: PeerVersions = Object.freeze({ satori: null, "@resvg/resvg-js": null, "@resvg/resvg-wasm": null });
 
 /** Renders, writes, and verifies every planned image; one failure never stops the rest. */
 export async function renderFiles(
@@ -313,7 +441,13 @@ export async function renderFiles(
   return mapConcurrent(images, options.concurrency, async (image) => {
     let outcome: RenderOutcome;
     try {
-      outcome = { ...(await writeImage(image, realRoot)), valid: true, issues: [] };
+      const hash = await inputHash(image, options.peers ?? NO_PEERS);
+      const reused = options.previous
+        ? await reuseImage(image, options.previous.get(image.path), hash, realRoot)
+        : undefined;
+      outcome = reused
+        ? { ...reused, valid: true, issues: [], reused: true }
+        : { ...(await writeImage(image, realRoot, hash)), valid: true, issues: [], reused: false };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       outcome = {
@@ -329,23 +463,112 @@ export async function renderFiles(
   });
 }
 
-/** The manifest written beside the images; `schemaVersion` changes only on a breaking change. */
+/** One manifest entry's own fields, in the manifest's order. */
+function copyManifestImage(image: ManifestImage): ManifestImage {
+  return {
+    path: image.path,
+    url: image.url,
+    route: image.route,
+    variant: image.variant,
+    size: { width: image.size.width, height: image.size.height },
+    format: image.format,
+    contentType: image.contentType,
+    bytes: image.bytes,
+    sha256: image.sha256,
+    verified: image.verified,
+    inputHash: image.inputHash,
+  };
+}
+
+/**
+ * The manifest written beside the images; `schemaVersion` changes only on a
+ * breaking change, so `inputHash` (added within version 1) is one readers
+ * may not know.
+ */
 export function renderManifest(images: readonly ManifestImage[]) {
   return {
     schemaVersion: 1 as const,
-    images: images.map((image): ManifestImage => ({
-      path: image.path,
-      url: image.url,
-      route: image.route,
-      variant: image.variant,
-      size: { width: image.size.width, height: image.size.height },
-      format: image.format,
-      contentType: image.contentType,
-      bytes: image.bytes,
-      sha256: image.sha256,
-      verified: image.verified,
-    })),
+    images: images.map(copyManifestImage),
   };
+}
+
+const HEX_SHA256 = /^[0-9a-f]{64}$/;
+const FORMATS: readonly unknown[] = ["png", "jpeg", "webp", "gif", null];
+
+function isDimension(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) > 0;
+}
+
+function isSha256(value: unknown): value is string {
+  return typeof value === "string" && HEX_SHA256.test(value);
+}
+
+/** Narrows one entry of a previous manifest; anything malformed is not reused. */
+function previousEntry(value: unknown): ManifestImage | undefined {
+  if (!isObject(value) || !isObject(value.size)) return undefined;
+  const { path: file, url, route, variant, size, format, contentType, bytes, verified } = value;
+  const valid =
+    typeof file === "string" && typeof url === "string" && typeof route === "string" &&
+    (variant === null || typeof variant === "string") &&
+    isDimension(size.width) && isDimension(size.height) && FORMATS.includes(format) &&
+    typeof contentType === "string" && isDimension(bytes) && typeof verified === "boolean" &&
+    isSha256(value.sha256) && isSha256(value.inputHash);
+  if (!valid) return undefined;
+  return copyManifestImage(value as unknown as ManifestImage);
+}
+
+/**
+ * Reads the previous run's manifest for `--incremental`. A missing file is an
+ * empty map; an unreadable or foreign one is reported through `warn` and also
+ * treated as empty, so the run renders everything rather than failing.
+ */
+export async function readPreviousManifest(
+  file: string,
+  warn: (message: string) => void,
+): Promise<Map<string, ManifestImage>> {
+  const entries = new Map<string, ManifestImage>();
+  let text: string;
+  try {
+    text = await readFile(file, "utf8");
+  } catch (error) {
+    if (!(isObject(error) && error.code === "ENOENT")) {
+      warn(`Cannot read the previous manifest ${file}; rendering every image`);
+    }
+    return entries;
+  }
+  let manifest: unknown;
+  try {
+    manifest = JSON.parse(text);
+  } catch {
+    manifest = undefined;
+  }
+  if (!isObject(manifest) || manifest.schemaVersion !== 1 || !Array.isArray(manifest.images)) {
+    warn(`The previous manifest ${file} is not a schemaVersion 1 render manifest; rendering every image`);
+    return entries;
+  }
+  for (const value of manifest.images) {
+    const entry = previousEntry(value);
+    if (entry) entries.set(entry.path, entry);
+  }
+  return entries;
+}
+
+/**
+ * Writes `text` to `file` atomically: into a new temporary file in the same
+ * directory, then renamed over the target, so a reader never sees a partial
+ * file and a crash leaves either no file or a complete one.
+ */
+export async function writeFileAtomic(file: string, text: string): Promise<void> {
+  const target = path.resolve(file);
+  await mkdir(path.dirname(target), { recursive: true });
+  const temporary = path.join(path.dirname(target), `.${path.basename(target)}.${randomUUID()}.tmp`);
+  try {
+    await writeFile(temporary, text, { flag: "wx" });
+    await rename(temporary, target);
+  } catch (error) {
+    await rm(temporary, { force: true });
+    throw error;
+  }
 }
 
 const TYPESCRIPT = /\.(?:ts|mts|cts)$/i;
