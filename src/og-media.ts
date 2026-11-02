@@ -14,6 +14,7 @@
  * @see https://ogp.me/#array
  */
 import { MAX_IMAGE_DIMENSION } from "./core.js";
+import { present } from "./internal.js";
 import type { SocialMetaTag } from "./meta-tags.js";
 
 /**
@@ -110,10 +111,6 @@ const MEDIA_TYPE = new RegExp(
  */
 export function isMediaType(value: string): boolean {
   return MEDIA_TYPE.test(value);
-}
-
-function present(value: string | undefined): value is string {
-  return value !== undefined && value !== "";
 }
 
 function parseAbsolute(value: string): URL | undefined {

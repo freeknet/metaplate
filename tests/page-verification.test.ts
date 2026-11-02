@@ -368,7 +368,7 @@ describe("verifyRemotePage page policy", () => {
   });
 
   it("refuses private image addresses named by a public page", async () => {
-    const PUBLIC_STAND_IN = "198.51.100.20";
+    const PUBLIC_STAND_IN = "93.184.216.34";
     const dialLoopback = (address: RemoteAddress): RemoteAddress =>
       address.address === PUBLIC_STAND_IN ? { address: "127.0.0.1", family: 4 } : address;
     const server = await site((origin) => ({

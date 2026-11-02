@@ -5,7 +5,7 @@ import { SOCIAL_TARGETS, type SocialTarget } from "./compatibility-profiles.js";
 import type { ImageFormat } from "./image.js";
 
 export const VERIFY_USAGE =
-  "Usage: metaplate verify [--json] [--target TARGET] [--url URL] [--alt TEXT] [--max-file-size BYTES] [--format svg|png|jpeg|webp|gif] --size WIDTHxHEIGHT <file> [...] [--size WIDTHxHEIGHT <file> [...]]";
+  "Usage: metaplate verify [--json] [--require-content] [--target TARGET] [--url URL] [--alt TEXT] [--max-file-size BYTES] [--format svg|png|jpeg|webp|gif] --size WIDTHxHEIGHT <file> [...] [--size WIDTHxHEIGHT <file> [...]]";
 
 const FORMATS = new Set<ImageFormat>(["svg", "png", "jpeg", "webp", "gif"]);
 const TARGETS = new Set<SocialTarget>(SOCIAL_TARGETS);
@@ -23,6 +23,8 @@ export type VerifyInvocation = {
   url?: string;
   alt?: string;
   maxFileSize?: number;
+  /** Fail a PNG whose every pixel is one color (`--require-content`). */
+  requireContent?: boolean;
 };
 
 /** Formats a stable, concise path for CLI logs, including duplicate basenames. */
@@ -32,7 +34,7 @@ export function formatVerifyPath(file: string, cwd = process.cwd()): string {
 }
 
 export const VERIFY_URL_USAGE =
-  "Usage: metaplate verify-url [--json] [--target TARGET] [--alt TEXT] [--max-file-size BYTES] [--format svg|png|jpeg|webp|gif] [--max-bytes BYTES] [--max-redirects N] [--timeout MS] [--allow-port PORT] [--allow-private] --size WIDTHxHEIGHT <url> [...] [--size WIDTHxHEIGHT <url> [...]]";
+  "Usage: metaplate verify-url [--json] [--require-content] [--target TARGET] [--alt TEXT] [--max-file-size BYTES] [--format svg|png|jpeg|webp|gif] [--max-bytes BYTES] [--max-redirects N] [--timeout MS] [--allow-port PORT] [--allow-private] --size WIDTHxHEIGHT <url> [...] [--size WIDTHxHEIGHT <url> [...]]";
 
 export type VerifyUrlTarget = {
   url: string;
@@ -219,7 +221,9 @@ function entryTarget<Key extends string>(key: Key, { value, size, format }: Grou
 /** Parses one or more size-delimited groups of image paths and social checks. */
 export function parseVerifyInvocation(args: string[]): VerifyInvocation {
   let url: string | undefined;
+  const content = requireContentFlag();
   const { entries, ...parsed } = parseGroups(args, "verify", VERIFY_USAGE, {
+    switches: content.switches,
     values: {
       "--url": (value) => {
         if (!value) throw new Error(`Invalid URL. ${VERIFY_USAGE}`);
@@ -237,6 +241,19 @@ export function parseVerifyInvocation(args: string[]): VerifyInvocation {
     targets: entries.map((entry) => entryTarget("file", entry)),
     ...parsed,
     ...(url ? { url } : {}),
+    ...content.option(),
+  };
+}
+
+/**
+ * `--require-content`, shared by `verify` and `verify-url`. The option is
+ * present only when the flag was given, so existing invocations parse as before.
+ */
+function requireContentFlag() {
+  let enabled = false;
+  return {
+    switches: { "--require-content": () => { enabled = true; } },
+    option: (): { requireContent?: true } => (enabled ? { requireContent: true } : {}),
   };
 }
 
@@ -257,7 +274,12 @@ function fetchLimitFlags(limits: VerifyUrlFetchOptions, usage: string) {
 export function parseVerifyUrlInvocation(args: string[]): VerifyUrlInvocation {
   const limits: VerifyUrlFetchOptions = { allowPrivate: false, allowedPorts: [] };
   const usage = VERIFY_URL_USAGE;
-  const { entries, ...parsed } = parseGroups(args, "verify-url", usage, fetchLimitFlags(limits, usage));
+  const shared = fetchLimitFlags(limits, usage);
+  const content = requireContentFlag();
+  const { entries, ...parsed } = parseGroups(args, "verify-url", usage, {
+    values: shared.values,
+    switches: { ...shared.switches, ...content.switches },
+  });
 
   if (parsed.alt !== undefined && parsed.socialTargets.length === 0) {
     throw new Error(`--alt requires at least one --target. ${usage}`);
@@ -265,6 +287,7 @@ export function parseVerifyUrlInvocation(args: string[]): VerifyUrlInvocation {
   return {
     targets: entries.map((entry) => entryTarget("url", entry)),
     ...parsed,
+    ...content.option(),
     fetch: { ...limits, allowedPorts: [...new Set(limits.allowedPorts)] },
   };
 }
