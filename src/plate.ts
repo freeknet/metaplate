@@ -10,6 +10,7 @@ import {
   type SocialImageOptions,
   type SocialImageVariantOptions,
 } from "./core.js";
+import { socialImageVersion } from "./image-version.js";
 import type { OpenGraphMediaOptions } from "./og-media.js";
 
 /**
@@ -40,8 +41,39 @@ export type PlateVariants<Copy, Variant extends string = string> = {
   readonly [Name in Variant]: PlateVariant<Copy>;
 };
 
+/**
+ * Per-call image URL options for a plate's `image`, `metadata`, and
+ * `artifact`.
+ */
+export type PlateUrlOptions = {
+  /**
+   * An explicit cache-busting token for this call's image URLs, emitted as
+   * `?v=<version>`. Overrides a token the plate's `version: "copy"` would
+   * derive. 1 to 64 characters from `A-Z a-z 0-9 . _ ~ -`.
+   */
+  version?: string;
+};
+
+/**
+ * Plate-level cache busting. With `version: "copy"`, every image URL the
+ * plate publishes in metadata gains `?v=<token>`, where the token is
+ * `socialImageVersion(copy, revision)`: a short hash of the card's copy and
+ * the plate's `revision`. File paths (`sitePath`, `metaplate render`
+ * output) never carry it.
+ */
+export type PlateVersioning = {
+  /** `"copy"` derives each card's URL version from its copy and `revision`. */
+  version?: "copy";
+  /**
+   * The design's revision, folded into every derived version. Bump it when
+   * the component changes how existing copy looks, so unchanged copy still
+   * gets new URLs. Requires `version: "copy"`.
+   */
+  revision?: string;
+};
+
 /** Per-call metadata options for a plate. */
-export type PlateMetadataOptions<Variant extends string = string> = {
+export type PlateMetadataOptions<Variant extends string = string> = PlateUrlOptions & {
   /**
    * Open Graph video and audio for this page, carried onto
    * `metadata.openGraph.videos` and `.audio` (see `OpenGraphMediaOptions`).
@@ -58,7 +90,28 @@ type PlateSocialDefinition<Copy, Variant extends string> = {
   basePath?: string;
   origin?: string;
   variants?: PlateVariants<Copy, Variant>;
-};
+} & PlateVersioning;
+
+/**
+ * Validates plate-level versioning once, at definition, and returns the
+ * per-call resolver: an explicit `version` wins, then a copy-derived one.
+ */
+function plateVersion<Copy>(definition: PlateVersioning) {
+  const { version: mode, revision } = definition;
+  if (mode !== undefined && mode !== "copy") {
+    throw new Error(`Invalid version: a plate's version must be "copy"; received ${JSON.stringify(mode)}`);
+  }
+  if (revision !== undefined) {
+    if (typeof revision !== "string" || revision === "") {
+      throw new Error(`Invalid revision: expected a non-empty string; received ${JSON.stringify(revision)}`);
+    }
+    if (mode !== "copy") throw new Error('revision requires version: "copy"');
+  }
+  return (copy: Copy, options: PlateUrlOptions | undefined): Pick<SocialImageOptions, "version"> => {
+    const version = options?.version ?? (mode === "copy" ? socialImageVersion(copy, revision) : undefined);
+    return version === undefined ? {} : { version };
+  };
+}
 
 /** Forwards per-call media only when supplied, keeping media-free output unchanged. */
 function mediaOption(options: PlateMetadataOptions | undefined): Pick<SocialImageOptions, "media"> {
@@ -118,6 +171,7 @@ export function createPlateSocial<Copy, Variant extends string = string>(
     type: contentType,
   });
   const variants = resolveVariants(definition, options.imagePath);
+  const versionFor = plateVersion<Copy>(definition);
   const defaultContext: PlateContext<Variant> = Object.freeze({ variant: undefined, size });
 
   /**
@@ -145,20 +199,21 @@ export function createPlateSocial<Copy, Variant extends string = string>(
   /** The default size: page metadata lists every variant after it. */
   const defaultView = Object.freeze({
     context: defaultContext,
-    image: (route: string, copy: Copy) =>
-      socialImage(route, definition.alt(copy), options),
+    image: (route: string, copy: Copy, urlOptions?: PlateUrlOptions) =>
+      socialImage(route, definition.alt(copy), { ...options, ...versionFor(copy, urlOptions) }),
     metadata: (route: string, copy: Copy, metadataOptions?: PlateMetadataOptions<Variant>) => {
       const twitterVariant = metadataOptions?.twitter?.variant;
       return socialImageMetadata(route, definition.alt(copy), {
         ...options,
         ...variantOptions(copy),
+        ...versionFor(copy, metadataOptions),
         ...(twitterVariant === undefined ? {} : { twitter: { variant: twitterVariant } }),
         ...mediaOption(metadataOptions),
       });
     },
     /** Metadata describing only this size, as an artifact's bytes do. */
-    ownMetadata: (route: string, copy: Copy) =>
-      socialImageMetadata(route, definition.alt(copy), options),
+    ownMetadata: (route: string, copy: Copy, urlOptions?: PlateUrlOptions) =>
+      socialImageMetadata(route, definition.alt(copy), { ...options, ...versionFor(copy, urlOptions) }),
     sitePath: sitePathFor(options.imagePath),
   });
 
@@ -173,12 +228,12 @@ export function createPlateSocial<Copy, Variant extends string = string>(
       size: variant.context.size,
       imagePath: variant.imagePath,
     });
-    const ownMetadata = (route: string, copy: Copy) =>
-      socialImageMetadata(route, variant.alt(copy), sizeOptions);
+    const ownMetadata = (route: string, copy: Copy, urlOptions?: PlateUrlOptions) =>
+      socialImageMetadata(route, variant.alt(copy), { ...sizeOptions, ...versionFor(copy, urlOptions) });
     return Object.freeze({
       context: variant.context,
-      image: (route: string, copy: Copy) =>
-        socialImage(route, variant.alt(copy), sizeOptions),
+      image: (route: string, copy: Copy, urlOptions?: PlateUrlOptions) =>
+        socialImage(route, variant.alt(copy), { ...sizeOptions, ...versionFor(copy, urlOptions) }),
       metadata: (route: string, copy: Copy, metadataOptions?: PlateMetadataOptions<Variant>) => {
         const twitterVariant = metadataOptions?.twitter?.variant;
         if (twitterVariant !== undefined && twitterVariant !== name) {
@@ -188,6 +243,7 @@ export function createPlateSocial<Copy, Variant extends string = string>(
         }
         return socialImageMetadata(route, variant.alt(copy), {
           ...sizeOptions,
+          ...versionFor(copy, metadataOptions),
           ...mediaOption(metadataOptions),
         });
       },

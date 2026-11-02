@@ -1,6 +1,6 @@
 import type { ImageSize } from "./core.js";
 import type { EmojiLoader } from "./emoji.js";
-import type { PlateContext, PlateVariants } from "./plate.js";
+import type { PlateContext, PlateVariants, PlateVersioning } from "./plate.js";
 import { loadSatori } from "./peers.js";
 import { createSvgPlate } from "./svg-plate.js";
 
@@ -92,8 +92,10 @@ export type SatoriNode =
 export type {
   PlateContext,
   PlateMetadataOptions,
+  PlateUrlOptions,
   PlateVariant,
   PlateVariants,
+  PlateVersioning,
   PlateView,
 } from "./plate.js";
 
@@ -127,7 +129,7 @@ export type SvgOgDefinition<Copy, Variant extends string = string> = {
    * receives every other script and any emoji the loader has no image for.
    */
   emoji?: EmojiLoader;
-};
+} & PlateVersioning;
 
 /** Defines a framework-neutral social image renderer that emits SVG text. */
 export function createSvgOg<Copy, Variant extends string = string>(

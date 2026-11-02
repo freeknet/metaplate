@@ -38,7 +38,6 @@ It works with plain Node, static build scripts, Next.js, Astro, React Router, Sv
   - [Verifying images](#verifying-images)
   - [Deployment routes](#deployment-routes)
 - [Entry points](#entry-points)
-- [Design lineage](#design-lineage)
 - [License](#license)
 
 ## Install
@@ -184,8 +183,11 @@ size itself, and `plate.variant(name)` gives the full plate API for one size.
 
 The root `metaplate` entry builds Open Graph and X metadata with no renderer
 or framework, including per-channel images and Open Graph video and audio.
-`socialMetaTags` and `socialMetaHtml` emit the `<meta>` tags, including
-validated `og:locale`, `article:`, and Discord accent-color and timestamp tags.
+`socialMetaTags` and `socialMetaHtml` emit the `<meta>` tags for pages that
+write their own `<head>`, including validated `og:locale`, `article:`, and
+Discord accent-color and timestamp tags. An opt-in `version`, or a plate's
+`version: "copy"`, adds a `?v=` token to published image URLs so crawlers that
+cache images by URL fetch a changed card, while file paths stay unchanged.
 [Metadata guide](docs/metadata.md)
 
 ### X player and app cards
@@ -256,8 +258,8 @@ every route is in [`deployment-evidence.json`](deployment-evidence.json).
 ## Entry points
 
 - `metaplate` — framework-free paths, dimensions, Open Graph and X metadata
-  (including video and audio, and X player and app cards), `<meta>` tag
-  serialization, Schema.org JSON-LD, Adaptive Cards, social compatibility
+  (including video and audio, and X player and app cards), cache-busting
+  image URL versions (`socialImageVersion`), `<meta>` tag serialization, Schema.org JSON-LD, Adaptive Cards, social compatibility
   profiles, and byte-level social image verification.
 - `metaplate/render` — Satori-based SVG generation. Satori is installed
   automatically.
@@ -286,11 +288,6 @@ every route is in [`deployment-evidence.json`](deployment-evidence.json).
 - `metaplate/png` — PNG header inspection and dimension verification. No peers.
 - `metaplate/image` — dimension and structural verification for SVG, PNG,
   JPEG, WebP, and GIF. No peers.
-
-## Design lineage
-
-Metaplate extracts the production patterns used by the GOLC and Cinnabar sites
-and the pre-rendered static-image pattern used by the AntikytheraOS showcase.
 
 ## License
 
