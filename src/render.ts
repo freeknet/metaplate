@@ -1,5 +1,6 @@
 import type { ImageSize } from "./core.js";
 import type { EmojiLoader } from "./emoji.js";
+import type { LanguageFontLoader } from "./language-fonts.js";
 import type { PlateContext, PlateVariants } from "./plate.js";
 import { loadSatori } from "./peers.js";
 import { createSvgPlate } from "./svg-plate.js";
@@ -127,6 +128,16 @@ export type SvgOgDefinition<Copy, Variant extends string = string> = {
    * receives every other script and any emoji the loader has no image for.
    */
   emoji?: EmojiLoader;
+  /**
+   * Fonts for scripts the plate's fonts do not cover, such as Japanese,
+   * Arabic, or Devanagari: `fontsourceLanguageFontLoader` from
+   * `metaplate/fonts` reads installed Fontsource packages, and
+   * `languageFontLoader` from `metaplate/font-data` takes bytes from any
+   * source. Satori's requests are answered in a fixed order: emoji go to
+   * `emoji`, every other script to `languageFonts`, and whatever neither
+   * resolves to `satori.loadAdditionalAsset`.
+   */
+  languageFonts?: LanguageFontLoader;
 };
 
 /** Defines a framework-neutral social image renderer that emits SVG text. */

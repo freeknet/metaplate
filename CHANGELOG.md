@@ -7,6 +7,24 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Added
 
+- The `languageFonts` plate option (`createSvgOg`, `createNodeOg`,
+  `createEdgeOg`) draws scripts the plate's fonts lack, such as Japanese,
+  Korean, Chinese, Arabic, Hebrew, Thai, and Devanagari, with fallback fonts
+  instead of missing-glyph boxes, offline. `fontsourceLanguageFontLoader`
+  from `metaplate/fonts` maps Satori's language codes (`"ja-JP"`,
+  `"ar-AR"`, ...) to installed Fontsource packages, reads each package's
+  `unicode.json` on first use, and reads only the subset files covering the
+  requested characters, each once (a Japanese title reads about 100 KB of an
+  84 MB package); several weights per language are supported, failures are
+  not memoized, and package resolution uses the same `cwd` and
+  `resolvePackage` options and path guards as `fontsourceFontLoader`.
+  `languageFontLoader` from the runtime-neutral `metaplate/font-data` takes a
+  byte source per language (and optional `unicodeRanges`) for edge runtimes.
+  Han characters, which Satori offers to `ja-JP`, `zh-CN`, `zh-TW`, and
+  `zh-HK` at once, fall through the configured languages until each
+  character is covered. Satori's requests are answered in a fixed order:
+  `emoji`, then `languageFonts`, then `satori.loadAdditionalAsset`. See
+  [`docs/fonts.md`](docs/fonts.md#other-scripts).
 - `metaplate render <module>` renders static social images as a build step.
   The module's default export is `{ plate, pages: [{ route?, copy }] }`, an
   array of those, or a function returning either; a `createNodeOg` or
