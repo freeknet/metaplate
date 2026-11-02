@@ -1,9 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
-const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
+const readme = await readFile(new URL("../docs/rendering.md", import.meta.url), "utf8");
 
-describe("README build-script example", () => {
+describe("rendering guide build-script example", () => {
   it("defines copy before passing it to render", () => {
     const start = readme.indexOf("### Authoring without a JSX toolchain");
     const end = readme.indexOf("### SVG-only rendering", start);

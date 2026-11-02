@@ -9,6 +9,7 @@ export default defineConfig({
     edge: "src/edge.ts",
     fonts: "src/fonts.ts",
     "font-data": "src/font-data.ts",
+    emoji: "src/emoji.ts",
     png: "src/png.ts",
     image: "src/image.ts",
     cli: "src/cli.ts",

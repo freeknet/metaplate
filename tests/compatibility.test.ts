@@ -60,11 +60,58 @@ describe("socialImageCompatibility", () => {
   });
 
   it("labels undocumented platform behavior as unknown rather than supported", () => {
-    const report = socialImageCompatibility(png, { targets: ["instagram"] });
+    for (const target of ["instagram", "telegram", "threads", "pinterest"] as const) {
+      const report = socialImageCompatibility(
+        { ...png, url: "/card.svg", type: "image/svg+xml", width: 1, height: 1 },
+        { targets: [target], fileSize: 100_000_000 },
+      );
 
-    expect(report.compatible).toBe(true);
-    expect(report.issues).toHaveLength(1);
-    expect(report.issues[0]?.severity).toBe("unknown");
+      expect(report.compatible).toBe(true);
+      expect(report.issues).toEqual([
+        expect.objectContaining({ target, severity: "unknown", code: "contract" }),
+      ]);
+    }
+  });
+
+  it("applies WhatsApp's documented large-preview image requirements", () => {
+    // https://developers.facebook.com/documentation/business-messaging/whatsapp/link-previews/
+    const whatsapp = (image: Partial<SocialImageDescriptor>, fileSize = 599_999) =>
+      socialImageCompatibility({ ...png, ...image }, { targets: ["whatsapp"], fileSize });
+
+    // At every limit; WhatsApp publishes no format or HTTPS rule, so SVG over HTTP passes.
+    expect(whatsapp({ width: 300, height: 75 })).toEqual({ compatible: true, issues: [] });
+    expect(whatsapp({ url: "http://example.com/card.svg", type: "image/svg+xml" }).issues).toEqual([]);
+
+    const rejected = [
+      [whatsapp({ url: "/card.png" }), "url", /absolute URL/],
+      [whatsapp({ width: 299, height: 200 }), "dimensions", /300px wide/],
+      [whatsapp({ width: 1201, height: 300 }), "dimensions", /4:1.*Received 1201x300/],
+      [whatsapp({}, 600_000), "file-size", /under 600KB/],
+    ] as const;
+    for (const [report, code, message] of rejected) {
+      expect(report.compatible).toBe(false);
+      expect(report.issues).toEqual([
+        expect.objectContaining({ target: "whatsapp", severity: "error", code, message: expect.stringMatching(message) }),
+      ]);
+    }
+  });
+
+  it("warns when an image exceeds Bluesky's card thumbnail blob limit", () => {
+    // https://bsky.network/docs/about-bluesky-content/posts#website-card-embeds
+    const bluesky = (fileSize: number) =>
+      socialImageCompatibility(
+        { ...png, url: "/card.svg", type: "image/svg+xml" },
+        { targets: ["bluesky"], fileSize },
+      );
+
+    // No URL, format, or dimension rule is published beyond the 1,000,000-byte blob.
+    expect(bluesky(1_000_000)).toEqual({ compatible: true, issues: [] });
+
+    const oversized = bluesky(1_000_001);
+    expect(oversized.compatible).toBe(true);
+    expect(oversized.issues).toEqual([
+      expect.objectContaining({ target: "bluesky", severity: "warning", code: "file-size" }),
+    ]);
   });
 
   it("checks Discord's documented link-preview formats", () => {

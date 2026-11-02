@@ -14,6 +14,7 @@ export const og = createNextOg<OgCopy>({
   component: (copy) => (
     <div
       style={{
+        boxSizing: "border-box",
         width: "100%",
         height: "100%",
         display: "flex",
