@@ -550,11 +550,17 @@ class OpenGraphReader {
   }
 }
 
-/** Resolves the document base URL from the first `<base href>` (HTML "frozen base URL"). */
+/**
+ * Resolves the document base URL from the first `<base href>` (HTML "frozen
+ * base URL"). The HTML algorithm falls back for `data:` and `javascript:`
+ * bases; this keeps only http(s) bases, because only http(s) image URLs can be
+ * fetched and any other scheme (`vbscript:`, `file:`, ...) would resolve every
+ * relative image to something unfetchable.
+ */
 function frozenBaseUrl(href: string, fallback: URL): URL {
   try {
     const parsed = new URL(href.trim(), fallback);
-    return parsed.protocol === "data:" || parsed.protocol === "javascript:" ? fallback : parsed;
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed : fallback;
   } catch {
     return fallback;
   }
