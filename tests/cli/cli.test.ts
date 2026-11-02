@@ -180,8 +180,7 @@ describe("verify CLI", () => {
       const commandHelp = run([command, "--help"], cwd);
       expect(commandHelp.status).toBe(0);
       expect(commandHelp.stderr).toBe("");
-      expect(commandHelp.stdout).toBe(`${usage}
-`);
+      expect(commandHelp.stdout).toBe(`${usage}\n`);
     }
     expect(version.status).toBe(0);
     expect(version.stderr).toBe("");

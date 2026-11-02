@@ -503,6 +503,11 @@ All notable changes to Metaplate are documented in this file. The project uses
   peer; the alert, package, version, and reasoning are unchanged.
 - Deployment evidence routes may list extra upstream references in
   `relatedDocs`, which the manifest validator requires to be HTTPS URLs.
+- The `x` compatibility profile checks X's documented Card image rules:
+  JPG, PNG, WEBP, or GIF (SVG is an error), under 5MB, at least 144x144 and
+  at most 4096x4096 pixels, and alt text of at most 420 characters. An image
+  below `summary_large_image`'s 300x157 minimum is a warning. It previously
+  checked only the URL and alt text.
 - `metaplate/node`'s renderer-independent code moved into internal modules
   shared with `metaplate/edge`. Its public API, types, and output are
   unchanged.
@@ -512,6 +517,36 @@ All notable changes to Metaplate are documented in this file. The project uses
   Workers and other edge isolates, where the native Resvg binding cannot load.
   `deployment-evidence.json` records Bun and Deno as `documented`, not
   certified.
+
+### Fixed
+
+- `metaplate/next` imports `next/og.js` instead of `next/og`. Next has no
+  exports map, so the extensionless form failed with `ERR_MODULE_NOT_FOUND`
+  in plain Node ESM (scripts and test runners that do not bundle), and under
+  NodeNext type resolution it either failed or silently became `any`.
+- `verifySocialImage` and `metaplate verify-page` compare an SVG with a
+  fractional size (`width="98.36"`) in whole pixels instead of throwing an
+  integer-size error. A page whose JSON-LD logo was such an SVG failed
+  entirely.
+- Remote checks (`verify-url`, `verify-page`, `remoteImageLoader`) decode a
+  body served with `Content-Encoding: gzip`, `deflate`, or `br` despite the
+  `identity` request, as crawlers do, and apply the byte limit to the decoded
+  bytes. Any other coding fails with a clear error instead of reading
+  compressed bytes as an image or page.
+- `connectionTimeoutMs` defaults to `timeoutMs`, so `--timeout` above 10
+  seconds also lets one slow connection use the longer budget.
+- `metaplate render` refuses an image whose file name has no extension, or
+  another format's, because a static host would serve it as the wrong
+  `Content-Type`. Before, `og-image` and JPEG bytes in `og.png` were written
+  and recorded as verified.
+- `metaplate verify` and `verify-url` reject a trailing `--size` or
+  `--format` that no file follows, instead of silently ignoring it.
+  `metaplate <command> --help` prints that command's usage and exits 0.
+- `socialImagePath` percent-encodes a relative path exactly as the
+  `origin`-qualified URL does, so spaces, control characters, and non-ASCII
+  no longer reach metadata raw.
+- Error messages name an empty route as `""` and an emoji directory as an
+  emoji directory, not a font file.
 
 ### Documentation
 
