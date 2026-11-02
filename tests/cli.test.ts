@@ -244,6 +244,23 @@ describe("verify CLI", () => {
     expect(report.files[0]?.targets.universal).toMatchObject({ compatible: true, issues: [] });
   });
 
+  it("accepts every documented messaging and social target", async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "metaplate-cli-"));
+    await writeFile(path.join(cwd, "good.png"), png());
+    const targets = ["whatsapp", "bluesky", "telegram", "threads", "pinterest"];
+    const result = run(
+      ["verify", "--json", ...targets.flatMap((target) => ["--target", target]), "--size", "1200x630", "good.png"],
+      cwd,
+    );
+    expect(result.status).toBe(0);
+    const report = JSON.parse(result.stdout) as {
+      files: Array<{ targets: Record<string, { compatible: boolean; issues: Array<{ severity: string }> }> }>;
+    };
+    expect(Object.keys(report.files[0]?.targets ?? {})).toEqual(targets);
+    expect(report.files[0]?.targets.whatsapp).toEqual({ compatible: true, issues: [] });
+    expect(report.files[0]?.targets.telegram?.issues).toEqual([expect.objectContaining({ severity: "unknown" })]);
+  });
+
   it("counts failed files rather than individual findings", async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "metaplate-cli-"));
     await writeFile(path.join(cwd, "good.png"), png());
