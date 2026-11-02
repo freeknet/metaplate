@@ -11,7 +11,7 @@ import { isMediaType } from "./og-media.js";
 import { createPlateSocial, type PlateUrlOptions } from "./plate.js";
 import { createRenderCache, type RenderCacheOptions } from "./render-cache.js";
 import type { SvgOgDefinition } from "./render.js";
-import { stableSerialize } from "./stable-hash.js";
+import { taggedSerialize } from "./stable-hash.js";
 import { createSvgPlate, type SatoriRender } from "./svg-plate.js";
 import { METAPLATE_VERSION } from "./version.js";
 
@@ -278,7 +278,7 @@ export function createRasterPlate<Copy, Variant extends string = string>(
           font.data instanceof Uint8Array ? font.data : new Uint8Array(font.data),
         ),
       })));
-      return digestText(stableSerialize({
+      return digestText(taggedSerialize({
         plate: "metaplate-plate/1",
         metaplate: METAPLATE_VERSION,
         renderer: backend.renderer,
@@ -389,7 +389,7 @@ export function createRasterPlate<Copy, Variant extends string = string>(
      * seen; change `revision` when it changes.
      */
     function fingerprint(): Promise<string> {
-      viewFingerprint ??= definitionFingerprint().then((plate) => digestText(stableSerialize({
+      viewFingerprint ??= definitionFingerprint().then((plate) => digestText(taggedSerialize({
         plate,
         variant: name ?? null,
         size: { width: size.width, height: size.height },

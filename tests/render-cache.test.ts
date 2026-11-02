@@ -12,7 +12,7 @@ import {
   requestFrom,
   type CacheablePlate,
 } from "../src/render-cache.js";
-import { stableSerialize } from "../src/stable-hash.js";
+import { taggedSerialize } from "../src/stable-hash.js";
 import { completePng } from "./helpers/image-fixtures.js";
 
 const root = path.join(import.meta.dirname, "..");
@@ -25,13 +25,13 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("stableSerialize", () => {
+describe("taggedSerialize", () => {
   it("ignores object key order and keeps array, Map, and Set order", () => {
-    expect(stableSerialize({ a: 1, b: { c: [1, 2], d: "x" } }))
-      .toBe(stableSerialize({ b: { d: "x", c: [1, 2] }, a: 1 }));
-    expect(stableSerialize([1, 2])).not.toBe(stableSerialize([2, 1]));
-    expect(stableSerialize(new Map([["a", 1], ["b", 2]]))).not.toBe(stableSerialize(new Map([["b", 2], ["a", 1]])));
-    expect(stableSerialize(new Set([1, 2]))).not.toBe(stableSerialize(new Set([2, 1])));
+    expect(taggedSerialize({ a: 1, b: { c: [1, 2], d: "x" } }))
+      .toBe(taggedSerialize({ b: { d: "x", c: [1, 2] }, a: 1 }));
+    expect(taggedSerialize([1, 2])).not.toBe(taggedSerialize([2, 1]));
+    expect(taggedSerialize(new Map([["a", 1], ["b", 2]]))).not.toBe(taggedSerialize(new Map([["b", 2], ["a", 1]])));
+    expect(taggedSerialize(new Set([1, 2]))).not.toBe(taggedSerialize(new Set([2, 1])));
   });
 
   it("tags every type so different values never collide", () => {
@@ -41,26 +41,26 @@ describe("stableSerialize", () => {
       new Map([[1, 1]]), new Set([1]), new URL("https://example.com/"), "https://example.com/",
       (copy: string) => copy, { a: undefined }, {},
     ];
-    const serialized = values.map((value) => stableSerialize(value));
+    const serialized = values.map((value) => taggedSerialize(value));
     expect(new Set(serialized).size).toBe(values.length);
   });
 
   it("serializes bytes, dates, and toJSON objects by value", () => {
-    expect(stableSerialize({ data: Uint8Array.from([0xde, 0xad]) })).toBe('{"data":bUint8Array:dead}');
-    expect(stableSerialize(new Date("2026-01-02T03:04:05Z"))).toBe(stableSerialize(new Date(Date.UTC(2026, 0, 2, 3, 4, 5))));
-    expect(stableSerialize(new URL("https://example.com/a"))).toBe(stableSerialize(new URL("https://example.com/a")));
+    expect(taggedSerialize({ data: Uint8Array.from([0xde, 0xad]) })).toBe('{"data":bUint8Array:dead}');
+    expect(taggedSerialize(new Date("2026-01-02T03:04:05Z"))).toBe(taggedSerialize(new Date(Date.UTC(2026, 0, 2, 3, 4, 5))));
+    expect(taggedSerialize(new URL("https://example.com/a"))).toBe(taggedSerialize(new URL("https://example.com/a")));
   });
 
   it("refuses cycles, symbols, and objects without a data representation, naming the path", () => {
     const cycle: { child: { parent?: unknown } } = { child: {} };
     cycle.child.parent = cycle;
-    expect(() => stableSerialize(cycle, "copy")).toThrow("Cannot serialize the cycle at copy.child.parent");
-    expect(() => stableSerialize({ tag: Symbol("x") }, "copy")).toThrow("Cannot serialize the symbol at copy.tag");
-    expect(() => stableSerialize({ list: [new (class Moment {})()] }, "copy"))
+    expect(() => taggedSerialize(cycle, "copy")).toThrow("Cannot serialize the cycle at copy.child.parent");
+    expect(() => taggedSerialize({ tag: Symbol("x") }, "copy")).toThrow("Cannot serialize the symbol at copy.tag");
+    expect(() => taggedSerialize({ list: [new (class Moment {})()] }, "copy"))
       .toThrow("Cannot serialize Moment at copy.list[0]");
     // A value seen twice without a cycle is fine.
     const shared = { x: 1 };
-    expect(() => stableSerialize({ a: shared, b: shared })).not.toThrow();
+    expect(() => taggedSerialize({ a: shared, b: shared })).not.toThrow();
   });
 });
 

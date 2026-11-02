@@ -47,7 +47,7 @@ function bytesOf(value: ArrayBuffer | ArrayBufferView): Uint8Array {
  * with no data representation, rather than letting two different values
  * collide on one key.
  */
-export function stableSerialize(value: unknown, label = "value"): string {
+export function taggedSerialize(value: unknown, label = "value"): string {
   const ancestors = new Set<object>();
 
   function walk(current: unknown, path: string): string {
