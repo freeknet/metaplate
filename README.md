@@ -33,6 +33,9 @@ It works with plain Node, static build scripts, Next.js, and Node-compatible fra
   - [X player and app cards](#x-player-and-app-cards)
   - [Social compatibility profiles](#social-compatibility-profiles)
   - [Emitting the meta tags yourself](#emitting-the-meta-tags-yourself)
+  - [Teams, Slack, and Discord previews](#teams-slack-and-discord-previews)
+  - [Video and audio previews](#video-and-audio-previews)
+  - [Schema.org image metadata](#schemaorg-image-metadata)
   - [Next.js static export and `basePath`](#nextjs-static-export-and-basepath)
   - [JPEG or WebP cards in Next.js](#jpeg-or-webp-cards-in-nextjs)
 - [Fonts](#fonts)
@@ -132,6 +135,14 @@ headers throws at definition time. Set `etag: "sha256"` (or `etag: true`) on the
 plate when responses and artifacts should carry a deterministic strong ETag
 based on the final encoded bytes. While automatic ETags are on, a caller
 `ETag` header is rejected too; with `etag` off, a caller `ETag` passes through.
+
+Responses are buffered, not streamed: every response renders the whole image
+first, then sends it with `Content-Length` and, when enabled, a strong `ETag`
+computed from the final bytes. That is deliberate. Social cards are small
+(typically 15 to 30 KB), so streaming would save almost nothing, and it would
+give up the exact length and content hash that CDNs use for caching and that
+`verifyImage`, `verify`, and `verify-url` rely on to prove the bytes match the
+metadata.
 
 Rendering is safe to call concurrently. Satori is a pure call, each render
 builds its own Resvg instance, and the font loaders memoize one shared copy
@@ -1022,9 +1033,12 @@ Pass `checkUrl: false` or `checkAlt: false` to evaluate a descriptor that has
 not been assigned a URL or alt text yet; the input type,
 `SocialCompatibilityImage`, makes both fields optional.
 
-Issues are `error`, `warning`, or `unknown`. Discord and Instagram checks are
-reported as unknown because neither publishes a stable webpage image-tag
-contract. SVG remains useful as renderer output, but it is not a universal
+Issues are `error`, `warning`, or `unknown`. The `discord` profile checks the
+image formats Discord's
+[link-preview contract](https://docs.discord.com/developers/link-previews/overview)
+supports (PNG, GIF, JPEG, WebP, and AVIF); Discord sets no image size limit and
+accepts root-relative image URLs. Instagram checks are reported as unknown
+because Instagram publishes no webpage image-tag contract. SVG remains useful as renderer output, but it is not a universal
 social delivery format; use PNG or JPEG for broad crawler compatibility.
 
 This local report cannot prove public fetchability, redirects, response MIME,
@@ -1105,6 +1119,348 @@ Next.js `generateMetadata` can carry the tags through `other`, as
 renders every `other` entry with a `name` attribute and groups repeated keys.
 That is faithful for a single Open Graph image only; with several images, use
 Next's `openGraph` and `twitter` fields.
+
+### Teams, Slack, and Discord previews
+
+Pasting a link into Teams, Slack, or Discord needs no app: each client fetches
+the page and builds the preview from the meta tags that `socialMetaTags` and
+`socialMetaHtml` already emit. An app is needed only to replace that preview
+with your own content or to post cards yourself.
+
+| Client | Ordinary link preview reads | Metaplate input that feeds it | Needs an app for |
+| --- | --- | --- | --- |
+| Microsoft Teams | `og:title`, `og:description`, and `og:image` (or `<meta name="title">` and `<meta name="description">`), rendered as an Adaptive Card; a page that requires authentication gets no preview. Schema.org JSON-LD can upgrade the card to a richer template. | `title`, `description`, and the first Open Graph image | Link unfurling for your domains through a message extension (`messageHandlers` in the app manifest, answering `composeExtension/queryLink`), or posting cards from a bot or Workflows webhook |
+| Slack | Open Graph and X (Twitter) Card metadata, when no installed app handles the domain ("classic" unfurling) | Open Graph images, `twitter:card`, `title`, `description`, `siteName` | App unfurls: subscribe to `link_shared` for up to five registered domains, then call `chat.unfurl` (`links:read`, `links:write`) |
+| Discord | `og:title`, `og:description`, `og:site_name`, `og:image` with `og:image:width`/`height`/`type`/`alt`, `twitter:card`, and `theme-color` | All of these except `theme-color`; `twitter:card` defaults to `summary_large_image` | Bot or webhook messages with their own embeds |
+
+Platform notes:
+
+- **Teams.** Teams "unfurls a preview of the link into an Adaptive Card" with
+  the page's image, title, and description, and keeps that preview when a page
+  has no supported schema.org micro-capability
+  ([micro-capabilities](https://learn.microsoft.com/en-us/microsoftteams/platform/messaging-extensions/how-to/micro-capabilities-for-website-links)).
+  The website-preview tags and the authentication rule are documented under
+  [Craft your website preview](https://learn.microsoft.com/en-us/microsoftteams/platform/concepts/build-and-test/share-to-teams-from-web-apps#craft-your-website-preview).
+  App-driven [link unfurling](https://learn.microsoft.com/en-us/microsoftteams/platform/messaging-extensions/how-to/link-unfurling)
+  requires a Teams app with a message extension; its results are cached for
+  30 minutes. The `teams` target in `socialImageCompatibility` checks for an
+  absolute HTTPS URL and the PNG, JPEG, or GIF formats Teams documents for
+  card images.
+- **Slack.** Without an app handler for the domain, Slack crawls the URL for
+  Open Graph and X Card metadata; `unfurl_links` and `unfurl_media` on a
+  posted message turn text and media previews off
+  ([Unfurling links in messages](https://docs.slack.dev/messaging/unfurling-links-in-messages/)).
+- **Discord.** Discord documents the tags it reads in
+  [Link Previews](https://docs.discord.com/developers/link-previews/overview).
+  Tags must be in the server-rendered HTML. `twitter:card` set to
+  `summary_large_image`, metaplate's default, shows a large image below the
+  text. Two or more `og:image` tags become a gallery of up to four, so a page
+  with size variants previews as a gallery. Declaring `og:image:width` and
+  `og:image:height` spares a measurement fetch. Images may be PNG, GIF, JPEG,
+  WebP, or AVIF. The accent color comes from
+  `<meta name="theme-color" content="#RRGGBB">`, page markup that metaplate
+  does not emit. Previews are cached for about 30 minutes.
+
+#### Adaptive Cards for bots and webhooks
+
+`socialImageAdaptiveCard(metadata, options)` builds the card that a Teams bot,
+Workflows webhook, or message extension posts. Ordinary link previews do not
+need it. The card declares schema
+`https://adaptivecards.io/schemas/adaptive-card.json` and version `1.6`, the
+highest version Teams supports for bot-sent cards, message extensions, link
+unfurling, and dialogs
+([cards reference](https://learn.microsoft.com/en-us/microsoftteams/platform/task-modules-and-cards/cards/cards-reference#support-for-adaptive-cards)).
+Pass `version` to target an older host; the
+[link unfurling](https://learn.microsoft.com/en-us/microsoftteams/platform/messaging-extensions/how-to/link-unfurling)
+page still lists 1.3 and earlier for unfurl responses. The body is an `Image`
+(`altText` from the image's alt text), a bold title `TextBlock`, an optional
+subtle description `TextBlock`, and an `Action.OpenUrl` to `url`:
+
+```ts
+import {
+  ADAPTIVE_CARD_CONTENT_TYPE,
+  socialImage,
+  socialImageAdaptiveCard,
+  variantImagePath,
+} from "metaplate";
+
+const page = {
+  title: "Release notes",
+  description: "What changed in the latest release.",
+  url: "https://example.com/blog/release-notes",
+};
+// Teams card images must fit 1024x1024; serve a smaller rendering for cards.
+const teamsImage = socialImage("/blog/release-notes", "Release notes card", {
+  type: "image/png",
+  size: { width: 1024, height: 536 },
+  imagePath: variantImagePath("og-image", "teams"),
+});
+const card = socialImageAdaptiveCard({ openGraph: { images: [teamsImage] } }, page);
+
+// Workflows webhook ("When a Teams webhook request is received") body:
+const webhookBody = {
+  type: "message",
+  attachments: [{ contentType: ADAPTIVE_CARD_CONTENT_TYPE, contentUrl: null, content: card }],
+};
+// Bot Framework attachment for context.sendActivity({ attachments: [attachment] }):
+const attachment = { contentType: ADAPTIVE_CARD_CONTENT_TYPE, content: card };
+```
+
+The resulting card:
+
+```json
+{
+  "$schema": "https://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.6",
+  "body": [
+    {
+      "type": "Image",
+      "url": "https://example.com/blog/release-notes/og-image-teams",
+      "altText": "Release notes card",
+      "size": "stretch"
+    },
+    { "type": "TextBlock", "text": "Release notes", "wrap": true, "size": "medium", "weight": "bolder" },
+    { "type": "TextBlock", "text": "What changed in the latest release.", "wrap": true, "isSubtle": true }
+  ],
+  "actions": [
+    { "type": "Action.OpenUrl", "title": "Open", "url": "https://example.com/blog/release-notes" }
+  ]
+}
+```
+
+The builder enforces the limits Teams documents and throws when one is not
+met:
+
+- The image is the first Open Graph image whose declared width and height are
+  at most 1024 pixels. Card images "must be at most 1024 × 1024 pixels and in
+  PNG, JPEG, or GIF format", and animated GIF and SVG are not supported
+  ([inline card images](https://learn.microsoft.com/en-us/microsoftteams/platform/task-modules-and-cards/cards/cards-reference#inline-card-images)).
+  A declared `type` must be `image/png`, `image/jpeg`, or `image/gif`; without
+  one, an `.svg`, `.webp`, or `.avif` path is rejected.
+- The image URL, resolved against `url`, must be credential-free HTTPS. Teams
+  also does not follow redirects for card images, which cannot be checked
+  locally.
+- Pass `fileSize` to check the image's encoded size against the documented
+  limit of less than 1 MB
+  ([card formatting](https://learn.microsoft.com/en-us/microsoftteams/platform/task-modules-and-cards/cards/cards-format)).
+- The serialized card must fit the 28 KB Workflows webhook message limit
+  ([incoming webhooks](https://learn.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/how-to/add-incoming-webhook));
+  bot messages allow 100 KB
+  ([message size limits](https://learn.microsoft.com/en-us/microsoftteams/platform/bots/how-to/format-your-bot-messages#message-size-limits)).
+- `title` and the image's alt text must be non-empty. `actionTitle` sets the
+  button label (default `"Open"`). `TextBlock` text is rendered with the
+  Adaptive Card Markdown subset, so escape Markdown characters that should
+  appear literally.
+
+Office 365 Connectors, including connector-based Incoming Webhooks, were
+retired in May 2026; Teams webhooks are now created with the Workflows app,
+which accepts the same `{ type: "message", attachments: [...] }` body. See
+[`examples/adaptive-card.ts`](examples/adaptive-card.ts). Metaplate makes no
+network calls: posting the card, and keeping the webhook URL secret, stay with
+the caller.
+### Video and audio previews
+
+The [Open Graph protocol](https://ogp.me/#structured) defines `og:video` and
+`og:audio` as optional properties with structured properties: a video has the
+same five as an image (`url`, `secure_url`, `type`, `width`, `height`), and
+audio has only `url`, `secure_url`, and `type`. Pass them as `media`; they are
+copied onto `metadata.openGraph.videos` and `metadata.openGraph.audio`, beside
+the images:
+
+```ts
+import { socialImageMetadata, socialMetaTags } from "metaplate";
+
+const social = socialImageMetadata("/launch", "Launch card", {
+  origin: "https://example.com",
+  media: {
+    videos: [
+      {
+        url: "https://cdn.example.com/trailer.mp4",
+        secureUrl: "https://cdn.example.com/trailer.mp4",
+        type: "video/mp4",
+        width: 1280,
+        height: 720,
+      },
+    ],
+    audio: [{ url: "https://cdn.example.com/theme.mp3", type: "audio/mpeg" }],
+  },
+});
+
+socialMetaTags(social, { url: "https://example.com/launch" });
+```
+
+`socialMetaTags` and `socialMetaHtml` emit them after every `og:image` group
+and before the `twitter:*` tags:
+
+1. For each video, in caller order: `og:video`, `og:video:secure_url`,
+   `og:video:type`, `og:video:width`, `og:video:height`.
+2. Then for each audio item: `og:audio`, `og:audio:secure_url`,
+   `og:audio:type`.
+
+```html
+<meta property="og:image" content="https://example.com/launch/og-image">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Launch card">
+<meta property="og:video" content="https://cdn.example.com/trailer.mp4">
+<meta property="og:video:secure_url" content="https://cdn.example.com/trailer.mp4">
+<meta property="og:video:type" content="video/mp4">
+<meta property="og:video:width" content="1280">
+<meta property="og:video:height" content="720">
+<meta property="og:audio" content="https://cdn.example.com/theme.mp3">
+<meta property="og:audio:type" content="audio/mpeg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://example.com/launch/og-image">
+<meta name="twitter:image:alt" content="Launch card">
+<meta property="og:url" content="https://example.com/launch">
+<meta property="og:type" content="website">
+```
+
+As with images, a missing field emits no tag, a relative `url` is resolved
+against the canonical page `url`, and a group whose resolved URL repeats an
+earlier one of the same kind is dropped. Metadata without `media` emits
+exactly the tags it did before. Validation runs in both `socialImageMetadata`
+and `socialMetaTags`:
+
+- `url` must be non-empty, and an absolute `url` must be a credential-free
+  http(s) URL.
+- `secureUrl` (`secure_url`) must be an absolute, credential-free https URL.
+- `type` must be a media type such as `video/mp4` or `audio/mpeg`.
+- Video `width` and `height` must be integers from 1 to 65535, the same range
+  as image dimensions. Audio has no dimensions.
+
+Plates accept the same option per call, for the default size and for a
+variant: `plate.metadata(route, copy, { media: { videos, audio } })`.
+
+**Next.js.** The descriptor fields match Next's
+[`openGraph.videos` and `openGraph.audio`](https://nextjs.org/docs/app/api-reference/functions/generate-metadata#opengraph)
+(`url`, `secureUrl`, `type`, `width`, `height`), so `openGraph: social.openGraph`
+passes them through unchanged, and Next renders the same tag order. Next
+resolves only images against `metadataBase` and documents video and audio URLs
+as "Must be an absolute URL", so `metaplate/next`'s `metadata()` rejects a
+relative video or audio URL instead of emitting one a crawler cannot follow.
+[`examples/og-media.ts`](examples/og-media.ts) shows both paths.
+
+**Where they render.** Open Graph defines the tags; it does not promise any
+client plays them. Meta's [sharing guide](https://developers.facebook.com/docs/sharing/webmasters)
+documents `og:video` and its structured properties, asks for secure URLs in
+both `og:video:url` and `og:video:secure_url`, and notes that a video "is not
+guaranteed to play in-line". That guide does not document `og:audio`. X Cards
+describe video with their own Player Card (`twitter:player`), which `media`
+does not emit. Metaplate makes no rendering claim for other platforms; check
+each one's debugger after deployment.
+### Schema.org image metadata
+
+`socialImageJsonLd` describes the same Open Graph images as a
+[schema.org `ImageObject`](https://schema.org/ImageObject) in JSON-LD, the
+form Google's
+[image metadata guidance](https://developers.google.com/search/docs/appearance/structured-data/image-license-metadata)
+reads for credit and licensing in Google Images. Google requires
+`contentUrl` and at least one of `creator`, `creditText`, `copyrightNotice`,
+or `license`; the image fields come from the metadata, so pass the licensing
+fields as options. `socialImageJsonLdScript` renders the result as a
+`<script type="application/ld+json">` element:
+
+```ts
+import { socialImageJsonLdScript, socialImageMetadata } from "metaplate";
+
+const social = socialImageMetadata("/blog/launch", "Launch card", { type: "image/png" });
+const imageLicense = {
+  url: "https://example.com/blog/launch",
+  creditText: "Example",
+  license: "/image-license",
+};
+
+// Plain HTML: put the element anywhere in <head> or <body>.
+const jsonLd = socialImageJsonLdScript(social, imageLicense);
+```
+
+The script's payload, formatted:
+
+```json
+{
+  "@context": "https://schema.org",
+  "@type": "ImageObject",
+  "contentUrl": "https://example.com/blog/launch/og-image",
+  "url": "https://example.com/blog/launch/og-image",
+  "caption": "Launch card",
+  "encodingFormat": "image/png",
+  "width": { "@type": "QuantitativeValue", "value": 1200, "unitCode": "E37" },
+  "height": { "@type": "QuantitativeValue", "value": 630, "unitCode": "E37" },
+  "creditText": "Example",
+  "license": "https://example.com/image-license"
+}
+```
+
+With one distinct image the result is that single node. With several, such
+as size variants, it is `{ "@context": "https://schema.org", "@graph": [...] }`
+with one `ImageObject` per image in metadata order; a later image whose
+resolved URL repeats an earlier one is dropped, as in `socialMetaTags`. Only
+`openGraph.images` is read. Each node's keys appear in a fixed order:
+`@type`, `contentUrl`, `url`, `name`, `caption`, `encodingFormat`, `width`,
+`height`, `representativeOfPage`, `creditText`, `creator`, `copyrightNotice`,
+`license`, `acquireLicensePage`. A field whose value is undefined or empty is
+left out.
+
+- `contentUrl` and `url` are both the image URL. Google prefers `contentUrl`
+  and also accepts `url`.
+- `caption` is the image's alt text and `encodingFormat` its media type.
+- `width` and `height` are `QuantitativeValue`s in pixels (UN/CEFACT unit
+  code `E37`). schema.org expects `Distance` or `QuantitativeValue` there,
+  and Google's guidance does not use either property, so there is no
+  Google-documented form; a bare number matches neither schema.org type, and
+  `QuantitativeValue` is the conforming form that names the unit.
+- `name`, `creditText`, `creator` (`{ "@type": "Person" | "Organization",
+  name, url? }`), `copyrightNotice`, `license`, `acquireLicensePage`, and
+  `representativeOfPage` come from the options and are copied onto every
+  node, because Google reads licensing per image.
+
+`url` is the canonical page URL, validated exactly as for `socialMetaTags`.
+When it is supplied, relative image URLs and the URL-valued options
+(`license`, `acquireLicensePage`, `creator.url`) resolve against it; absolute
+URLs are never rewritten. Without it, URLs are emitted as given. The page URL
+itself is not emitted.
+
+`socialImageJsonLdScript` serializes with `JSON.stringify` and then escapes
+`<`, `>`, `&`, U+2028, and U+2029 as `\u003c`, `\u003e`, `\u0026`, `\u2028`,
+and `\u2029`. JSON allows those characters only inside strings, where the
+escape decodes to the same character, so `JSON.parse` of the payload returns
+the original values. The payload contains no `<`, so no caption, credit, or
+URL can close the element, open another, or start an HTML comment: the only
+`</script` in the output is its own closing tag. `serializeJsonLd` applies
+the same escaping to any value.
+
+In Next.js, render the JSON-LD as a native `<script>` in `page.tsx` or
+`layout.tsx`, as
+[Next's JSON-LD guide](https://nextjs.org/docs/app/guides/json-ld)
+recommends. `serializeJsonLd` stands in for the guide's
+`JSON.stringify(jsonLd).replace(/</g, "\u003c")`:
+
+```tsx
+import { serializeJsonLd, socialImageJsonLd, socialImageMetadata } from "metaplate";
+
+const social = socialImageMetadata("/blog/launch", "Launch card", { type: "image/png" });
+
+export default function Page() {
+  const jsonLd = socialImageJsonLd(social, {
+    url: "https://example.com/blog/launch",
+    creditText: "Example",
+    license: "/image-license",
+  });
+  return (
+    <section>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
+      />
+      {/* ... */}
+    </section>
+  );
+}
+```
+
+[`examples/json-ld.ts`](examples/json-ld.ts) type-checks both forms.
 
 ### Next.js static export and `basePath`
 

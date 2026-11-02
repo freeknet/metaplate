@@ -1,5 +1,6 @@
 import { MAX_IMAGE_DIMENSION, type XCard } from "./core.js";
 import { xCardTags, type XAppCard, type XPlayerCard } from "./x-cards.js";
+import { openGraphMediaTags, type SocialMetaMediaInput } from "./og-media.js";
 
 /**
  * One `<meta>` tag as a plain object. Open Graph tags carry `property`, X Card
@@ -29,7 +30,9 @@ export type SocialMetaImageInput = {
  * metadata, and an omitted channel emits no tags.
  */
 export type SocialMetaInput = {
-  openGraph?: { images?: readonly SocialMetaImageInput[] | undefined } | undefined;
+  openGraph?:
+    | ({ images?: readonly SocialMetaImageInput[] | undefined } & SocialMetaMediaInput)
+    | undefined;
   twitter?:
     | {
         card?: XCard | undefined;
@@ -87,11 +90,11 @@ export type SocialMetaHtmlOptions = SocialMetaOptions & {
 const TAG_KEY = /^(?:og|twitter)(?::[a-z]+(?:_[a-z]+)*)+$/;
 const INDENT = /^[ \t]*$/;
 
-function present(value: string | undefined): value is string {
+export function present(value: string | undefined): value is string {
   return value !== undefined && value !== "";
 }
 
-function dimension(value: number, axis: string): string {
+export function dimension(value: number, axis: string): string {
   if (!Number.isInteger(value) || value < 1 || value > MAX_IMAGE_DIMENSION) {
     throw new Error(
       `Invalid size: ${axis} must be an integer from 1 to ${MAX_IMAGE_DIMENSION}; received ${value}`,
@@ -110,7 +113,7 @@ function isAbsoluteUrl(value: string): boolean {
 }
 
 /** Parses the canonical URL, accepting only credential-free http(s) URLs. */
-function canonicalBase(url: string): URL {
+export function canonicalBase(url: string): URL {
   let parsed: URL | undefined;
   try {
     parsed = new URL(url);
@@ -126,7 +129,7 @@ function canonicalBase(url: string): URL {
   return parsed;
 }
 
-function imageUrl(image: SocialMetaImageInput, base: URL | undefined, label: string): string {
+export function imageUrl(image: SocialMetaImageInput, base: URL | undefined, label: string): string {
   if (!image.url) throw new Error(`${label} image URL must not be empty`);
   if (!base || isAbsoluteUrl(image.url)) return image.url;
   return new URL(image.url, base).href;
@@ -200,6 +203,10 @@ function pageTags(options: SocialMetaOptions): SocialMetaTag[] {
  *    `og:image:height`, `og:image:type`, `og:image:alt`. Repeating the group
  *    is how Open Graph expresses multiple images; a group whose URL repeats an
  *    earlier one is dropped.
+ *    Then each Open Graph video (`og:video`, `og:video:secure_url`,
+ *    `og:video:type`, `og:video:width`, `og:video:height`) and each audio
+ *    item (`og:audio`, `og:audio:secure_url`, `og:audio:type`), resolved and
+ *    deduplicated by URL like images; see `openGraphMediaTags`.
  * 2. `twitter:card`, `twitter:image`, `twitter:image:alt`, `twitter:site`,
  *    `twitter:site:id`, `twitter:creator`, `twitter:creator:id`, then the
  *    card-specific tags: for `player`, `twitter:description`,
@@ -218,8 +225,9 @@ function pageTags(options: SocialMetaOptions): SocialMetaTag[] {
  *
  * @throws When `options.url` is not an absolute, credential-free http(s) URL,
  *   when an image URL is empty, when a dimension is not an integer from 1
- *   to 65535, or when a player or app payload is missing, mismatched with its
- *   card, or invalid (see `xCardFields`).
+ *   to 65535, when a video or audio item fails the `openGraphMedia` checks,
+ *   or when a player or app payload is missing, mismatched with its card, or
+ *   invalid (see `xCardFields`).
  */
 export function socialMetaTags(
   metadata: SocialMetaInput,
@@ -228,6 +236,8 @@ export function socialMetaTags(
   const base = present(options.url) ? canonicalBase(options.url) : undefined;
   return [
     ...openGraphImageTags(metadata.openGraph?.images ?? [], base),
+    // Open Graph video and audio groups (src/og-media.ts).
+    ...openGraphMediaTags(metadata.openGraph, base),
     ...(metadata.twitter ? twitterTags(metadata.twitter, base) : []),
     ...pageTags(options),
   ];

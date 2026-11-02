@@ -1,5 +1,6 @@
 import { OG_CONTENT_TYPE } from "./core.js";
 import { detectFormat, imageContentType, type ImageFormat, type OutputFormat } from "./image.js";
+import { isMediaType } from "./og-media.js";
 import { createPlateSocial } from "./plate.js";
 import type { SvgOgDefinition } from "./render.js";
 import { createSvgPlate, type SatoriRender } from "./svg-plate.js";
@@ -149,7 +150,7 @@ function outputContentType(output: OutputEncoder | undefined): string {
 }
 
 function assertMediaType(value: string): void {
-  if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+\/[!#$%&'*+.^_`|~0-9A-Za-z-]+(?:\s*;\s*[!#$%&'*+.^_`|~0-9A-Za-z-]+=(?:[!#$%&'*+.^_`|~0-9A-Za-z-]+|"[^"\\\r\n]*"))*$/.test(value)) {
+  if (!isMediaType(value)) {
     throw new TypeError(`Invalid output contentType: ${value}`);
   }
 }
