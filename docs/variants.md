@@ -54,7 +54,7 @@ checked only at runtime.
 `og.variant("square")` is the same plate bound to that size. It has the whole
 plate surface (`size`, `render`, `renderSvg`, `renderPixels`, `response`,
 `handler`, `handlerFrom`, `fetchable`, `fetchableFrom`, `artifact`, `image`,
-`metadata`, `contentType`) and renders, encodes with the plate's `output`
+`metadata`, `sitePath`, `contentType`) and renders, encodes with the plate's `output`
 encoder if one is set, and serves only the square size. `og.variants` lists the
 declared names in order, and `variantName` tells a view which size it is.
 
@@ -105,7 +105,8 @@ copy-bound `handler`: serve each size through its view's `fetchable`,
 Next route form above works with the `next/og` renderer too. For Next's
 `opengraph-image` convention, write one metadata file per size and re-export
 the view's `size` and `contentType`; Metaplate does not wrap
-`generateImageMetadata`. A build script writes one file per view:
+`generateImageMetadata`. A build script writes one file per view, or
+[`metaplate render`](render-cli.md) writes every view of every page for you:
 
 ```ts
 for (const view of [og, ...og.variants.map((name) => og.variant(name))]) {

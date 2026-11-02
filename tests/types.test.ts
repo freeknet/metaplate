@@ -4,7 +4,13 @@ import type { SatoriOptions as UpstreamSatoriOptions } from "satori";
 import type { ReactElement } from "react";
 import type { Metadata } from "next";
 import { createNextOg, nextTwitterMetadata, type NextOgDefinition } from "../src/next.js";
-import { createNodeOg, type NodeOgDefinition, type ResvgRenderOptions } from "../src/node.js";
+import {
+  createNodeOg,
+  type NodeOgDefinition,
+  type RenderJob,
+  type RenderModule,
+  type ResvgRenderOptions,
+} from "../src/node.js";
 import {
   createSvgOg,
   type PlateContext,
@@ -117,6 +123,24 @@ export function variantNamesAreChecked() {
   // @ts-expect-error -- the X Card variant must be declared too.
   inferred.metadata("/", { title: "t" }, { twitter: { variant: "story" } });
   explicit.variant("any-name");
+}
+
+// A render job is checked against its plate's copy, for every size; a
+// renderer that cannot produce artifacts is not a renderable plate.
+export function renderJobsAreChecked() {
+  const plate = createNodeOg<Copy, "square">({
+    ...legacySvg,
+    variants: { square: { size: { width: 1080, height: 1080 } } },
+  });
+  const job = { plate, pages: [{ copy: { title: "t" } }] } satisfies RenderJob<Copy>;
+  const square = { plate: plate.variant("square"), pages: [{ route: "/a", copy: { title: "t" } }] } satisfies RenderJob<Copy>;
+  const module: RenderModule = async () => [job, square];
+  // @ts-expect-error -- the copy must match the plate's.
+  const wrongCopy: RenderJob<Copy> = { plate, pages: [{ copy: { heading: "t" } }] };
+  const svg = createSvgOg<Copy>({ ...legacySvg });
+  // @ts-expect-error -- an SVG-only plate has no artifact().
+  const svgJob: RenderJob<Copy> = { plate: svg, pages: [{ copy: { title: "t" } }] };
+  return [module, wrongCopy, svgJob];
 }
 
 // X player and app cards are discriminated by `card`: each requires its own

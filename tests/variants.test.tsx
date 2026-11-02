@@ -391,3 +391,31 @@ it("keeps single-size metadata byte-for-byte identical to 0.8.0", () => {
   const baseline = fixture("single-size-metadata-0.8.0.json").toString("utf8").replace(/\r\n/g, "\n").trimEnd();
   expect(JSON.stringify(actual, null, 2)).toBe(baseline);
 });
+
+describe("sitePath", () => {
+  it("names each size's file relative to the deployment root on every adapter", () => {
+    const shared = {
+      alt: (copy: Copy) => copy.title,
+      imagePath: "cards/og.png",
+      basePath: "/project",
+      origin: "https://example.com",
+      variants: { square: { size: SQUARE }, story: { size: STORY, imagePath: "story.png" } },
+    };
+    const plates = [
+      createNodeOg<Copy, "square" | "story">({ ...shared, fonts: inter, component: reflowingCard }),
+      createSvgOg<Copy, "square" | "story">({ ...shared, fonts: inter, component: reflowingCard }),
+      createNextOg<Copy, "square" | "story">({ ...shared, component: reflowingCard }),
+    ];
+    for (const plate of plates) {
+      expect(plate.sitePath("/")).toBe("cards/og.png");
+      expect(plate.sitePath("/docs/guide/")).toBe("docs/guide/cards/og.png");
+      expect(plate.variant("square").sitePath("/docs")).toBe("docs/cards/og-square.png");
+      expect(plate.variant("story").sitePath("/docs")).toBe("docs/story.png");
+      // The metadata URL is the site path under basePath and origin.
+      expect(plate.image("/docs", { title: "Docs" }).url).toBe(
+        `https://example.com/project/${plate.sitePath("/docs")}`,
+      );
+      expect(() => plate.sitePath("/docs/../admin")).toThrow('"." or ".." segments');
+    }
+  });
+});

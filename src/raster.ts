@@ -309,6 +309,8 @@ export function createRasterPlate<Copy, Variant extends string = string>(
       size,
       image: socialView.image,
       metadata: socialView.metadata,
+      /** The image path relative to the deployment root, without `basePath` or `origin`. */
+      sitePath: socialView.sitePath,
       renderSvg: svgView.renderSvg,
       contentType,
       render,

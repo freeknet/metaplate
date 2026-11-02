@@ -6,8 +6,8 @@ brand. Choose the route that matches the entry point you use.
 ## Runtime decision tree
 
 1. **Can the image be generated during the build?** Render it into the site's
-   public/output directory and deploy the resulting `.png` or `.jpg` as a
-   static file. This is the most portable route and works on Netlify, GitHub
+   public/output directory, with [`metaplate render`](render-cli.md) or a build
+   script, and deploy the resulting `.png` or `.jpg` as a static file. This is the most portable route and works on Netlify, GitHub
    Pages, and CDN/static hosting.
 2. **Does the provider run standard Node.js, Bun, or Deno?** Use
    `metaplate/node` with a Web `Response` handler, a provider function, or raw
@@ -30,7 +30,7 @@ into an image or asset element; allowlist remote assets or keep them local.
 
 | Deployment shape | API | Runtime | Recommended output | Support status |
 | --- | --- | --- | --- | --- |
-| Static site/CDN | `render()` or `renderSvg()` in a build script | Node at build time only | `public/og-image.png` or `.jpg` | Supported |
+| Static site/CDN | [`metaplate render`](render-cli.md), or `render()` / `renderSvg()` in a build script | Node at build time only | `public/og-image.png` or `.jpg` | Supported |
 | Vercel Function | `handler()` / `handlerFrom()` or `response()` | Vercel Node.js runtime | `/api/og` or framework route | Hosted-certified on a dated Vercel production deployment (2026-11-01, Node.js runtime); Next.js 16.4.3 on Vercel likewise |
 | Netlify Function | `handler()` / `handlerFrom()` or `response()` | Netlify Node.js Function | Function path or custom path | Hosted-certified on a dated Netlify production deployment (2026-11-01, Functions Node.js runtime `nodejs24.x`); generated framework functions use project settings |
 | Deno Deploy | `metaplate/edge` or `metaplate/node`, both `fetchableFrom()` | Deno Deploy, built from GitHub | App route | Hosted-certified on a dated Deno Deploy production build (2026-11-01), both renderers |
@@ -45,7 +45,14 @@ into an image or asset element; allowlist remote assets or keep them local.
 
 Create the image during the provider's build, write it to the published output,
 and point metadata at the resulting file. Use a real filename extension so static
-hosts infer `Content-Type` correctly:
+hosts infer `Content-Type` correctly.
+
+For more than one card, or any plate with size variants, use
+[`metaplate render`](render-cli.md) as the build step: it writes every page at
+every size to the path the plate's metadata URL names (without `basePath`, so
+the output can be published under a project-site prefix), verifies each file on
+disk, writes a manifest with each file's SHA-256, and exits non-zero on any
+failure. A single card needs no more than a script like this one:
 
 ```ts
 // scripts/build-og.ts

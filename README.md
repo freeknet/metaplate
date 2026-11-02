@@ -23,6 +23,7 @@ It works with plain Node, static build scripts, Next.js, Astro, React Router, Sv
 - [Quick start](#quick-start)
 - [Guides](#guides)
   - [Rendering and routes](#rendering-and-routes)
+  - [Static files with `metaplate render`](#static-files-with-metaplate-render)
   - [Framework and runtime support](#framework-and-runtime-support)
   - [Edge runtimes](#edge-runtimes)
   - [Next.js](#nextjs)
@@ -136,6 +137,19 @@ into Fetch-based routes in Next.js, Astro, React Router, and SvelteKit, and
 `render` feeds Express or a build script. Plates are Satori layouts, not DOM,
 so read the plate constraints before designing one.
 [Rendering guide](docs/rendering.md)
+
+### Static files with `metaplate render`
+
+`metaplate render` renders a whole site's cards for static hosting. It loads a
+module whose default export is `{ plate, pages: [{ route, copy }] }`, writes
+every page at every size to the path its metadata URL names, verifies each
+file, and records them in a checksummed manifest.
+
+```sh
+npx metaplate render og.render.mjs --out public
+```
+
+[Render CLI guide](docs/render-cli.md)
 
 ### Framework and runtime support
 
