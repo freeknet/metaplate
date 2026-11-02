@@ -12,6 +12,7 @@ export default defineConfig({
     emoji: "src/emoji.ts",
     png: "src/png.ts",
     image: "src/image.ts",
+    assets: "src/assets.ts",
     cli: "src/cli.ts",
   },
   format: ["esm"],

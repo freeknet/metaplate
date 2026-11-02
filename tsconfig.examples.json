@@ -16,7 +16,8 @@
       "metaplate/edge": ["./src/edge.ts"],
       "metaplate/font-data": ["./src/font-data.ts"],
       "metaplate/png": ["./src/png.ts"],
-      "metaplate/image": ["./src/image.ts"]
+      "metaplate/image": ["./src/image.ts"],
+      "metaplate/assets": ["./src/assets.ts"]
     }
   },
   "include": ["examples"],

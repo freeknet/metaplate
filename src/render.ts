@@ -1,7 +1,7 @@
 import type { ImageSize } from "./core.js";
 import type { EmojiLoader } from "./emoji.js";
 import { assertRenderGuards, type RenderGuards } from "./guards.js";
-import type { PlateContext, PlateVariants, PlateVersioning } from "./plate.js";
+import type { PlateContext, PlateElement, PlateVariants, PlateVersioning } from "./plate.js";
 import { loadSatori } from "./peers.js";
 import { createSvgPlate } from "./svg-plate.js";
 
@@ -101,6 +101,7 @@ export type SatoriNode =
 
 export type {
   PlateContext,
+  PlateElement,
   PlateMetadataOptions,
   PlateUrlOptions,
   PlateVariant,
@@ -113,9 +114,12 @@ export type SvgOgDefinition<Copy, Variant extends string = string> = {
   /**
    * Satori-compatible JSX or a plain `{ type, props }` object tree. The
    * second argument names the variant and size being rendered so the layout
-   * can reflow; a single-argument component ignores it.
+   * can reflow; a single-argument component ignores it. An `async`
+   * component may load per-page data first, such as an avatar through
+   * `remoteImageLoader` from `metaplate/assets`; a synchronous one renders
+   * without an extra await.
    */
-  component: (copy: Copy, context: PlateContext<Variant>) => SatoriNode;
+  component: (copy: Copy, context: PlateContext<Variant>) => PlateElement<SatoriNode>;
   alt: (copy: Copy) => string;
   /** Satori does not bundle a default font, so at least one face is required. */
   fonts: StandaloneFontLoader;

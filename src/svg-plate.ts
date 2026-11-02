@@ -1,11 +1,16 @@
 import {
+  createPlateSocial,
+  createPlateViews,
+  isPendingElement,
+  type PlateContext,
+} from "./plate.js";
+import {
   GuardReport,
   guardAssetLoader,
   guardLevel,
   overflowDetector,
   type GuardTarget,
 } from "./guards.js";
-import { createPlateSocial, createPlateViews, type PlateContext } from "./plate.js";
 import type { SatoriOptions, SvgOgDefinition } from "./render.js";
 
 export const SVG_CONTENT_TYPE = "image/svg+xml" as const;
@@ -49,6 +54,8 @@ async function renderSvg<Copy, Variant extends string>(
   if (fonts.length === 0) {
     throw new Error("Standalone Metaplate renderers require at least one font");
   }
+  const rendered = definition.component(copy, context);
+  const element = isPendingElement(rendered) ? await rendered : rendered;
 
   // SatoriNode is structurally what Satori walks; its own declarations type
   // the parameter as React's ReactNode, and its FontOptions narrow the font
@@ -59,7 +66,7 @@ async function renderSvg<Copy, Variant extends string>(
   const report = new GuardReport(definition.guards);
   const target: GuardTarget = { variant: context.variant, size: context.size };
   const svg = await satori(
-    definition.component(copy, context) as Parameters<typeof satori>[0],
+    element as Parameters<typeof satori>[0],
     {
       ...(satoriOptions(definition, report, target) as unknown as Parameters<typeof satori>[1]),
       width: context.size.width,

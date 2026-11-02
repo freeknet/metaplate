@@ -7,7 +7,7 @@ import { build as esbuild } from "esbuild";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { emojiLoader, twemojiName } from "../src/emoji.js";
 import { fontLoader } from "../src/font-data.js";
-import { imageDimensions, verifyImage } from "../src/image.js";
+import { imageAssetLoader, imageDimensions, verifyImage } from "../src/image.js";
 import { createNodeOg } from "../src/node.js";
 
 // Edge runtimes cannot read node_modules, so the entry takes Wasm and font
@@ -113,7 +113,51 @@ it(
     }
     expect(red).toBeGreaterThan(1000);
     expect(requested.sort()).toEqual(["1f44b-1f3fd", "1fae8"]);
-    expect(readFileSync(path.join(root, "src", "emoji.ts"), "utf8")).not.toMatch(/^import /m);
+    for (const file of ["emoji.ts", "bytes.ts"]) {
+      expect(readFileSync(path.join(root, "src", file), "utf8")).not.toMatch(/^import .*["']node:/m);
+    }
+  },
+  30_000,
+);
+
+// An edge function reads its logo from its own origin; here the "origin" is a
+// Response built in memory, loaded once by the runtime-neutral loader.
+it(
+  "draws an imageAsset from an async component with @resvg/resvg-wasm",
+  async () => {
+    const { createEdgeOg } = await edgeEntry();
+    let fetches = 0;
+    const logo = imageAssetLoader(() => {
+      fetches += 1;
+      return new Response(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2 1"><rect width="2" height="1" fill="#ff0000"/></svg>',
+      );
+    });
+    const plate = createEdgeOg({
+      ...definition,
+      ...wasm,
+      size: { width: 120, height: 60 },
+      component: async () => {
+        const { src } = await logo();
+        return {
+          type: "div",
+          props: {
+            style: { display: "flex", width: "100%", height: "100%" },
+            children: { type: "img", props: { src, width: 120, height: 60 } },
+          },
+        };
+      },
+    });
+
+    for (let render = 0; render < 2; render += 1) {
+      const { pixels } = await plate.renderPixels({ title: "unused" });
+      let red = 0;
+      for (let offset = 0; offset < pixels.length; offset += 4) {
+        if (pixels[offset]! > 200 && pixels[offset + 1]! < 50 && pixels[offset + 3]! > 200) red += 1;
+      }
+      expect(red / (pixels.length / 4)).toBeGreaterThan(0.95);
+    }
+    expect(fetches).toBe(1);
   },
   30_000,
 );

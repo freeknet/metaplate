@@ -292,7 +292,11 @@ every route is in [`deployment-evidence.json`](deployment-evidence.json).
   installed-package reader, `packageEmojiLoader`, is in `metaplate/fonts`.
 - `metaplate/png` — PNG header inspection and dimension verification. No peers.
 - `metaplate/image` — dimension and structural verification for SVG, PNG,
-  JPEG, WebP, and GIF. No peers.
+  JPEG, WebP, and GIF, and `imageAsset`/`imageAssetLoader` for embedding
+  checked image bytes in a plate. No peers or Node built-ins.
+- `metaplate/assets` — Node readers for plate images: project files
+  (`readImageAsset`, `fileImageLoader`) and remote images fetched only
+  from allowlisted origins (`remoteImageLoader`). No renderer peers.
 
 ## License
 
