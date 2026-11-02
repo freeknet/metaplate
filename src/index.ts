@@ -93,3 +93,12 @@ export {
   type SocialImageJsonLdOptions,
   type SocialImageObject,
 } from "./json-ld.js";
+export {
+  MIN_IMAGE_SIGNING_SECRET_BYTES,
+  signImagePath,
+  verifyImageSignature,
+  type ImageSignatureVerification,
+  type ImageSigningKeys,
+  type ImageSigningSecret,
+  type ImageSigningSecrets,
+} from "./signing.js";

@@ -26,4 +26,5 @@ and component complexity, use stable path params rather than arbitrary query
 strings, set an explicit cache policy, and apply deployment-level concurrency
 and timeout limits. Never pass a request-controlled remote image URL into a
 Satori component: allowlist asset origins so server-side rendering cannot be
-used to reach private or link-local services.
+used to reach private or link-local services. To refuse URLs your pages did
+not emit, sign them; see [Signed image routes](signed-routes.md).

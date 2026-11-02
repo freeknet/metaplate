@@ -7,6 +7,19 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Added
 
+- Signed image routes. `signImagePath` and `verifyImageSignature` (from
+  `metaplate`) insert and check an HMAC-SHA-256 signature of the URL's
+  pathname as one 43-character base64url path segment before the file name,
+  through Web Crypto only, so they run in Node 20+, Deno, and
+  `metaplate/edge`. Secrets must be at least 32 bytes; pass several, newest
+  first, to rotate. Plates from `metaplate/node`, `metaplate/edge`, and
+  `metaplate/next`, and their variants, gain `signedMetadata(route, copy,
+  keys, options?)`, which signs every Open Graph and X Card image URL, and
+  `handlerFrom` and `fetchableFrom` take `{ signed: { secret | secrets,
+  status?, url? } }`, which answers a missing or invalid signature with 403
+  (or 404) and `Cache-Control: no-store` before the resolver or renderer
+  runs. Unsigned routes are unchanged. See
+  [`docs/signed-routes.md`](docs/signed-routes.md).
 - `metaplate render <module>` renders static social images as a build step.
   The module's default export is `{ plate, pages: [{ route?, copy }] }`, an
   array of those, or a function returning either; a `createNodeOg` or

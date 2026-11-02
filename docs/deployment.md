@@ -25,6 +25,8 @@ Generated responses are buffered and rendering is CPU/memory intensive. For
 public dynamic routes, bound route text, use stable path keys, set cache headers,
 and configure provider timeouts/concurrency. Never pass an arbitrary request URL
 into an image or asset element; allowlist remote assets or keep them local.
+[Signed image routes](signed-routes.md) make a dynamic route render only the
+URLs your pages emitted.
 
 ## Deployment matrix
 

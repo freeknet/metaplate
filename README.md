@@ -24,6 +24,7 @@ It works with plain Node, static build scripts, Next.js, Astro, React Router, Sv
 - [Guides](#guides)
   - [Rendering and routes](#rendering-and-routes)
   - [Static files with `metaplate render`](#static-files-with-metaplate-render)
+  - [Signed image routes](#signed-image-routes)
   - [Framework and runtime support](#framework-and-runtime-support)
   - [Edge runtimes](#edge-runtimes)
   - [Next.js](#nextjs)
@@ -150,6 +151,17 @@ npx metaplate render og.render.mjs --out public
 ```
 
 [Render CLI guide](docs/render-cli.md)
+
+### Signed image routes
+
+A dynamic image route can refuse every URL your pages did not emit.
+`plate.signedMetadata(route, copy, { secret })` signs each image URL with
+HMAC-SHA-256 as an extra path segment, and
+`plate.handlerFrom(resolve, { signed: { secret } })` answers an unsigned or
+tampered path with 403 before resolving copy or rendering. It runs on Web
+Crypto in Node and on the edge, supports secret rotation, and is opt-in;
+static files need none of it.
+[Signed routes guide](docs/signed-routes.md)
 
 ### Framework and runtime support
 
