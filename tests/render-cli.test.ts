@@ -12,6 +12,7 @@ import {
 } from "../src/cli-args.js";
 import { fontsourceFontLoader } from "../src/fonts.js";
 import { verifyImage } from "../src/image.js";
+import { socialImageVersion } from "../src/index.js";
 import { createNodeOg } from "../src/node.js";
 import { createSvgOg } from "../src/render.js";
 import {
@@ -57,7 +58,7 @@ function card(copy: Copy) {
   };
 }
 
-function nodePlate(options: { basePath?: string; origin?: string } = {}) {
+function nodePlate(options: { basePath?: string; origin?: string; version?: "copy" } = {}) {
   return createNodeOg<Copy, "square">({
     alt: (copy) => copy.title,
     fonts: inter,
@@ -178,6 +179,17 @@ describe("render module contract", () => {
     [{ plate: { ...fakePlate(), variants: "square" }, pages: [page] }, "job.plate.variants must be an array"],
   ])("rejects %j", async (exported, message) => {
     await expect(resolveRenderJobs(exported)).rejects.toThrow(`Invalid render module: ${message}`);
+  });
+
+  it("keeps a page's version and refuses one that is not a valid token", async () => {
+    const [job] = await resolveRenderJobs({ plate: fakePlate(), pages: [{ route: "/a", copy: {}, version: "r2" }] });
+    expect(job!.pages).toEqual([{ route: "/a", copy: {}, version: "r2" }]);
+    await expect(resolveRenderJobs({ plate: fakePlate(), pages: [{ copy: {}, version: "a&b" }] })).rejects.toThrow(
+      "Invalid render module: job.pages[0].version: Invalid version",
+    );
+    await expect(resolveRenderJobs({ plate: fakePlate(), pages: [{ copy: {}, version: 2 }] })).rejects.toThrow(
+      "Invalid render module: job.pages[0].version: Invalid version",
+    );
   });
 
   it("names the plate factories when given a plate that cannot produce artifacts", async () => {
@@ -305,6 +317,24 @@ describe("renderFiles", { timeout: 30_000 }, () => {
       ]);
       expect(image.inputHash).toMatch(/^[0-9a-f]{64}$/);
     }
+  });
+
+  it("publishes versioned URLs in the manifest while writing unversioned paths", async () => {
+    const out = await temporary("versioned");
+    const plate = nodePlate({ basePath: "/project", version: "copy" }).variant("square");
+    const home = { title: "Home" };
+    const images = planImages([{
+      plate: plate as RenderablePlate<Copy> as RenderablePlate<unknown>,
+      pages: [{ copy: home }, { route: "/posts/hello", copy: { title: "Hello" }, version: "release-2" }],
+    }], out);
+    const outcomes = await renderFiles(images, { outDir: out, concurrency: 2 });
+
+    expect(outcomes.every((outcome) => outcome.valid)).toBe(true);
+    expect(renderManifest(outcomes as ManifestImage[]).images.map(({ path: file, url }) => ({ file, url }))).toEqual([
+      { file: "og-image-square.png", url: `/project/og-image-square.png?v=${socialImageVersion(home)}` },
+      { file: "posts/hello/og-image-square.png", url: "/project/posts/hello/og-image-square.png?v=release-2" },
+    ]);
+    expect(existsSync(path.join(out, "posts", "hello", "og-image-square.png"))).toBe(true);
   });
 
   it("writes an encoder's bytes and records an unrecognizable format as unverified", async () => {
@@ -582,7 +612,7 @@ export default {
 
     const usage = runCli(bundlePath, ["render"], cwd);
     expect(usage.status).toBe(1);
-    expect(usage.stderr).toBe(`${RENDER_USAGE}\n${RENDER_USAGE}\n`);
+    expect(usage.stderr).toBe(`${RENDER_USAGE}\n`);
   });
 
   it("explains how to load JSX instead of failing on the extension", async () => {
@@ -847,6 +877,27 @@ describe("renderFiles with a previous manifest", () => {
     expect(counter.renders).toBe(2);
     const restored = await readFile(path.join(out, "b", "og-image.png"));
     expect(sha256(restored)).toBe(previous.get("b/og-image.png")!.sha256);
+  });
+
+  it("records a reused image under the same versioned URL a render would publish", { timeout: 30_000 }, async () => {
+    const out = await temporary("reuse-versioned");
+    const og = createNodeOg<Copy>({
+      alt: (copy) => copy.title,
+      fonts: inter,
+      imagePath: "og-image.png",
+      component: card,
+      origin: "https://example.com",
+      version: "copy",
+      revision: "1",
+    }) as RenderablePlate<Copy> as RenderablePlate<unknown>;
+    const pages = [{ route: "/derived", copy: { title: "A" } }, { route: "/pinned", copy: { title: "B" }, version: "rel-7" }];
+    const first = await renderFiles(planImages([{ plate: og, pages }], out), { outDir: out, concurrency: 2 });
+    const previous = new Map((first as ManifestImage[]).map((image) => [image.path, image]));
+    const second = await renderFiles(planImages([{ plate: og, pages }], out), { outDir: out, concurrency: 2, previous });
+    expect(second.map((outcome) => outcome.valid && outcome.reused)).toEqual([true, true]);
+    expect(second.map((outcome) => outcome.valid && outcome.url)).toEqual((first as ManifestImage[]).map((image) => image.url));
+    expect((second[0] as ManifestImage).url).toMatch(/^https:\/\/example\.com\/derived\/og-image\.png\?v=[0-9a-f]{8}$/);
+    expect((second[1] as ManifestImage).url).toBe("https://example.com/pinned/og-image.png?v=rel-7");
   });
 
   it("never reuses for a plate without a fingerprint", async () => {

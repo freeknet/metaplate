@@ -28,7 +28,7 @@ const keys = (tags: SocialMetaTag[]) => tags.map(keyOf);
 
 /** Strict parse of one emitted line: two attributes, escaped content only. */
 const META_LINE =
-  /^([ \t]*)<meta (property|name)="([a-z_:]+)" content="((?:[^"'<>&\r\n]|&(?:amp|lt|gt|quot|#39|#10|#13);)*)">$/;
+  /^([ \t]*)<meta (property|name)="([a-z_:-]+)" content="((?:[^"'<>&\r\n]|&(?:amp|lt|gt|quot|#39|#10|#13);)*)">$/;
 const ENTITIES: Record<string, string> = {
   "&amp;": "&",
   "&lt;": "<",
@@ -347,6 +347,16 @@ describe("socialMetaHtml", () => {
       description: "Tabs\tstay; newlines\nescape",
       url: "https://example.com/docs?a=1&b=2",
       siteName: "Example & Co",
+      locale: "en_GB",
+      alternateLocales: ["fr_FR"],
+      article: {
+        publishedTime: "2026-11-01T09:30:00+01:00",
+        authors: [`O'Brien & "Sons"`],
+        section: "<News>",
+        tags: ["a\nb"],
+      },
+      pubdate: "2026-11-01T09:30:00Z",
+      themeColor: "#0b7285",
     };
 
     for (const indent of ["", "    "]) {

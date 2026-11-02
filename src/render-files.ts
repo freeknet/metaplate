@@ -5,6 +5,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { ImageSize } from "./core.js";
 import { verifyImage, type ImageFormat } from "./image.js";
+import { assertVersionToken } from "./image-version.js";
 import { stableSerialize } from "./stable-hash.js";
 import { METAPLATE_VERSION } from "./version.js";
 
@@ -34,15 +35,19 @@ export type RenderablePlate<Copy> = {
   readonly variants: readonly string[];
   variant(name: string): RenderablePlate<Copy>;
   sitePath(route: string): string;
-  artifact(route: string, copy: Copy): Promise<RenderFileArtifact>;
+  /** `options.version` is passed only when the page names one. */
+  artifact(route: string, copy: Copy, options?: { version?: string }): Promise<RenderFileArtifact>;
   /**
    * What this size renders, independent of copy. Plates from `createNodeOg`
    * and `createEdgeOg` have it; without it an image gets no `inputHash` and
    * `--incremental` always renders it.
    */
   fingerprint?(): Promise<string>;
-  /** The image descriptor, whose URL a reused file is recorded under. */
-  image?(route: string, copy: Copy): { readonly url: string };
+  /**
+   * The image descriptor, whose URL (versioned exactly as `artifact`'s
+   * metadata is) a reused file is recorded under.
+   */
+  image?(route: string, copy: Copy, options?: { version?: string }): { readonly url: string };
 };
 
 /** One page to render: its route and the copy the plate renders for it. */
@@ -50,6 +55,12 @@ export type RenderPage<Copy> = {
   /** The page's route, as passed to `plate.metadata`; defaults to `/`. */
   route?: string;
   copy: Copy;
+  /**
+   * An explicit cache-busting token for this page's image URLs, overriding
+   * the plate's `version: "copy"`. It changes the manifest `url`, never the
+   * file `path`.
+   */
+  version?: string;
 };
 
 /**
@@ -83,11 +94,16 @@ export type PlannedImage = {
   variant: string | null;
   plate: RenderablePlate<unknown>;
   copy: unknown;
+  /** The page's explicit version token, when it names one. */
+  version?: string;
 };
 
 export type ManifestImage = {
   path: string;
-  /** The image URL the plate's metadata publishes, including `basePath` and `origin`. */
+  /**
+   * The image URL the plate's metadata publishes, including `basePath`,
+   * `origin`, and any `?v=` version token.
+   */
   url: string;
   route: string;
   variant: string | null;
@@ -146,7 +162,18 @@ function checkPages(value: unknown, label: string): RenderPage<unknown>[] {
     if (page.route !== undefined && typeof page.route !== "string") {
       fail(`${pageLabel}.route must be a string`);
     }
-    return page.route === undefined ? { copy: page.copy } : { route: page.route, copy: page.copy };
+    if (page.version !== undefined) {
+      try {
+        assertVersionToken(page.version);
+      } catch (error) {
+        fail(`${pageLabel}.version: ${(error as Error).message}`);
+      }
+    }
+    return {
+      ...(page.route === undefined ? {} : { route: page.route }),
+      copy: page.copy,
+      ...(page.version === undefined ? {} : { version: page.version }),
+    };
   });
 }
 
@@ -236,7 +263,15 @@ export function planImages(jobs: readonly RenderJob<unknown>[], outDir: string):
           throw new Error(`Invalid render module: ${label} and ${previous} both write ${relative}`);
         }
         seen.set(key, label);
-        planned.push({ path: relative, target, route, variant, plate: view, copy: page.copy });
+        planned.push({
+          path: relative,
+          target,
+          route,
+          variant,
+          plate: view,
+          copy: page.copy,
+          ...(page.version === undefined ? {} : { version: page.version }),
+        });
       }
     }
   }
@@ -381,7 +416,10 @@ async function reuseImage(
       return undefined;
     }
   }
-  return { ...copyManifestImage(previous), url: image.plate.image(image.route, image.copy).url };
+  const url = image.version === undefined
+    ? image.plate.image(image.route, image.copy).url
+    : image.plate.image(image.route, image.copy, { version: image.version }).url;
+  return { ...copyManifestImage(previous), url };
 }
 
 /**
@@ -390,7 +428,9 @@ async function reuseImage(
  * `verifyImage` at the artifact's own size and format.
  */
 async function writeImage(image: PlannedImage, realRoot: string, hash: string | null): Promise<ManifestImage> {
-  const artifact = await image.plate.artifact(image.route, image.copy);
+  const artifact = image.version === undefined
+    ? await image.plate.artifact(image.route, image.copy)
+    : await image.plate.artifact(image.route, image.copy, { version: image.version });
   await assertSafeTarget(image, realRoot, "write");
   await writeFile(image.target, artifact.bytes);
 
