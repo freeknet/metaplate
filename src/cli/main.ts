@@ -410,8 +410,7 @@ async function main(args: string[]) {
   const command = COMMANDS.get(args[0] ?? "");
   // `<command> --help` prints that command's usage and succeeds.
   if ((command || args[0] === "verify") && args.slice(1).some((arg) => arg === "--help" || arg === "-h")) {
-    process.stdout.write(`${command?.usage ?? VERIFY_USAGE}
-`);
+    process.stdout.write(`${command?.usage ?? VERIFY_USAGE}\n`);
     return;
   }
   await (command ? command.run(args) : verifyFiles(args));
