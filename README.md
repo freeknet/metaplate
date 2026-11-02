@@ -890,9 +890,12 @@ Pass `checkUrl: false` or `checkAlt: false` to evaluate a descriptor that has
 not been assigned a URL or alt text yet; the input type,
 `SocialCompatibilityImage`, makes both fields optional.
 
-Issues are `error`, `warning`, or `unknown`. Discord and Instagram checks are
-reported as unknown because neither publishes a stable webpage image-tag
-contract. SVG remains useful as renderer output, but it is not a universal
+Issues are `error`, `warning`, or `unknown`. The `discord` profile checks the
+image formats Discord's
+[link-preview contract](https://docs.discord.com/developers/link-previews/overview)
+supports (PNG, GIF, JPEG, WebP, and AVIF); Discord sets no image size limit and
+accepts root-relative image URLs. Instagram checks are reported as unknown
+because Instagram publishes no webpage image-tag contract. SVG remains useful as renderer output, but it is not a universal
 social delivery format; use PNG or JPEG for broad crawler compatibility.
 
 This local report cannot prove public fetchability, redirects, response MIME,
