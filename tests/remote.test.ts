@@ -24,8 +24,8 @@ function local(port: number, extra: RemoteFetchOptions = {}): RemoteFetchOptions
   return { allowPrivate: true, allowedPorts: [port], ...extra };
 }
 
-/** A documentation-range address the policy treats as public, dialed as loopback. */
-const PUBLIC_STAND_IN = "198.51.100.20";
+/** A public address (formerly example.com), never dialed: the test dialer maps it to loopback. */
+const PUBLIC_STAND_IN = "93.184.216.34";
 const dialLoopback = (address: RemoteAddress): RemoteAddress =>
   address.address === PUBLIC_STAND_IN ? { address: "127.0.0.1", family: 4 } : address;
 
@@ -175,12 +175,50 @@ describe("fetchRemoteImage address policy", () => {
     ["::ffff:169.254.169.254", "IPv4-mapped link-local"],
     ["64:ff9b::a00:1", "NAT64 private"],
     ["2002:7f00:1::", "6to4 loopback"],
+    // IANA special-purpose registries, "Globally Reachable: False".
+    ["192.0.0.8", "IETF protocol assignment"],
+    ["192.0.0.170", "IETF protocol assignment"],
+    ["192.0.2.1", "documentation"],
+    ["198.51.100.1", "documentation"],
+    ["203.0.113.5", "documentation"],
+    ["192.88.99.1", "deprecated 6to4 relay anycast"],
+    ["198.19.255.1", "benchmarking"],
+    ["64:ff9b:1::7f00:1", "local-use NAT64"],
+    ["64:ff9b:1::808:808", "local-use NAT64"],
+    ["100::1", "discard-only"],
+    ["100:0:0:1::1", "dummy"],
+    ["2001:0:4136:e378:8000:63bf:80ff:fffe", "Teredo"],
+    ["2001:2::1", "IETF protocol assignment"],
+    ["2001:10::1", "IETF protocol assignment"],
+    ["2001:1ff::1", "IETF protocol assignment"],
+    ["2001:db8::1", "documentation"],
+    ["3fff::1", "documentation"],
+    ["5f00::1", "segment routing SID"],
+    ["::ffff:192.0.2.1", "IPv4-mapped documentation"],
+    ["2002:c000:0201::1", "6to4 documentation"],
     ["not-an-address", "unparseable"],
   ])("classifies %s as %s", (address, kind) => {
     expect(nonPublicAddressKind(address)).toBe(kind);
   });
 
-  it.each(["8.8.8.8", "93.184.216.34", "172.32.0.1", "2606:4700::1111", "::ffff:8.8.8.8"])(
+  it.each([
+    "8.8.8.8",
+    "93.184.216.34",
+    "172.32.0.1",
+    "2606:4700::1111",
+    "::ffff:8.8.8.8",
+    "64:ff9b::808:808",
+    // Globally reachable allocations inside refused IANA blocks.
+    "192.0.0.9",
+    "192.0.0.10",
+    "2001:1::1",
+    "2001:1::3",
+    "2001:3::1",
+    "2001:4:112::1",
+    "2001:20::1",
+    "2001:30::1",
+    "2001:200::1",
+  ])(
     "treats %s as public",
     (address) => {
       expect(nonPublicAddressKind(address)).toBeUndefined();
@@ -374,11 +412,11 @@ describe("fetchRemoteImage limits", () => {
       "/small": serveBytes(body.subarray(0, 10), "text/plain"),
     }));
     for (const path of ["/declared", "/streamed"]) {
-      const result = await fetchRemoteResourceVia(`${server.origin}${path}`, local(server.port, { maxBytes: 1024 }), (address) => address, "text/plain", true);
+      const result = await fetchRemoteResourceVia(`${server.origin}${path}`, local(server.port, { maxBytes: 1024 }), (address) => address, "text/plain", { truncate: true });
       expect(result).toMatchObject({ truncated: true, byteLength: 1024 });
       expect([...result.bytes]).toEqual([...body.subarray(0, 1024)]);
     }
-    const small = await fetchRemoteResourceVia(`${server.origin}/small`, local(server.port, { maxBytes: 1024 }), (address) => address, "text/plain", true);
+    const small = await fetchRemoteResourceVia(`${server.origin}/small`, local(server.port, { maxBytes: 1024 }), (address) => address, "text/plain", { truncate: true });
     expect(small.truncated).toBeUndefined();
     expect(small.byteLength).toBe(10);
   });

@@ -179,7 +179,7 @@ async function fetchRobots(origin: string, options: RemoteFetchOptions, dial: Re
       ...options,
       maxBytes: REMOTE_ROBOTS_DEFAULTS.maxBytes,
       maxRedirects: REMOTE_ROBOTS_DEFAULTS.maxRedirects,
-    }, dial, REMOTE_ROBOTS_ACCEPT, true);
+    }, dial, REMOTE_ROBOTS_ACCEPT, { truncate: true });
     // RFC 9309 files are UTF-8; undecodable bytes become U+FFFD.
     const robots = parseRobotsTxt(new TextDecoder("utf-8").decode(response.bytes));
     return {

@@ -1,8 +1,8 @@
+import { present } from "./internal.js";
 import {
   canonicalBase,
   dimension,
   imageUrl,
-  present,
   type SocialMetaInput,
 } from "./meta-tags.js";
 

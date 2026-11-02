@@ -292,6 +292,220 @@ types because Next itself is intrinsic to it.
 Use `createSvgOg` from `metaplate/render` when the consumer only needs SVG. It
 does not load or execute Resvg's native Node binding.
 
+## Images and assets
+
+A plate can draw logos, photos, and per-page images such as avatars or
+covers. Metaplate embeds each one as a `data:` URI before Satori runs, so
+nothing is fetched during layout, and checks the bytes first, so a broken
+image fails the render with a reason instead of leaving an empty box.
+
+### Async components
+
+`component` may be `async` in every adapter (`createSvgOg`, `createNodeOg`,
+`createEdgeOg`, and `createNextOg`), so it can load what a page needs before
+returning the element tree:
+
+```tsx
+import { fileImageLoader, remoteImageLoader } from "metaplate/assets";
+import { fontsourceFontLoader } from "metaplate/fonts";
+import { createNodeOg } from "metaplate/node";
+
+const logo = fileImageLoader("public/logo.svg");
+const avatars = remoteImageLoader({ origins: ["https://avatars.example.com"] });
+
+export const og = createNodeOg<{ title: string; avatar: string }>({
+  alt: (copy) => copy.title,
+  fonts: fontsourceFontLoader([{ font: "inter", weight: 700 }]),
+  component: async (copy) => {
+    const [mark, avatar] = await Promise.all([logo(), avatars(copy.avatar)]);
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 48, fontFamily: "Inter" }}>
+        <img src={avatar.src} width={160} height={160} style={{ borderRadius: 80 }} />
+        <img src={mark.src} width={mark.width} height={mark.height} />
+        {copy.title}
+      </div>
+    );
+  },
+});
+```
+
+A synchronous component works as before and is not awaited. The component
+runs after the fonts load. A component that throws or rejects fails the
+render with that error. Define loaders once, at module scope, like the font
+loaders: each one reads or fetches on first use, shares the result with every
+later render, and retries after a failure instead of caching it.
+
+### Embedding bytes with `imageAsset`
+
+`imageAsset(bytes, options?)` from `metaplate/image` turns image bytes into
+what `<img>` needs. It takes an `ArrayBuffer` or any view, including a Node
+`Buffer`, and needs no peers and no Node built-ins, so it works on every
+runtime:
+
+```ts
+import { imageAsset } from "metaplate/image";
+
+const logo = imageAsset(bytes);
+// { src: "data:image/png;base64,…", width: 512, height: 128,
+//   format: "png", contentType: "image/png", byteLength: 20480 }
+```
+
+`width` and `height` are the image's intrinsic size, which Satori uses when
+`<img>` sets neither. Setting them explicitly is clearer, and
+`width={logo.width}` keeps the aspect ratio. The format comes from the bytes,
+not the file name or `Content-Type`. Raster formats are walked by the same
+structural detector as `imageDimensions`, so a truncated download or an HTML
+error page served with status 200 throws. That detector is strict: it also
+rejects a JPEG with bytes after its end marker, which some cameras write.
+Re-encode such a file before embedding it.
+
+An SVG needs a size Satori can use: pixel `width` and `height` attributes, or
+a `viewBox`. A logo exported with only `viewBox="0 0 48 24"` is 48x24, and a
+lone pixel `width` or `height` is scaled by the `viewBox` aspect ratio,
+matching Satori's own sizing. DOCTYPE and entity declarations are refused,
+as in `imageDimensions`.
+
+Sources larger than `maxBytes` (default 4 MiB) are refused before decoding.
+Every embedded image grows the SVG Satori produces by a third more than its
+size, and the SVG is rendered on every request, so resize large photos before
+embedding them.
+
+`imageAssetLoader(source, options?)` memoizes one asset in any runtime. The
+source is bytes, a `Response`, or a function returning either. A
+`Response` that is not `ok` rejects, and a failed load is retried on the next
+render rather than cached.
+
+### Supported formats
+
+Satori's `<img>` embeds PNG, JPEG, GIF, WebP, and SVG, and rejects anything
+else, AVIF included.
+The raster card is then drawn by Resvg, which does not decode every format
+Satori embeds. An image Resvg cannot decode is drawn as nothing, and the
+card keeps its size and format, so nothing reports the loss. `imageAsset`
+accepts only the formats every Metaplate renderer draws unless you opt in:
+
+| Format | `metaplate/node` and `metaplate/edge` (Resvg 2.6) | `metaplate/next` (`next/og`) | `imageAsset` |
+| --- | --- | --- | --- |
+| PNG, JPEG, SVG | Drawn | Drawn | Accepted |
+| GIF | First frame drawn | Not drawn | Only with `formats: [..., "gif"]` |
+| WebP | Not drawn | Not drawn | Only with `formats: [..., "webp"]` |
+| AVIF, HEIC, JPEG XL, TIFF, BMP, ICO | Rejected by Satori | Rejected by Satori | Rejected, with the format named |
+
+This was observed with Satori 0.63.2, `@resvg/resvg-js` 2.6.2,
+`@resvg/resvg-wasm` 2.6.2, and Next.js 16.4.3. The test suite renders each
+format and fails if a renderer starts drawing GIF or WebP, so the defaults
+can be revisited then. Opt into `"gif"` only for plates rendered with
+`metaplate/node` or `metaplate/edge`. Opt into `"webp"` only for
+`createSvgOg` output that a browser displays. Otherwise, convert to PNG or
+JPEG. `formats` also restricts: `formats: ["png"]` refuses everything else.
+
+### Project files with `metaplate/assets`
+
+`metaplate/assets` holds the Node readers. It loads no renderer peers, so a
+Next.js route, an Astro endpoint, or a build script can import it without
+loading Satori or Resvg.
+
+```ts
+import { fileImageLoader, readImageAsset } from "metaplate/assets";
+
+const logo = fileImageLoader("public/logo.svg"); // memoized: () => Promise<ImageAsset>
+const photo = await readImageAsset(new URL("./cover.jpg", import.meta.url));
+```
+
+Relative paths resolve against `cwd` (default `process.cwd()`), and a
+`file:` URL is read as is. The file's size is checked against `maxBytes`
+before it is read. Format and size errors name the file. On a serverless
+host, include the file in the function bundle, as for
+[fonts](fonts.md).
+
+This replaces the boilerplate in Next's
+[`opengraph-image` docs](https://nextjs.org/docs/app/api-reference/file-conventions/metadata/opengraph-image#using-nodejs-runtime-with-local-assets),
+which reads a file, base64-encodes it, and hard-codes its media type.
+Passing an `ArrayBuffer` as `src` also works at run time, but React's types
+reject it ([satori#606](https://github.com/vercel/satori/issues/606)), and
+it is not checked before Resvg sees it.
+
+### Remote images with an origin allowlist
+
+Given an `http(s)` URL as `<img src>`, Satori fetches it during layout,
+with no origin allowlist, byte cap, or timeout of your choosing. A URL from
+request data therefore lets the image route reach whatever the server can
+reach, which the [support matrix](support.md) warns against.
+`remoteImageLoader` fetches instead, under an explicit policy:
+
+```ts
+import { remoteImageLoader } from "metaplate/assets";
+
+const avatars = remoteImageLoader({
+  origins: ["https://avatars.example.com", "https://cdn.example.com"],
+});
+
+const avatar = await avatars(`https://avatars.example.com/u/${user.id}.png`);
+```
+
+- **Only allowlisted origins.** `origins` is required, and entries are bare
+  origins: a path, query, or credentials in an entry throws rather than
+  being ignored. Every request and every redirect must stay on one of them;
+  a URL or redirect elsewhere rejects with `RemoteImageError` code
+  `"origin"` before any connection is made.
+- **The `verify-url` fetcher.** Requests go through the same hardened fetcher
+  as `fetchRemoteImage`. It fetches only `http:` and `https:` on default
+  ports (others need `allowedPorts`). It refuses URLs with credentials,
+  checks every resolved address and dials the checked one, so DNS rebinding
+  cannot move a request. Loopback, private, link-local, and other non-public
+  addresses are refused unless `allowPrivate` is set for local development.
+  Each redirect (at most `maxRedirects`, default 3) is checked again. It
+  sends a fixed identity with no cookies or credentials, and enforces
+  `timeoutMs` and `connectionTimeoutMs` (10 s each by default).
+- **A byte cap.** `maxBytes` (default 4 MiB) caps the body while it streams
+  and is passed to `imageAsset`. The bytes must pass `imageAsset` and its
+  `formats`, and errors name the URL.
+- **A bounded cache.** Each loader memoizes up to `cacheSize` images by URL
+  (default 64), evicting the oldest first, as the emoji loader does, and
+  shares one request between concurrent renders. `cacheSize: 0` turns the
+  cache off. Failures are never cached. Cached entries do not expire, so
+  give a changed image a new URL (`/u/42.png?v=3`), or create a new loader
+  to start empty.
+
+### Edge runtimes
+
+`metaplate/assets` needs Node. On an edge runtime, serve the image as a
+static file of the same site and fetch it from your own origin, the pattern
+the [edge guide](edge.md#edge-runtimes-with-metaplateedge) uses for fonts and
+Wasm:
+
+```ts
+import { createEdgeOg } from "metaplate/edge";
+import { imageAssetLoader } from "metaplate/image";
+
+let origin = "";
+const logo = imageAssetLoader(() => fetch(new URL("/images/logo.png", origin)));
+
+const og = createEdgeOg({
+  // fonts, resvg, and layout as in the edge guide
+  component: async (copy: { title: string }) => {
+    const { src, width, height } = await logo();
+    return {
+      type: "div",
+      props: {
+        style: { display: "flex", alignItems: "center", gap: 32 },
+        children: [{ type: "img", props: { src, width, height } }, copy.title],
+      },
+    };
+  },
+});
+
+const route = og.fetchableFrom((request: Request) => {
+  origin ||= new URL(request.url).origin;
+  return { title: new URL(request.url).pathname.slice(1, 81) };
+});
+```
+
+The fetch goes to the deployment's own origin, never to a URL from request
+data. To show per-page images from another host on the edge, fetch them from
+that host with the runtime's `fetch` under your own allowlist, or render the
+cards at build time with `metaplate/node`.
+
 ## Plate constraints
 
 A plate is a Satori layout that rasterises to an image, not a DOM tree. Six
@@ -346,3 +560,125 @@ differences bite in practice:
   pixels, and encoded output must agree. Define the intended `size` on the
   plate, or declare another size as a
   [variant](variants.md), instead.
+
+## Render guards
+
+The constraints above fail silently: a card with its title drawn off the
+canvas, or with text no font covers, still has the right format and size, so
+`verifyImage` and `metaplate verify` accept it. This project's own Netlify Edge
+deployment served exactly such blank cards (see the CHANGELOG), and
+missing-glyph boxes from absent CJK or other-script fonts are a common Satori
+complaint ([vercel/satori#367](https://github.com/vercel/satori/issues/367)).
+Render guards check each render and fail it, or report it, instead of
+returning the broken card:
+
+```ts
+import { createNodeOg, RenderGuardError } from "metaplate/node";
+
+export const og = createNodeOg<Copy>({
+  alt: (copy) => copy.alt,
+  fonts,
+  component,
+  guards: { missingGlyphs: "error", overflow: "error", blank: "error" },
+});
+
+try {
+  await og.render(copy);
+} catch (error) {
+  if (error instanceof RenderGuardError) console.error(error.issues);
+  throw error;
+}
+```
+
+Each guard takes `"error"`, `"warn"`, or `"off"`:
+
+| Guard | Reports | Renderers |
+| --- | --- | --- |
+| `missingGlyphs` | Text that no plate font covers and that nothing resolved to a font or image | `createSvgOg`, `createNodeOg`, `createEdgeOg` |
+| `overflow` | An element holding text whose laid-out box reaches outside the canvas | `createSvgOg`, `createNodeOg`, `createEdgeOg` |
+| `blank` | A rasterised image in which every pixel is the same color | `createNodeOg`, `createEdgeOg` |
+
+`"error"` rejects the render (and so `render`, `renderPixels`, `artifact`,
+`response`, the route handlers, and `metaplate render`, which then exits `1`)
+with a `RenderGuardError`. Its `issues` lists every error-level problem the
+render step found, each with `guard`, `message`, the `variant` and `size`
+being rendered, and the guard's own details: `languageCode` and `segment`
+for missing glyphs, `element`, `text`, and `box` for overflow, `color` for a
+blank image. Its `name` is `"RenderGuardError"`; `instanceof` works when the
+class is imported from the same entry as the plate factory, because each
+entry is bundled separately.
+
+`"warn"` returns the image and passes each issue to `guards.onWarning`. Without
+`onWarning`, warnings go to `console.warn`, so a `"warn"` guard is never
+silent; pass `onWarning` to route them to the application's logger or
+metrics instead. Warnings are reported before an error is thrown, so a render
+with both reports all of them.
+
+### How each guard decides
+
+- **`missingGlyphs`** wraps Satori's `loadAdditionalAsset`. Satori calls it
+  for text that none of the plate's fonts covers, once per language code and
+  segment in a render, with the code it detected (such as
+  `ja-JP|zh-CN|zh-TW|zh-HK`, `emoji`, or `unknown`). The plate's `emoji`
+  loader and any `satori.loadAdditionalAsset` of its own still run first;
+  when the whole chain answers with no font and no image, Satori draws the
+  text from fonts that lack it, as missing-glyph boxes or nothing, and the
+  guard reports the segment and code. Graphemes listed in
+  `satori.graphemeImages` are drawn as images and are not reported. A font
+  that a loader returns is trusted: if it does not cover the segment either,
+  Satori still draws missing glyphs, and the guard cannot see that. Emoji
+  count, so an emoji with no image fails the guard; set the
+  [`emoji`](emoji.md) option. Recent Satori releases (0.63.2 checked) also
+  treat any character followed by U+FE0F as emoji, so a text symbol written
+  with that selector (such as `©️`) needs an emoji image or the selector
+  removed.
+- **`overflow`** composes with Satori's `onNodeDetected`, which reports every
+  laid-out element with its box in canvas pixels; a caller's own
+  `satori.onNodeDetected` still receives every node. Only elements holding
+  their own text are checked (a string or number child, or such children in
+  an array), so decorative shapes and images may bleed off the edge on
+  purpose. An element is reported when its box starts before the canvas or
+  ends past it by more than half a pixel. The box is the element's, before
+  any CSS `transform`, and includes its padding: a text element with padding
+  reaching outside is reported even when the glyphs themselves are visible.
+  Text deliberately set off the edge needs `"warn"` or `"off"`.
+- **`blank`** reads the raw RGBA pixels after Resvg rasterises them and
+  before any `output` encoder runs, stopping at the first pixel that differs
+  from the first; fully transparent pixels count as one color whatever their
+  RGB. It catches a solid-background card whose text never appeared. It does
+  not catch a gradient or photograph whose text is missing; `overflow` and
+  `missingGlyphs` cover those causes.
+
+Both Satori hooks have the same contract across the supported peer range:
+`loadAdditionalAsset(code, segment)` and `onNodeDetected` with
+`{ left, top, width, height, type, props, textContent }` behave identically in
+Satori 0.33.3, 0.38.2, 0.48.1, 0.55.5, and 0.63.2 (each probed with the same
+layout). The guards report what the installed Satori lays out: the
+content-box root above grows past the canvas from 0.48.1 in that probe, while
+0.33.3 and 0.38.2 lay it out at the canvas size, so the same plate can pass
+`overflow` on an older Satori and fail on a newer one.
+
+### Why guards are off by default
+
+Every guard defaults to `"off"`, and with every guard off the Satori options
+are passed through exactly as before, so upgrading changes no output.
+Turning them on by default would break renders that work today: a title
+with an emoji and no `emoji` loader, a CJK name rendered with the boxes a site
+has accepted, or a watermark deliberately set off the edge would start
+failing, and a `"warn"` default would log on every request of a live route.
+Fail loudly where a broken card would be published: set every guard to
+`"error"` in the plate a build (`metaplate render`) or a test renders, and use
+`"warn"` with `onWarning` on live routes that should keep serving while the
+problem is reported.
+
+`metaplate/next` cannot run guards: `next/og`'s `ImageResponse` exposes
+neither Satori's callbacks nor the pixels, so `createNextOg` rejects a
+`guards` option. Render through `createNodeOg` in a route handler when a Next
+card must be guarded (see [Render guards in Next.js](nextjs.md#render-guards-in-nextjs)
+for that route shape). `createSvgOg` has no pixels either, so it rejects
+`blank`. For images that already exist, `metaplate verify --require-content`
+runs the blank check on PNG files and URLs; see
+[the verification guide](verification.md#require-visible-content).
+
+[`examples/render-guards.ts`](../examples/render-guards.ts) is a type-checked
+version of a strict build plate and a lenient live one.

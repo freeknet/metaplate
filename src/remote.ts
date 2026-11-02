@@ -4,6 +4,7 @@ import { request as httpsRequest, type RequestOptions } from "node:https";
 import { isIP } from "node:net";
 import type { ImageSize } from "./core.js";
 import { imageContentType, verifyImage, type ImageDimensions, type ImageFormat } from "./image.js";
+import { integerOption } from "./internal.js";
 import { METAPLATE_VERSION } from "./version.js";
 
 /** Fixed request identity; no caller-supplied headers are ever sent. */
@@ -61,7 +62,8 @@ export type RemoteImageErrorCode =
   | "byte-limit"
   | "timeout"
   | "network"
-  | "content-type";
+  | "content-type"
+  | "origin";
 
 /** A refused or failed remote fetch, with a stable machine-readable code. */
 export class RemoteImageError extends Error {
@@ -172,6 +174,15 @@ function contains(range: Cidr, bytes: readonly number[]): boolean {
   return true;
 }
 
+// Every block the IANA special-purpose registries mark "Globally Reachable:
+// False" is refused, along with multicast and the deprecated blocks the
+// registries list without flags. Sources, last updated 2025-10-09:
+//   https://www.iana.org/assignments/iana-ipv4-special-registry/
+//   https://www.iana.org/assignments/iana-ipv6-special-registry/
+// Where a refused block contains a more specific allocation the registry marks
+// "Globally Reachable: True", that allocation is listed in the matching
+// *_REACHABLE table and wins over the wider block.
+
 const IPV4_BLOCKED: readonly Cidr[] = [
   cidr("0.0.0.0/8", "unspecified"),
   cidr("10.0.0.0/8", "private"),
@@ -180,20 +191,54 @@ const IPV4_BLOCKED: readonly Cidr[] = [
   cidr("169.254.0.0/16", "link-local"),
   cidr("172.16.0.0/12", "private"),
   cidr("192.0.0.0/24", "IETF protocol assignment"),
+  cidr("192.0.2.0/24", "documentation"),
+  cidr("192.88.99.0/24", "deprecated 6to4 relay anycast"),
   cidr("192.168.0.0/16", "private"),
   cidr("198.18.0.0/15", "benchmarking"),
+  cidr("198.51.100.0/24", "documentation"),
+  cidr("203.0.113.0/24", "documentation"),
   cidr("224.0.0.0/4", "multicast"),
   cidr("240.0.0.0/4", "reserved or broadcast"),
+];
+
+/** Globally reachable allocations inside a block of `IPV4_BLOCKED`. */
+const IPV4_REACHABLE: readonly Cidr[] = [
+  cidr("192.0.0.9/32", "Port Control Protocol anycast"),
+  cidr("192.0.0.10/32", "TURN anycast"),
 ];
 
 const IPV6_BLOCKED: readonly Cidr[] = [
   cidr("::/128", "unspecified"),
   cidr("::1/128", "loopback"),
+  cidr("64:ff9b:1::/48", "local-use NAT64"),
+  cidr("100::/64", "discard-only"),
+  cidr("100:0:0:1::/64", "dummy"),
+  cidr("2001::/32", "Teredo"),
+  cidr("2001::/23", "IETF protocol assignment"),
+  cidr("2001:db8::/32", "documentation"),
+  cidr("3fff::/20", "documentation"),
+  cidr("5f00::/16", "segment routing SID"),
   cidr("fc00::/7", "unique-local"),
   cidr("fe80::/10", "link-local"),
   cidr("fec0::/10", "site-local"),
   cidr("ff00::/8", "multicast"),
 ];
+
+/** Globally reachable allocations inside a block of `IPV6_BLOCKED`. */
+const IPV6_REACHABLE: readonly Cidr[] = [
+  cidr("2001:1::1/128", "Port Control Protocol anycast"),
+  cidr("2001:1::2/128", "TURN anycast"),
+  cidr("2001:1::3/128", "DNS-SD service registration anycast"),
+  cidr("2001:3::/32", "AMT"),
+  cidr("2001:4:112::/48", "AS112-v6"),
+  cidr("2001:20::/28", "ORCHIDv2"),
+  cidr("2001:30::/28", "drone remote ID entity tags"),
+];
+
+function blockedKind(bytes: readonly number[], blocked: readonly Cidr[], reachable: readonly Cidr[]): string | undefined {
+  if (reachable.some((range) => contains(range, bytes))) return undefined;
+  return blocked.find((range) => contains(range, bytes))?.kind;
+}
 
 /** IPv6 forms that carry an IPv4 address, and the byte offset it starts at. */
 const IPV6_EMBEDDING: readonly (readonly [Cidr, number])[] = [
@@ -205,19 +250,21 @@ const IPV6_EMBEDDING: readonly (readonly [Cidr, number])[] = [
 ];
 
 /**
- * Describes why an address is not publicly routable, or returns `undefined`
- * for a public address. Unparseable input is treated as not public.
+ * Describes why an address is not globally reachable, or returns `undefined`
+ * for a public address. IPv4 addresses carried in IPv4-mapped, IPv4-compatible,
+ * IPv4-translated, NAT64 (64:ff9b::/96), and 6to4 forms are checked as the
+ * IPv4 address they carry. Unparseable input is treated as not public.
  */
 export function nonPublicAddressKind(address: string): string | undefined {
   const family = isIP(address.split("%", 1)[0]!);
   if (family === 4) {
     const bytes = ipv4Bytes(address)!;
-    return IPV4_BLOCKED.find((range) => contains(range, bytes))?.kind;
+    return blockedKind(bytes, IPV4_BLOCKED, IPV4_REACHABLE);
   }
   const bytes = family === 6 ? ipv6Bytes(address) : undefined;
   if (!bytes) return "unparseable";
-  const direct = IPV6_BLOCKED.find((range) => contains(range, bytes));
-  if (direct) return direct.kind;
+  const direct = blockedKind(bytes, IPV6_BLOCKED, IPV6_REACHABLE);
+  if (direct) return direct;
   for (const [range, offset] of IPV6_EMBEDDING) {
     if (!contains(range, bytes)) continue;
     const embedded = bytes.slice(offset, offset + 4).join(".");
@@ -230,13 +277,13 @@ export function nonPublicAddressKind(address: string): string | undefined {
 // ---------------------------------------------------------------------------
 // Option and URL policy
 
-function positiveInteger(name: string, value: number | undefined, fallback: number, minimum = 1): number {
-  if (value === undefined) return fallback;
-  if (!Number.isSafeInteger(value) || value < minimum) {
-    throw new TypeError(`${name} must be an integer of at least ${minimum}; received ${value}`);
-  }
-  return value;
-}
+/** Per-call options for `fetchRemoteResourceVia`. */
+export type RemoteResourceOptions = Readonly<{
+  /** A caller policy run on every hop before any DNS lookup. */
+  checkHop?: (url: URL, label: string) => void;
+  /** Cut an oversized body at `maxBytes` instead of failing. */
+  truncate?: boolean;
+}>;
 
 function settingsFrom(options: RemoteFetchOptions, truncate: boolean): Settings {
   for (const port of options.allowedPorts ?? []) {
@@ -244,20 +291,25 @@ function settingsFrom(options: RemoteFetchOptions, truncate: boolean): Settings 
       throw new TypeError(`allowedPorts entries must be integers from 1 to 65535; received ${port}`);
     }
   }
-  const timeoutMs = positiveInteger("timeoutMs", options.timeoutMs, REMOTE_FETCH_DEFAULTS.timeoutMs);
+  const timeoutMs = integerOption("timeoutMs", options.timeoutMs, 1) ?? REMOTE_FETCH_DEFAULTS.timeoutMs;
   return {
     truncate,
     allowPrivate: options.allowPrivate === true,
     allowedPorts: new Set(options.allowedPorts ?? []),
-    maxRedirects: positiveInteger("maxRedirects", options.maxRedirects, REMOTE_FETCH_DEFAULTS.maxRedirects, 0),
-    maxBytes: positiveInteger("maxBytes", options.maxBytes, REMOTE_FETCH_DEFAULTS.maxBytes),
+    maxRedirects: integerOption("maxRedirects", options.maxRedirects, 0) ?? REMOTE_FETCH_DEFAULTS.maxRedirects,
+    maxBytes: integerOption("maxBytes", options.maxBytes, 1) ?? REMOTE_FETCH_DEFAULTS.maxBytes,
     timeoutMs,
     connectionTimeoutMs: Math.min(
       timeoutMs,
-      positiveInteger("connectionTimeoutMs", options.connectionTimeoutMs, REMOTE_FETCH_DEFAULTS.connectionTimeoutMs),
+      integerOption("connectionTimeoutMs", options.connectionTimeoutMs, 1) ?? REMOTE_FETCH_DEFAULTS.connectionTimeoutMs,
     ),
     resolve: options.resolve ?? ((hostname) => lookup(hostname, { all: true })),
   };
+}
+
+/** Validates fetch options once, where a long-lived caller is defined. */
+export function assertRemoteFetchOptions(options: RemoteFetchOptions): void {
+  settingsFrom(options, false);
 }
 
 function defaultPort(url: URL): number {
@@ -523,19 +575,22 @@ export function fetchRemoteImageVia(
 /**
  * The one hardened fetch loop behind every remote check. Only the `Accept`
  * header varies by caller; every scheme, credential, port, address,
- * redirect, byte, and time limit is applied identically. With `truncate`, a
- * body larger than `maxBytes` is cut to its first `maxBytes` bytes (and
- * marked `truncated`) instead of failing, which is how a robots.txt parser
- * applies its parsing limit.
+ * redirect, byte, and time limit is applied identically. `hop.checkHop` adds
+ * a caller policy (such as an origin allowlist) to every hop, redirects
+ * included, after the built-in URL checks and before any DNS lookup. With
+ * `hop.truncate`, a body larger than `maxBytes` is cut to its first
+ * `maxBytes` bytes (and marked `truncated`) instead of failing, which is how
+ * a robots.txt parser applies its parsing limit.
  */
 export async function fetchRemoteResourceVia(
   input: string | URL,
   options: RemoteFetchOptions,
   dial: RemoteDialer,
   accept: string,
-  truncate = false,
+  hop: RemoteResourceOptions = {},
 ): Promise<RemoteImage & { truncated?: true }> {
-  const settings = settingsFrom(options, truncate);
+  const settings = settingsFrom(options, hop.truncate === true);
+  const checkHop = hop.checkHop;
   const requested = parseUrl(String(input), undefined, "URL");
   const controller = new AbortController();
   const budget = setTimeout(() => controller.abort(), settings.timeoutMs);
@@ -543,7 +598,9 @@ export async function fetchRemoteResourceVia(
     const redirects: string[] = [];
     let current = requested;
     for (;;) {
-      checkUrl(current, settings, redirects.length === 0 ? "URL" : "Redirect to");
+      const label = redirects.length === 0 ? "URL" : "Redirect to";
+      checkUrl(current, settings, label);
+      checkHop?.(current, label);
       const address = await vetAddress(current, settings, controller.signal);
       const result = await exchange(current, dial(address), settings, controller.signal, accept);
       if (result.kind === "body") {
