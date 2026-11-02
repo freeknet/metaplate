@@ -419,6 +419,9 @@ describe("decodeHtmlBytes", () => {
   it("honors the Content-Type charset", () => {
     expect(decodeHtmlBytes(latin1Page, "text/html; charset=ISO-8859-1")).toContain("Café");
     expect(decodeHtmlBytes(latin1Page, 'text/html; charset="windows-1252"')).toContain("Café");
+    // ISO-8859-1 means windows-1252, so 0x80-0x9F are punctuation, not C1 controls.
+    const quoted = Uint8Array.from([0x93, 0x41, 0x94, 0x80, 0x81]);
+    expect(decodeHtmlBytes(quoted, "text/html; charset=ISO-8859-1")).toBe("“A”€");
   });
 
   it("finds a meta charset in the first 1024 bytes", () => {
