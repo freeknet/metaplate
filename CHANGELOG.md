@@ -7,6 +7,23 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Added
 
+- `metaplate preview <module>` serves a live local gallery of a render
+  module: every page at every size, rendered on request and checked with
+  `verifyImage`, with its path, published URL, alt text, size, format, bytes,
+  and any `--target`/`--max-file-size` findings. Each card can switch to
+  Satori's layout debug boxes and to centered 1.91:1 (Open Graph), 2:1 (X
+  `summary_large_image`), and 1:1 (X `summary`) crop overlays. Saving the
+  module reloads open pages over a server-sent event; on Node 22.15 and 23.5
+  or newer a `module.registerHooks` resolve hook reloads the local files it
+  imports too, while `node_modules` packages stay loaded. A failing image
+  fails only its card, and a module that cannot load is shown in the page
+  until it is fixed. It listens on `127.0.0.1:4323` by default (`--host`,
+  `--port`, `--port 0` for any free port), warns before listening on any
+  other address, answers only loopback `Host` headers while on loopback,
+  escapes every module-supplied value, and serves the page under a strict
+  Content Security Policy. See [`docs/preview.md`](docs/preview.md).
+- `renderSvg(copy, { debug: true })` turns on Satori's `debug` option for
+  one render without changing the plate's `satori` options.
 - Signed image routes. `signImagePath` and `verifyImageSignature` (from
   `metaplate`) insert and check an HMAC-SHA-256 signature of the URL's
   pathname as one 43-character base64url path segment before the file name,

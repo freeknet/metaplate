@@ -34,6 +34,11 @@ export type RenderablePlate<Copy> = {
   sitePath(route: string): string;
   /** `options.version` is passed only when the page names one. */
   artifact(route: string, copy: Copy, options?: { version?: string }): Promise<RenderFileArtifact>;
+  /**
+   * The Satori SVG for this size. `metaplate render` never calls it;
+   * `metaplate preview` uses it, when present, to draw layout debug boxes.
+   */
+  renderSvg?(copy: Copy, options?: { debug?: boolean }): Promise<string>;
 };
 
 /** One page to render: its route and the copy the plate renders for it. */
@@ -419,12 +424,13 @@ function loadError(file: string, error: unknown): unknown {
 /**
  * Imports a render module through a `file:` URL, which Node's ESM loader
  * needs for an absolute path (a Windows drive path is not a valid specifier),
- * and returns its default export.
+ * and returns its default export. A `query` (such as `?v=2`) loads a fresh
+ * instance: Node caches ES modules by URL, so a new query is a new module.
  */
-export async function importRenderModule(file: string): Promise<unknown> {
+export async function importRenderModule(file: string, query = ""): Promise<unknown> {
   let namespace: Record<string, unknown>;
   try {
-    namespace = (await import(pathToFileURL(path.resolve(file)).href)) as Record<string, unknown>;
+    namespace = (await import(`${pathToFileURL(path.resolve(file)).href}${query}`)) as Record<string, unknown>;
   } catch (error) {
     throw loadError(file, error);
   }
