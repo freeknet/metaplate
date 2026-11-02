@@ -59,13 +59,13 @@ export function redirectTo(location: string, status = 302): Handler {
   };
 }
 
-/** Dispatches by request path; anything unrouted is a 404. */
-export function routes(table: Record<string, Handler>): Handler {
+/** Dispatches on `keyOf(request)`; anything unrouted is a 404. */
+function dispatchBy(table: Record<string, Handler>, keyOf: (request: IncomingMessage) => string): Handler {
   // A Map keeps request paths such as "/constructor" from reaching
   // Object.prototype members, and the type check guards the dispatch.
   const handlers = new Map(Object.entries(table));
   return (request, response) => {
-    const handler = handlers.get(request.url ?? "");
+    const handler = handlers.get(keyOf(request));
     if (typeof handler === "function") {
       handler(request, response);
       return;
@@ -73,4 +73,17 @@ export function routes(table: Record<string, Handler>): Handler {
     response.writeHead(404);
     response.end();
   };
+}
+
+/** Dispatches by request path, query included; anything unrouted is a 404. */
+export function routes(table: Record<string, Handler>): Handler {
+  return dispatchBy(table, (request) => request.url ?? "");
+}
+
+/**
+ * Dispatches by request pathname only, as a static host or a framework's
+ * path router does: the query string never selects a different handler.
+ */
+export function pathRoutes(table: Record<string, Handler>): Handler {
+  return dispatchBy(table, (request) => new URL(request.url ?? "/", "http://localhost").pathname);
 }
