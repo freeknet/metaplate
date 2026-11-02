@@ -77,3 +77,27 @@ export {
   type RemoteImageVerification,
   type RemoteResolver,
 } from "./remote.js";
+
+export {
+  REMOTE_PAGE_DEFAULTS,
+  verifyRemotePage,
+  type RemotePageDeclaredImage,
+  type RemotePageImageIssueCode,
+  type RemotePageImageReport,
+  type RemotePageImageSource,
+  type RemotePageIssue,
+  type RemotePageIssueCode,
+  type RemotePageIssueSeverity,
+  type RemotePageOptions,
+  type RemotePageTargetReport,
+  type RemotePageVerification,
+} from "./page-verification.js";
+
+export {
+  extractPageSocialMetadata,
+  type PageJsonLdImage,
+  type PageMetadataIssue,
+  type PageMetadataIssueCode,
+  type PageOpenGraphImage,
+  type PageSocialMetadata,
+} from "./html-metadata.js";
