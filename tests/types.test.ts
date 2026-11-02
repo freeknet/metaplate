@@ -2,8 +2,16 @@ import { describe, expect, it } from "vitest";
 import type { ResvgRenderOptions as UpstreamResvgRenderOptions } from "@resvg/resvg-js";
 import type { SatoriOptions as UpstreamSatoriOptions } from "satori";
 import type { ReactElement } from "react";
-import type { Metadata } from "next";
-import { createNextOg, nextTwitterMetadata, type NextOgDefinition } from "../src/next.js";
+import type { Metadata, Viewport } from "next";
+import {
+  NEXT_OPEN_GRAPH_TYPES,
+  createNextOg,
+  nextPageMetadata,
+  nextPageViewport,
+  nextTwitterMetadata,
+  type NextOgDefinition,
+  type NextOpenGraphType,
+} from "../src/next.js";
 import {
   createNodeOg,
   type NodeOgDefinition,
@@ -14,6 +22,7 @@ import {
 import {
   createSvgOg,
   type PlateContext,
+  type PlateElement,
   type SatoriNode,
   type SatoriOptions,
   type SvgOgDefinition,
@@ -22,6 +31,7 @@ import {
   socialImageMetadata,
   type SocialCompatibilityImage,
   type SocialImageMetadata,
+  type SocialImageOptions,
   type SocialImageVerificationDescriptor,
   type TwitterCard,
   type TwitterImageOptions,
@@ -93,6 +103,30 @@ createSvgOg<Copy>({ alt: (copy) => copy.title, fonts, component: (copy) => copy.
 createNodeOg(legacyNode);
 createNextOg(legacyNext);
 createNextOg<Copy>({ alt: (copy) => copy.title, component: () => null as unknown as ReactElement });
+
+// Components may be async everywhere a component is accepted; the element a
+// promise resolves to is held to the same type as a synchronous result.
+const asyncSvg: SvgOgDefinition<Copy> = {
+  ...legacySvg,
+  component: async (copy) => legacyCard(copy),
+};
+const asyncNode: NodeOgDefinition<Copy, "square"> = {
+  ...legacySvg,
+  variants: { square: { size: { width: 1080, height: 1080 } } },
+  component: async (copy, context) => `${copy.title} ${context.variant ?? "default"}`,
+};
+createSvgOg(asyncSvg);
+createNodeOg(asyncNode);
+createNextOg<Copy>({ alt: (copy) => copy.title, component: async () => null as unknown as ReactElement });
+const thenable: PlateElement<SatoriNode> = Promise.resolve("text");
+void thenable;
+
+export function asyncElementsAreChecked() {
+  // @ts-expect-error -- a promise must still resolve to a Satori element tree.
+  createSvgOg<Copy>({ alt: (copy) => copy.title, fonts, component: async () => ({ notAnElement: true }) });
+  // @ts-expect-error -- the Next adapter's promise must resolve to a React element.
+  createNextOg<Copy>({ alt: (copy) => copy.title, component: async () => 42 });
+}
 
 // Without explicit type arguments, variant names are inferred from the
 // declaration: the component's context and `plate.variant` both use them.
@@ -190,6 +224,39 @@ export function xCardPayloadsAreChecked() {
   const wide: XImageOptions = { card: "player", site: "@e" };
   void wide;
 }
+
+// The return type follows the options actually passed: a card other than the
+// default `summary_large_image` must be named in `twitter.card`, so an
+// explicit type argument cannot claim a payload the runtime never builds.
+export function returnTypeFollowsOptions(wideOptions: SocialImageOptions) {
+  // @ts-expect-error -- a player card requires its options.
+  socialImageMetadata<"player">("/", "card");
+  // @ts-expect-error -- an app card requires its options.
+  socialImageMetadata<"app">("/", "card", {});
+  // @ts-expect-error -- without `twitter.card` the runtime card is `summary_large_image`.
+  socialImageMetadata<"summary">("/", "card", { twitter: { site: "@e" } });
+  const explicitDefault = socialImageMetadata<"summary_large_image">("/", "card");
+  const defaultWithTwitter: "summary_large_image" = socialImageMetadata("/", "card", {
+    twitter: { site: "@e", variant: "square" },
+  }).twitter.card;
+  const explicitPlayer = socialImageMetadata<"player">("/", "card", {
+    twitter: { card: "player", site: "@e", player: playerOptions },
+  });
+  const forwarded: SocialImageMetadata<XCard> = socialImageMetadata("/", "card", wideOptions);
+  // @ts-expect-error -- forwarded wide options leave the card a union.
+  const forwardedPlayer: string = forwarded.twitter.player.url;
+  return [explicitDefault.twitter.card, defaultWithTwitter, explicitPlayer.twitter.player.url, forwardedPlayer];
+}
+
+// Page-level fields: the Next mapping returns Next's own types, and the
+// og:type allowlist names every value Next's openGraph.type accepts.
+const pageMetadata: Metadata = {
+  ...nextPageMetadata({ type: "article", article: { publishedTime: new Date(0) } }),
+};
+const pageViewport: Viewport = nextPageViewport({ themeColor: "#000000" });
+type UnlistedNextType = Exclude<NextOpenGraphType, (typeof NEXT_OPEN_GRAPH_TYPES)[number]>;
+const everyNextTypeListed: [UnlistedNextType] extends [never] ? true : false = true;
+void [pageMetadata, pageViewport, everyNextTypeListed];
 
 describe("React-free type mirror", () => {
   it("is exercised by the type-level assertions above", () => {

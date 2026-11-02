@@ -2,7 +2,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { emojiKey, emojiLoader, type EmojiLoader } from "./emoji.js";
 import {
   loadedFont,
@@ -18,6 +17,7 @@ import {
   type LanguageCode,
   type LanguageFontLoader,
 } from "./language-fonts.js";
+import { projectFilePath } from "./project-path.js";
 
 export { fontLoader, loadFonts } from "./font-core.js";
 export { languageFontLoader } from "./language-fonts.js";
@@ -102,16 +102,6 @@ function resolveFontFile(packageDirectory: string, file: string): string {
   return target;
 }
 
-function projectFontPath(file: string | URL, cwd: string): string {
-  if (file instanceof URL) {
-    if (file.protocol !== "file:") {
-      throw new Error(`Project font URLs must use the file: protocol: ${file.href}`);
-    }
-    return fileURLToPath(file);
-  }
-  return path.resolve(cwd, file);
-}
-
 /** Loads co-located or otherwise project-managed font files. */
 export async function loadFileFonts(
   fonts: readonly FileFont[],
@@ -119,7 +109,7 @@ export async function loadFileFonts(
 ): Promise<LoadedFont[]> {
   const cwd = path.resolve(options.cwd ?? process.cwd());
   return Promise.all(
-    fonts.map(async (font) => loadedFont(font, await readFile(projectFontPath(font.file, cwd)))),
+    fonts.map(async (font) => loadedFont(font, await readFile(projectFilePath(font.file, cwd, "font")))),
   );
 }
 

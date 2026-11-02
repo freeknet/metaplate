@@ -7,7 +7,7 @@ import { build as esbuild } from "esbuild";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { emojiLoader, twemojiName } from "../src/emoji.js";
 import { fontLoader } from "../src/font-data.js";
-import { imageDimensions, verifyImage } from "../src/image.js";
+import { imageAssetLoader, imageDimensions, verifyImage } from "../src/image.js";
 import { createNodeOg } from "../src/node.js";
 
 // Edge runtimes cannot read node_modules, so the entry takes Wasm and font
@@ -113,7 +113,51 @@ it(
     }
     expect(red).toBeGreaterThan(1000);
     expect(requested.sort()).toEqual(["1f44b-1f3fd", "1fae8"]);
-    expect(readFileSync(path.join(root, "src", "emoji.ts"), "utf8")).not.toMatch(/^import /m);
+    for (const file of ["emoji.ts", "bytes.ts"]) {
+      expect(readFileSync(path.join(root, "src", file), "utf8")).not.toMatch(/^import .*["']node:/m);
+    }
+  },
+  30_000,
+);
+
+// An edge function reads its logo from its own origin; here the "origin" is a
+// Response built in memory, loaded once by the runtime-neutral loader.
+it(
+  "draws an imageAsset from an async component with @resvg/resvg-wasm",
+  async () => {
+    const { createEdgeOg } = await edgeEntry();
+    let fetches = 0;
+    const logo = imageAssetLoader(() => {
+      fetches += 1;
+      return new Response(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2 1"><rect width="2" height="1" fill="#ff0000"/></svg>',
+      );
+    });
+    const plate = createEdgeOg({
+      ...definition,
+      ...wasm,
+      size: { width: 120, height: 60 },
+      component: async () => {
+        const { src } = await logo();
+        return {
+          type: "div",
+          props: {
+            style: { display: "flex", width: "100%", height: "100%" },
+            children: { type: "img", props: { src, width: 120, height: 60 } },
+          },
+        };
+      },
+    });
+
+    for (let render = 0; render < 2; render += 1) {
+      const { pixels } = await plate.renderPixels({ title: "unused" });
+      let red = 0;
+      for (let offset = 0; offset < pixels.length; offset += 4) {
+        if (pixels[offset]! > 200 && pixels[offset + 1]! < 50 && pixels[offset + 3]! > 200) red += 1;
+      }
+      expect(red / (pixels.length / 4)).toBeGreaterThan(0.95);
+    }
+    expect(fetches).toBe(1);
   },
   30_000,
 );
@@ -274,6 +318,32 @@ it("offers Fetch-shaped handlers and no copy-bound handler", async () => {
   expect("handler" in plate).toBe(false);
 });
 
+it(
+  "verifies signed paths with Web Crypto before rendering on the edge entry",
+  async () => {
+    const { createEdgeOg } = await edgeEntry();
+    const secret = "edge-secret-0123456789abcdefghijklmno";
+    const component = vi.fn(definition.component);
+    const plate = createEdgeOg({ ...definition, ...wasm, imagePath: "og.png", component });
+    const route = plate.fetchableFrom(
+      (request: Request) => ({ title: new URL(request.url).pathname.split("/")[2] ?? "home" }),
+      { signed: { secret, status: 404 } },
+    );
+    const metadata = await plate.signedMetadata("/og/edge", { title: "edge" }, { secret });
+    const url = new URL(metadata.openGraph.images[0]!.url, "https://edge.example");
+
+    const rejected = await route.fetch(new Request(new URL("/og/other/og.png", url)));
+    expect(rejected.status).toBe(404);
+    expect(component).not.toHaveBeenCalled();
+
+    const response = await route.fetch(new Request(url));
+    expect(response.status).toBe(200);
+    verifyImage(new Uint8Array(await response.arrayBuffer()), plate.size, "png");
+    expect(component).toHaveBeenCalledOnce();
+  },
+  30_000,
+);
+
 it("rejects output encoders and dimension-changing Resvg settings", async () => {
   const { createEdgeOg } = await edgeEntry();
 
@@ -358,6 +428,58 @@ it(
   30_000,
 );
 
+// Both packages keep their Wasm instance process-wide and Vitest does not
+// reload node_modules between tests, so a failed initialisation is staged
+// through each package's init function rather than with real bad bytes.
+const BAD_WASM = "bad" as unknown as Uint8Array;
+
+async function initAccepting(module: unknown, initialised: unknown[]): Promise<void> {
+  if (module === BAD_WASM) throw new WebAssembly.CompileError("not a Wasm module");
+  initialised.push(module);
+}
+
+it(
+  "replaces a layout module that failed to initialise with one supplied later",
+  async () => {
+    const initialised: unknown[] = [];
+    vi.doMock("satori/standalone", async (importOriginal) => ({
+      ...(await importOriginal<object>()),
+      init: (module: unknown) => initAccepting(module, initialised),
+    }));
+    const { createEdgeOg, initEdgeRenderer } = await edgeEntry();
+
+    await expect(initEdgeRenderer(resvgWasm, { layout: BAD_WASM })).rejects.toThrow("not a Wasm module");
+    // A corrected module replaces the failed one in the same isolate.
+    await initEdgeRenderer(resvgWasm, { layout: layoutWasm });
+    expect(initialised).toEqual([layoutWasm]);
+    const plate = createEdgeOg(definition);
+    verifyImage(await plate.render({ title: "Corrected layout" }), plate.size, "png");
+  },
+  30_000,
+);
+
+it(
+  "replaces a Resvg module that failed to initialise, but keeps one that succeeded",
+  async () => {
+    const initialised: unknown[] = [];
+    vi.doMock("@resvg/resvg-wasm", async (importOriginal) => ({
+      ...(await importOriginal<object>()),
+      initWasm: (module: unknown) => initAccepting(module, initialised),
+    }));
+    const { initEdgeRenderer } = await edgeEntry();
+
+    await expect(initEdgeRenderer(BAD_WASM, { layout: layoutWasm })).rejects.toThrow("not a Wasm module");
+    await initEdgeRenderer(resvgWasm, { layout: layoutWasm });
+    expect(initialised).toEqual([resvgWasm]);
+
+    // Once initialised, the module is a process-wide singleton: later sources
+    // are ignored rather than re-initialising it.
+    await initEdgeRenderer(BAD_WASM, { layout: layoutWasm });
+    expect(initialised).toEqual([resvgWasm]);
+  },
+  30_000,
+);
+
 it(
   "names the install command when @resvg/resvg-wasm is missing",
   async () => {
@@ -406,7 +528,7 @@ async function renderFailure(error: unknown): Promise<unknown> {
 }
 
 const HARFBUZZ_RUNTIME =
-  /Satori's bundled HarfBuzz text shaper compiles WebAssembly at runtime and expects self\.location, which this runtime forbids \(Cloudflare Workers and other V8 isolates that disallow Wasm code generation\)\. metaplate\/edge runs on edge runtimes that allow it, such as Deno and Netlify Edge Functions\. See https:\/\/github\.com\/lnorton89\/metaplate#edge-runtimes-with-metaplateedge/;
+  /Satori's bundled HarfBuzz text shaper compiles WebAssembly at runtime and expects self\.location, which this runtime forbids \(Cloudflare Workers and other V8 isolates that disallow Wasm code generation\)\. metaplate\/edge runs on edge runtimes that allow it, such as Deno and Netlify Edge Functions\. See https:\/\/github\.com\/lnorton89\/metaplate\/blob\/main\/docs\/edge\.md#edge-runtimes-with-metaplateedge/;
 
 /** Asserts that a render failing with `original` rejects with the explanation. */
 async function expectExplained(original: Error): Promise<void> {

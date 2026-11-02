@@ -76,6 +76,11 @@
       "types": "./dist/image.d.ts",
       "import": "./dist/image.js",
       "default": "./dist/image.js"
+    },
+    "./assets": {
+      "types": "./dist/assets.d.ts",
+      "import": "./dist/assets.js",
+      "default": "./dist/assets.js"
     }
   },
   "bin": {

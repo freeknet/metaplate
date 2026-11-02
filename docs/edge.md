@@ -111,8 +111,11 @@ const og = createEdgeOg({
 `resvg.wasm` and `layout.wasm` accept a `WebAssembly.Module`, bytes, a
 `Response`, a `URL`, a promise of one, or a function returning one; a function
 runs on the first render. Each Wasm module is a single instance per isolate,
-so the first source supplied wins, and a source whose initialisation fails is
-tried again on the next render. To supply both once for every plate, call
+so the first source supplied wins. A source whose initialisation fails is
+tried again on the next render, unless a new source is supplied first (through
+`createEdgeOg` or `initEdgeRenderer`): that one replaces the failed source, so
+a corrected module takes effect without restarting the isolate. To supply both
+once for every plate, call
 `initEdgeRenderer(resvgWasm, { layout: layoutWasm })` at module scope instead.
 A render with either module missing fails with an error naming it and where to
 pass it.

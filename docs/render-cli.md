@@ -12,6 +12,9 @@ lives, verifies every file on disk, and writes a manifest of what it wrote.
 npx metaplate render og.render.mjs --out public
 ```
 
+While designing a plate, [`metaplate preview`](preview.md) serves the same
+module as a live gallery that reloads on every save.
+
 ## A render module
 
 The module's default export names the plates and the pages each one renders:
@@ -62,9 +65,12 @@ The contract, in full:
 - **A job** is `{ plate, pages }`. `plate` is a plate from `createNodeOg`
   (`metaplate/node`) or `createEdgeOg` (`metaplate/edge`); `pages` is a
   non-empty array.
-- **A page** is `{ route?, copy }`. `copy` is what the plate renders, exactly
-  as `plate.artifact(route, copy)` takes it. `route` is the page's route as
-  you pass it to `plate.metadata(route, copy)`, and defaults to `/`.
+- **A page** is `{ route?, copy, version? }`. `copy` is what the plate
+  renders, exactly as `plate.artifact(route, copy)` takes it. `route` is the
+  page's route as you pass it to `plate.metadata(route, copy)`, and defaults
+  to `/`. `version` is an optional cache-busting token for the page's image
+  URLs (see [Versioned URLs](#versioned-urls)); an invalid token is refused
+  before anything renders.
 - **Sizes.** A default plate renders each page at its default size and then
   at every declared variant, in declaration order. A variant view,
   `og.variant("square")`, renders only that size, so one job can add a single
@@ -131,6 +137,41 @@ Paths are checked before anything renders, and a bad one fails the run:
 
 `--out` is not emptied first; files the run does not write are left alone.
 
+### Versioned URLs
+
+Crawlers cache images by URL, so a card that changes needs a new URL (see
+[Versioned image URLs](metadata.md#versioned-image-urls)). A plate created
+with `version: "copy"` (and optionally a design `revision`) publishes each
+page's image URL with `?v=<token>` derived from its copy, and a page's own
+`version` overrides that token for the page:
+
+```js
+const og = createNodeOg({ /* ... */ imagePath: "og-image.png", version: "copy", revision: "2" });
+
+export default {
+  plate: og,
+  pages: [
+    { route: "/posts/hello", copy: { title: "Hello" } },
+    { route: "/about", copy: { title: "About" }, version: "release-12" },
+  ],
+};
+```
+
+The token changes only the manifest `url`, which is the URL the page's
+metadata publishes. The file is written at the same unversioned `path`,
+because a static host serves `posts/hello/og-image.png` for any query on that
+path:
+
+```json
+{
+  "path": "posts/hello/og-image.png",
+  "url": "/posts/hello/og-image.png?v=1e52226d"
+}
+```
+
+Render the module with the same plate your pages use for their metadata, so
+the manifest and the pages agree on every token.
+
 ## Formats and verification
 
 The plate decides the format. A plate with no `output` writes PNG; a plate
@@ -193,6 +234,12 @@ failure is reported, and **no manifest is written**, so a deploy step that
 publishes only when the manifest exists never publishes half a build. Files
 written before the failure stay in `--out`.
 
+Format, size, and structure checks cannot tell a blank card from a drawn one.
+Give the module's plate [render guards](rendering.md#render-guards) set to
+`"error"` and a card with text off the canvas, text no font covers, or a
+single-color image fails its render here, exits `1`, and keeps the manifest
+unwritten.
+
 ### Manifest
 
 One entry of the manifest written for
@@ -222,7 +269,7 @@ One entry of the manifest written for
 | --- | --- |
 | `schemaVersion` | `1`. Fields may be added within a version; removing or changing one bumps it. |
 | `path` | The file, relative to `--out`, with `/` separators on every platform. |
-| `url` | The image URL the plate's metadata publishes for it, with `basePath` and `origin`. |
+| `url` | The image URL the plate's metadata publishes for it, with `basePath`, `origin`, and any `?v=` [version token](#versioned-urls). |
 | `route` | The page route, as given (default `/`). |
 | `variant` | The variant name, or `null` for the default size. |
 | `size` | The width and height the file was verified at. |
