@@ -358,6 +358,58 @@ it(
   30_000,
 );
 
+// Both packages keep their Wasm instance process-wide and Vitest does not
+// reload node_modules between tests, so a failed initialisation is staged
+// through each package's init function rather than with real bad bytes.
+const BAD_WASM = "bad" as unknown as Uint8Array;
+
+async function initAccepting(module: unknown, initialised: unknown[]): Promise<void> {
+  if (module === BAD_WASM) throw new WebAssembly.CompileError("not a Wasm module");
+  initialised.push(module);
+}
+
+it(
+  "replaces a layout module that failed to initialise with one supplied later",
+  async () => {
+    const initialised: unknown[] = [];
+    vi.doMock("satori/standalone", async (importOriginal) => ({
+      ...(await importOriginal<object>()),
+      init: (module: unknown) => initAccepting(module, initialised),
+    }));
+    const { createEdgeOg, initEdgeRenderer } = await edgeEntry();
+
+    await expect(initEdgeRenderer(resvgWasm, { layout: BAD_WASM })).rejects.toThrow("not a Wasm module");
+    // A corrected module replaces the failed one in the same isolate.
+    await initEdgeRenderer(resvgWasm, { layout: layoutWasm });
+    expect(initialised).toEqual([layoutWasm]);
+    const plate = createEdgeOg(definition);
+    verifyImage(await plate.render({ title: "Corrected layout" }), plate.size, "png");
+  },
+  30_000,
+);
+
+it(
+  "replaces a Resvg module that failed to initialise, but keeps one that succeeded",
+  async () => {
+    const initialised: unknown[] = [];
+    vi.doMock("@resvg/resvg-wasm", async (importOriginal) => ({
+      ...(await importOriginal<object>()),
+      initWasm: (module: unknown) => initAccepting(module, initialised),
+    }));
+    const { initEdgeRenderer } = await edgeEntry();
+
+    await expect(initEdgeRenderer(BAD_WASM, { layout: layoutWasm })).rejects.toThrow("not a Wasm module");
+    await initEdgeRenderer(resvgWasm, { layout: layoutWasm });
+    expect(initialised).toEqual([resvgWasm]);
+
+    // Once initialised, the module is a process-wide singleton: later sources
+    // are ignored rather than re-initialising it.
+    await initEdgeRenderer(BAD_WASM, { layout: layoutWasm });
+    expect(initialised).toEqual([resvgWasm]);
+  },
+  30_000,
+);
+
 it(
   "names the install command when @resvg/resvg-wasm is missing",
   async () => {
@@ -406,7 +458,7 @@ async function renderFailure(error: unknown): Promise<unknown> {
 }
 
 const HARFBUZZ_RUNTIME =
-  /Satori's bundled HarfBuzz text shaper compiles WebAssembly at runtime and expects self\.location, which this runtime forbids \(Cloudflare Workers and other V8 isolates that disallow Wasm code generation\)\. metaplate\/edge runs on edge runtimes that allow it, such as Deno and Netlify Edge Functions\. See https:\/\/github\.com\/lnorton89\/metaplate#edge-runtimes-with-metaplateedge/;
+  /Satori's bundled HarfBuzz text shaper compiles WebAssembly at runtime and expects self\.location, which this runtime forbids \(Cloudflare Workers and other V8 isolates that disallow Wasm code generation\)\. metaplate\/edge runs on edge runtimes that allow it, such as Deno and Netlify Edge Functions\. See https:\/\/github\.com\/lnorton89\/metaplate\/blob\/main\/docs\/edge\.md#edge-runtimes-with-metaplateedge/;
 
 /** Asserts that a render failing with `original` rejects with the explanation. */
 async function expectExplained(original: Error): Promise<void> {

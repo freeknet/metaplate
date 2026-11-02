@@ -475,8 +475,14 @@ describe("verify-url CLI", () => {
     const result = await runAsync(["verify-url", "--timeout", "soon", "--size", "1x1", "https://example.com/og.png"]);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("Invalid timeout.");
-    expect(result.stderr).toContain(VERIFY_URL_USAGE);
+    expect(result.stderr.split(VERIFY_URL_USAGE)).toHaveLength(2);
   });
+});
+
+it("prints the usage once for an argument error that already names it", async () => {
+  const result = await runAsync(["verify", "--url", "x", "--size", "1200x630", "f.png"]);
+  expect(result.status).toBe(1);
+  expect(result.stderr).toBe(`--url and --alt require at least one --target. ${VERIFY_USAGE}\n`);
 });
 
 describe("parseVerifyPageInvocation", () => {
@@ -659,6 +665,6 @@ describe("verify-page CLI", () => {
     const result = await runAsync(["verify-page", "--size", "1x1", "https://example.com/"]);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("--size is not accepted here.");
-    expect(result.stderr).toContain(VERIFY_PAGE_USAGE);
+    expect(result.stderr.split(VERIFY_PAGE_USAGE)).toHaveLength(2);
   });
 });

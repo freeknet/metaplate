@@ -22,6 +22,7 @@ import {
   socialImageMetadata,
   type SocialCompatibilityImage,
   type SocialImageMetadata,
+  type SocialImageOptions,
   type SocialImageVerificationDescriptor,
   type TwitterCard,
   type TwitterImageOptions,
@@ -189,6 +190,29 @@ export function xCardPayloadsAreChecked() {
   // @ts-expect-error -- the wide options type is discriminated too.
   const wide: XImageOptions = { card: "player", site: "@e" };
   void wide;
+}
+
+// The return type follows the options actually passed: a card other than the
+// default `summary_large_image` must be named in `twitter.card`, so an
+// explicit type argument cannot claim a payload the runtime never builds.
+export function returnTypeFollowsOptions(wideOptions: SocialImageOptions) {
+  // @ts-expect-error -- a player card requires its options.
+  socialImageMetadata<"player">("/", "card");
+  // @ts-expect-error -- an app card requires its options.
+  socialImageMetadata<"app">("/", "card", {});
+  // @ts-expect-error -- without `twitter.card` the runtime card is `summary_large_image`.
+  socialImageMetadata<"summary">("/", "card", { twitter: { site: "@e" } });
+  const explicitDefault = socialImageMetadata<"summary_large_image">("/", "card");
+  const defaultWithTwitter: "summary_large_image" = socialImageMetadata("/", "card", {
+    twitter: { site: "@e", variant: "square" },
+  }).twitter.card;
+  const explicitPlayer = socialImageMetadata<"player">("/", "card", {
+    twitter: { card: "player", site: "@e", player: playerOptions },
+  });
+  const forwarded: SocialImageMetadata<XCard> = socialImageMetadata("/", "card", wideOptions);
+  // @ts-expect-error -- forwarded wide options leave the card a union.
+  const forwardedPlayer: string = forwarded.twitter.player.url;
+  return [explicitDefault.twitter.card, defaultWithTwitter, explicitPlayer.twitter.player.url, forwardedPlayer];
 }
 
 describe("React-free type mirror", () => {
