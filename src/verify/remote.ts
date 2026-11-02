@@ -41,7 +41,10 @@ export type RemoteFetchOptions = {
   maxBytes?: number;
   /** Budget for the whole fetch, including DNS and every redirect. Default 10 s. */
   timeoutMs?: number;
-  /** Budget for each individual connection, from connect to body end. Default 10 s. */
+  /**
+   * Budget for each individual connection, from connect to body end, at most
+   * `timeoutMs`. Defaults to `timeoutMs` (10 s when that is unset too).
+   */
   connectionTimeoutMs?: number;
   /**
    * Replaces `dns.lookup(hostname, { all: true })`. Every returned address is
@@ -303,7 +306,9 @@ function settingsFrom(options: RemoteFetchOptions, truncate: boolean): Settings 
     timeoutMs,
     connectionTimeoutMs: Math.min(
       timeoutMs,
-      integerOption("connectionTimeoutMs", options.connectionTimeoutMs, 1) ?? REMOTE_FETCH_DEFAULTS.connectionTimeoutMs,
+      // Unset, it follows timeoutMs, so raising the total budget (the CLI's
+      // --timeout) also lets one slow connection use it.
+      integerOption("connectionTimeoutMs", options.connectionTimeoutMs, 1) ?? timeoutMs,
     ),
     resolve: options.resolve ?? ((hostname) => lookup(hostname, { all: true })),
   };
