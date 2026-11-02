@@ -16,6 +16,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSyn
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { npmPackResult } from "./npm-pack-result.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const target = process.argv[2];
@@ -55,7 +56,7 @@ if (!existsSync(join(root, "dist", "index.js"))) {
 rmSync(consumer, { recursive: true, force: true });
 mkdirSync(consumer, { recursive: true });
 
-const [packed] = JSON.parse(npm(["pack", "--json", "--pack-destination", consumer], root));
+const packed = npmPackResult(npm(["pack", "--json", "--pack-destination", consumer], root));
 const tarball = join(consumer, packed.filename);
 const sha256 = createHash("sha256").update(readFileSync(tarball)).digest("hex");
 
