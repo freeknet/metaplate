@@ -101,6 +101,17 @@ describe("parseVerifyTargets", () => {
   ] satisfies { args: string[] }[])(`rejects invalid arguments: $args`, ({ args }) => {
     expect(() => parseVerifyTargets(args)).toThrow(VERIFY_USAGE);
   });
+
+  it("rejects a --size or --format that no file follows instead of ignoring it", () => {
+    expect(() => parseVerifyTargets(["verify", "--size", "1200x630", "ok.png", "--format", "jpeg"]))
+      .toThrow("--format applies to the files after it, but none follow it.");
+    expect(() => parseVerifyTargets(["verify", "--size", "1200x630", "ok.png", "--size", "600x315"]))
+      .toThrow("--size applies to the files after it, but none follow it.");
+    expect(() => parseVerifyUrlInvocation(["verify-url", "--size", "1x1", "https://example.com/a.png", "--size", "2x2"]))
+      .toThrow("--size applies to the URLs after it, but none follow it.");
+    // Trailing flags that apply to every file are still accepted.
+    expect(() => parseVerifyTargets(["verify", "--size", "1200x630", "ok.png", "--target", "x"])).not.toThrow();
+  });
 });
 
 describe("verify CLI", () => {
@@ -165,6 +176,13 @@ describe("verify CLI", () => {
     expect(help.stdout).toContain(VERIFY_PAGE_USAGE);
     expect(help.stdout).toContain(RENDER_USAGE);
     expect(shortHelp.stdout).toBe(help.stdout);
+    for (const [command, usage] of [["verify", VERIFY_USAGE], ["verify-url", VERIFY_URL_USAGE], ["verify-page", VERIFY_PAGE_USAGE], ["render", RENDER_USAGE]] as const) {
+      const commandHelp = run([command, "--help"], cwd);
+      expect(commandHelp.status).toBe(0);
+      expect(commandHelp.stderr).toBe("");
+      expect(commandHelp.stdout).toBe(`${usage}
+`);
+    }
     expect(version.status).toBe(0);
     expect(version.stderr).toBe("");
     expect(version.stdout.trim()).toBe(METAPLATE_VERSION);
