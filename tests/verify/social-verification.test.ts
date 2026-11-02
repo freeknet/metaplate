@@ -68,6 +68,25 @@ describe("verifySocialImage", () => {
     expect(options).toBeDefined();
   });
 
+  it("compares a fractional SVG size in whole pixels instead of throwing", () => {
+    const svg = new TextEncoder().encode(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="98.36" height="40.5"></svg>',
+    );
+    const measured = verifySocialImage(svg, { url: "https://example.com/logo.svg" });
+    expect(measured.actual).toMatchObject({ format: "svg", width: 98.36, height: 40.5 });
+    expect(measured.issues.some(({ code }) => code === "dimensions")).toBe(false);
+
+    const declared = verifySocialImage(svg, {
+      url: "https://example.com/logo.svg",
+      width: 98,
+      height: 41,
+      type: "image/svg+xml",
+    });
+    expect(declared.issues.map(({ code }) => code)).not.toContain("dimensions");
+    const wrong = verifySocialImage(svg, { url: "https://example.com/logo.svg", width: 99, height: 41 });
+    expect(wrong.issues.map(({ code }) => code)).toContain("dimensions");
+  });
+
   it("reports target-specific aspect-ratio guidance as a warning", () => {
     const report = socialImageCompatibility(
       { ...pngDescriptor, width: 1300, height: 627 },
