@@ -9,9 +9,11 @@ brand. Choose the route that matches the entry point you use.
    public/output directory and deploy the resulting `.png` or `.jpg` as a
    static file. This is the most portable route and works on Netlify, GitHub
    Pages, and CDN/static hosting.
-2. **Does the provider run standard Node.js?** Use `metaplate/node` with a Web
-   `Response` handler, a provider function, or raw bytes in Express. Set the
-   provider to its Node runtime, not its Edge runtime.
+2. **Does the provider run standard Node.js, Bun, or Deno?** Use
+   `metaplate/node` with a Web `Response` handler, a provider function, or raw
+   bytes in Express. Set the provider to its Node runtime, not its Edge
+   runtime. Deno Deploy runs `metaplate/node` through Deno's Node
+   compatibility.
 3. **Does the provider run only an edge runtime?** `metaplate/node` is not
    supported there because it loads the native `@resvg/resvg-js` binding. Use
    static generation or, on a Deno-based edge such as Netlify Edge Functions,
@@ -128,6 +130,27 @@ for = "/og-image"
 
 - [Netlify Functions and configuration](https://docs.netlify.com/build/functions/configuration/)
 - [Netlify build dependencies](https://docs.netlify.com/build/configure-builds/manage-dependencies/)
+
+## Static hosts
+
+Extension-free route-handler output may be served as a generic download by a
+static host. Set the `Content-Type` explicitly for `/og-image` and `/*/og-image`
+— `image/png` by default, or the `plate.contentType` of a custom-output plate
+(`image/jpeg`, `image/webp`, …). For Netlify, a PNG plate:
+
+```toml
+[[headers]]
+for = "/og-image"
+  [headers.values]
+  Content-Type = "image/png"
+
+[[headers]]
+for = "/*/og-image"
+  [headers.values]
+  Content-Type = "image/png"
+```
+
+A JPEG plate uses `Content-Type = "image/jpeg"` for the same two paths.
 
 ## Vercel Node.js Functions
 
@@ -320,10 +343,8 @@ deployment is reproducible from a commit:
 - Builds and logs are read from the REST API (`https://api.deno.com/v2`) with an
   organization access token.
 
-Uploading a local directory with `deno deploy` did not work for this
-organization on 2026-11-01. The server never reported which files to upload,
-and every build was cancelled after five minutes in its preparing step, across
-CLI versions, operating systems, and apps
+The fixture deploys from GitHub, not by uploading a local directory with
+`deno deploy`; uploads stalled on Deno Deploy's side when this was set up
 ([denoland/deploy_feedback#954](https://github.com/denoland/deploy_feedback/issues/954)).
 
 ### Hosted Deno Deploy evidence
@@ -404,7 +425,7 @@ Netlify Edge Functions (see [Hosted Netlify evidence](#hosted-netlify-evidence))
 A minimal edge function is about 1.6 MB gzip, mostly the two Wasm modules; the
 certified Netlify Edge bundle was 462 KB gzip against a 20 MB limit. See the
 README section
-[Edge runtimes with `metaplate/edge`](../README.md#edge-runtimes-with-metaplateedge).
+[Edge runtimes with `metaplate/edge`](edge.md).
 
 **Cloudflare Workers are not supported.** Satori shapes text with a HarfBuzz
 build bundled into `satori/standalone`. In a worker-shaped isolate it reads

@@ -262,8 +262,6 @@ All notable changes to Metaplate are documented in this file. The project uses
   `@sveltejs/vite-plugin-svelte` 7.3.1, and `svelte` 5.57.3; they add one
   low-severity advisory, `deepmerge` GHSA-gcqx-w48m-w2h4, under the release
   audit's high threshold.
-- Deployment evidence routes may list extra upstream references in
-  `relatedDocs`, which the manifest validator requires to be HTTPS URLs.
 - The root entry exports `socialMetaTags(metadata, options?)` and
   `socialMetaHtml(metadata, options?)`, a framework-neutral serializer for
   `SocialImageMetadata`. `socialMetaTags` returns an ordered, deduplicated
@@ -289,6 +287,38 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Changed
 
+- Development tooling now resolves `minimatch` 11 through an npm override,
+  clearing the moderate globparts denial-of-service advisory (fixed in
+  11.0.1) that eslint and typescript-eslint pulled in through their 10.x
+  ranges. Development-only; the published package has no dependencies.
+- The `discord` compatibility profile now checks the image formats Discord's
+  published link-preview contract supports (PNG, GIF, JPEG, WebP, and AVIF)
+  instead of reporting an unknown contract. Discord sets no image size limit
+  and accepts root-relative image URLs, so the profile does not require
+  crawler-ready URLs. `socialImageCompatibility` output for `discord` changes
+  accordingly; Instagram is still reported as unknown.
+- Every font loader now rejects bytes that are not a TrueType, OpenType, WOFF,
+  or WOFF2 file with a `TypeError` naming the font and showing the leading
+  bytes it received. Satori renders text in an unreadable font as nothing, so
+  previously a failed font fetch (an HTML error page, a placeholder, an empty
+  body) produced a blank card that a CDN could cache; it now fails the render
+  and the memoized loader retries on the next request.
+- `Runtime smoke / bun` and `Runtime smoke / deno` are now blocking, required
+  checks on `main`, and they run against the packed tarball:
+  `scripts/prepare-runtime-consumer.mjs` installs it, with the lockfile's peer
+  versions, into a clean consumer, and the smoke imports `metaplate` by
+  package name and fails unless every entry resolves into that consumer's
+  `node_modules`. Bun and Deno are recorded as `certified` for the packed
+  package on linux-x64; no hosted Bun or Deno Deploy deployment is certified.
+- The packed-package verifier copies a dependency's installed optional
+  dependencies with its lockfile-verified closure, so Next's SWC binaries and
+  its optional sharp encoder (with sharp's platform binaries) arrive through
+  one rule instead of an SWC-specific copy step.
+- The tslib `unstableOwnership` disposition's dependency path now names the
+  first lockfile path through `@astrojs/node`, which reaches `astro` as a
+  peer; the alert, package, version, and reasoning are unchanged.
+- Deployment evidence routes may list extra upstream references in
+  `relatedDocs`, which the manifest validator requires to be HTTPS URLs.
 - `metaplate/node`'s renderer-independent code moved into internal modules
   shared with `metaplate/edge`. Its public API, types, and output are
   unchanged.
@@ -301,6 +331,19 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Documentation
 
+- The README is now a short overview: install, a quick start, a one-paragraph
+  summary of each guide, and the entry points. The full guides moved verbatim
+  into `docs/`: rendering, framework and runtime support, edge runtimes,
+  Next.js, size variants, metadata, X player and app cards, compatibility
+  profiles, chat previews, Schema.org JSON-LD, fonts, and verification. Static
+  hosts joined the deployment guide. The package now ships the whole `docs/`
+  directory so the README's links resolve offline.
+- Plate constraints now lead with the `content-box` pitfall: a padded root
+  sized to 100% grows past the canvas and can draw a one-line title off the
+  image. The README quick start, the size-variants guide, and the Astro,
+  Next.js, and size-variants examples set `boxSizing: "border-box"`. In the
+  size-variants example the square layout is bottom-aligned, and its title
+  rendered entirely below the 1080px canvas.
 - Correct the Netlify Edge caveat. The blank cards on the edge site's first
   deploy came from the fixture's layout, not from a first-deploy race on the
   font fetch as first recorded. Satori sizes boxes as content-box, so a card
@@ -308,12 +351,10 @@ All notable changes to Metaplate are documented in this file. The project uses
   bottom-aligned title was drawn below it. The Netlify Edge and Cloudflare
   fixtures now set `boxSizing: "border-box"`, and `netlify-edge` was
   redeployed and re-certified with one-line titles.
-
 - Document why image responses are buffered rather than streamed: each
   response carries `Content-Length` and a strong `ETag` from the final bytes,
   which CDNs and the verification tools rely on, and cards are too small for
   streaming to help.
-
 - The support table claims SvelteKit 3 `+server` routes with `adapter-node` 6
   on Node 22.17 or newer. The SvelteKit example now imports from `#lib`,
   because SvelteKit 3 removed `$lib` in favor of `package.json` subpath
