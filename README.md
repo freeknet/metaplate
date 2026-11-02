@@ -24,6 +24,7 @@ It works with plain Node, static build scripts, Next.js, Astro, React Router, Sv
 - [Guides](#guides)
   - [Rendering and routes](#rendering-and-routes)
   - [Static files with `metaplate render`](#static-files-with-metaplate-render)
+  - [Live preview with `metaplate preview`](#live-preview-with-metaplate-preview)
   - [Framework and runtime support](#framework-and-runtime-support)
   - [Edge runtimes](#edge-runtimes)
   - [Next.js](#nextjs)
@@ -150,6 +151,19 @@ npx metaplate render og.render.mjs --out public
 ```
 
 [Render CLI guide](docs/render-cli.md)
+
+### Live preview with `metaplate preview`
+
+`metaplate preview` serves a local gallery of the same render module: every
+page at every size with its metadata and `--target` checks, a switch for
+Satori's layout debug boxes, and 1.91:1, 2:1, and 1:1 crop overlays. Saving
+the module or a local file it imports reloads every open gallery.
+
+```sh
+npx metaplate preview og.render.mjs
+```
+
+[Preview guide](docs/preview.md)
 
 ### Framework and runtime support
 
