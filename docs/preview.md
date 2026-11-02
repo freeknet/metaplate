@@ -51,8 +51,8 @@ Each overlay dims what falls outside a centered crop to one platform ratio:
 | Overlay | Ratio | What the platform publishes |
 | --- | --- | --- |
 | Open Graph link share | 1.91:1 | Facebook's [image guidance](https://developers.facebook.com/docs/sharing/webmasters/images/): keep images "as close to 1.91:1 aspect ratio as possible" to show the full image in Feed without cropping. |
-| X `summary_large_image` | 2:1 | X's [Summary Card with Large Image](https://developer.x.com/en/docs/x-for-websites/cards/overview/summary-card-with-large-image) documents a 2:1 aspect ratio, 300x157 minimum and 4096x4096 maximum. |
-| Square thumbnail (X `summary`) | 1:1 | X's [Summary Card](https://developer.x.com/en/docs/x-for-websites/cards/overview/summary) documents a 1:1 image, 144x144 minimum and 4096x4096 maximum. |
+| X `summary_large_image` | 2:1 | X's Summary Card with Large Image reference ([archived 2023-12-17](https://web.archive.org/web/20231217021401/https://developer.twitter.com/en/docs/twitter-for-websites/cards/overview/summary-card-with-large-image)): "an aspect ratio of 2:1 with minimum dimensions of 300x157 or maximum of 4096x4096 pixels". |
+| Square thumbnail (X `summary`) | 1:1 | X's Summary Card reference ([archived 2024-01-25](https://web.archive.org/web/20240125214107/https://developer.twitter.com/en/docs/twitter-for-websites/cards/overview/summary)): "an aspect ratio of 1:1 with minimum dimensions of 144x144 or maximum of 4096x4096 pixels", "cropped to a square on all platforms". |
 
 These platforms publish the ratio, not where the crop is anchored, so the
 overlay assumes the center. Treat it as a guide to the safe area for text and

@@ -20,6 +20,8 @@ export {
   type XImageOptions,
 } from "./core.js";
 
+export { IMAGE_VERSION_PARAMETER, socialImageVersion } from "./image-version.js";
+
 export {
   socialImageCompatibility,
   type CompatibilitySeverity,
@@ -40,6 +42,8 @@ export {
 export {
   socialMetaHtml,
   socialMetaTags,
+  type SocialMetaArticle,
+  type SocialMetaDateTime,
   type SocialMetaHtmlOptions,
   type SocialMetaImageInput,
   type SocialMetaInput,
@@ -93,3 +97,12 @@ export {
   type SocialImageJsonLdOptions,
   type SocialImageObject,
 } from "./json-ld.js";
+export {
+  MIN_IMAGE_SIGNING_SECRET_BYTES,
+  signImagePath,
+  verifyImageSignature,
+  type ImageSignatureVerification,
+  type ImageSigningKeys,
+  type ImageSigningSecret,
+  type ImageSigningSecrets,
+} from "./signing.js";

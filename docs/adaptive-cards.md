@@ -11,7 +11,7 @@ with your own content or to post cards yourself.
 | --- | --- | --- | --- |
 | Microsoft Teams | `og:title`, `og:description`, and `og:image` (or `<meta name="title">` and `<meta name="description">`), rendered as an Adaptive Card; a page that requires authentication gets no preview. Schema.org JSON-LD can upgrade the card to a richer template. | `title`, `description`, and the first Open Graph image | Link unfurling for your domains through a message extension (`messageHandlers` in the app manifest, answering `composeExtension/queryLink`), or posting cards from a bot or Workflows webhook |
 | Slack | Open Graph and X (Twitter) Card metadata, when no installed app handles the domain ("classic" unfurling) | Open Graph images, `twitter:card`, `title`, `description`, `siteName` | App unfurls: subscribe to `link_shared` for up to five registered domains, then call `chat.unfurl` (`links:read`, `links:write`) |
-| Discord | `og:title`, `og:description`, `og:site_name`, `og:image` with `og:image:width`/`height`/`type`/`alt`, `twitter:card`, and `theme-color` | All of these except `theme-color`; `twitter:card` defaults to `summary_large_image` | Bot or webhook messages with their own embeds |
+| Discord | `og:title`, `og:description`, `og:site_name`, `og:image` with `og:image:width`/`height`/`type`/`alt`, `twitter:card`, `theme-color`, and `og:pubdate` | All of these: `themeColor` and `pubdate` set the last two; `twitter:card` defaults to `summary_large_image` | Bot or webhook messages with their own embeds |
 
 Platform notes:
 
@@ -38,8 +38,11 @@ Platform notes:
   with size variants previews as a gallery. Declaring `og:image:width` and
   `og:image:height` spares a measurement fetch. Images may be PNG, GIF, JPEG,
   WebP, or AVIF. The accent color comes from
-  `<meta name="theme-color" content="#RRGGBB">`, page markup that metaplate
-  does not emit. Previews are cached for about 30 minutes.
+  `<meta name="theme-color" content="#RRGGBB">` (or `#RRGGBBAA`), which
+  `socialMetaTags` emits from `themeColor`, and the embed timestamp from
+  `og:pubdate`, a full RFC 3339 timestamp, which it emits from `pubdate`; see
+  [page-level tags](metadata.md#page-level-tags). Previews are cached for
+  about 30 minutes.
 
 ### Adaptive Cards for bots and webhooks
 
