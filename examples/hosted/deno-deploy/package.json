@@ -1,0 +1,20 @@
+{
+  "name": "metaplate-hosted-deno-deploy",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "pack:metaplate": "node scripts/pack-metaplate.mjs",
+    "setup": "npm run pack:metaplate && npm install --no-audit --no-fund",
+    "start": "node scripts/deno.mjs run -A main.ts",
+    "login": "node scripts/deno.mjs login",
+    "create": "node scripts/deno.mjs create"
+  },
+  "dependencies": {
+    "@fontsource/inter": "5.3.0",
+    "@resvg/resvg-js": "2.6.2",
+    "@resvg/resvg-wasm": "2.6.2",
+    "metaplate": "file:./metaplate.tgz",
+    "react": "19.3.1",
+    "satori": "0.63.2"
+  }
+}
