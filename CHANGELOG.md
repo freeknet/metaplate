@@ -18,6 +18,45 @@ All notable changes to Metaplate are documented in this file. The project uses
   `metaplate` command in-process and resolves to its exit code (#166). It
   leaves `process.exitCode` alone, and concurrent calls keep separate output.
   The `metaplate` binary is unchanged.
+- `metaplate verify --require-content` and `verify-url --require-content`
+  check JPEG as well as PNG (#164), so cards encoded as JPEG, the format
+  [the rendering guide](docs/rendering.md) recommends for photographic
+  cards, can be checked after the build. The decoder adds no dependency. It
+  supports baseline, extended, and progressive Huffman JPEGs, any chroma
+  subsampling, restart markers, grayscale, and Adobe CMYK. It reads the DCT
+  coefficients and fails a JPEG only when every 8x8 block of every channel
+  holds the same flat value. WebP and GIF still fail with the flag; that
+  error now names the plate's `guards: { blank: "error" }` as the check for
+  those formats.
+
+### Changed
+
+- The `satori` peer range is now `>=0.38.2 <1` (was `>=0.33.3 <1`) (#165).
+  Older releases inside the old range drop content without an error, and no
+  render guard can see it:
+  - before 0.38.2, `inset` is ignored, so an absolutely positioned overlay
+    such as a scrim behind a headline collapses to 0x0;
+  - through 0.35.1, text with `color: "transparent"` draws nothing, so
+    outline type set with `WebkitTextStroke` disappears;
+  - 0.35.2 to 0.37.0 fail on import under Node ESM;
+  - before 0.38.2, a fragment is laid out as a box of its own.
+
+  All four were checked on Satori 0.33.5 through 0.63.2. A project on an
+  older Satori gets a peer-dependency warning and should upgrade. The
+  fragment constraint is gone from the rendering guide.
+
+### Fixed
+
+- `verify-page` reads `twitter:image:type`, `twitter:image:width`, and
+  `twitter:image:height`, which Next.js emits from `og.metadata()` for a
+  JPEG plate, and checks them against the fetched bytes like the
+  `og:image:*` properties (#163). They are reported in `metadata.twitter` as
+  `imageType`, `imageWidth`, and `imageHeight`.
+- A `verify-page` target no longer reports "No media type is declared, so
+  raster compatibility cannot be confirmed" for an image it fetched. Without
+  a declared type, the format rule reads the fetched bytes' format, so the
+  `universal` target accepts an undeclared PNG or JPEG and `x` rejects an
+  undeclared SVG (#163).
 
 ## [0.8.0] - 2026-11-01
 

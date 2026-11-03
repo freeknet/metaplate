@@ -156,8 +156,8 @@ so they are rejected without at least one `--target`.
 
 Format, size, and structure checks accept a card whose every pixel is one
 color: a title drawn off the canvas or in a font that never loaded leaves the
-background behind, still a valid 1200x630 PNG. `--require-content` decodes the
-PNG and fails it when every pixel is the same color:
+background behind, still a valid 1200x630 PNG. `--require-content` decodes a
+PNG or JPEG and fails it when every pixel is the same color:
 
 ```sh
 npx metaplate verify --require-content --size 1200x630 public/og.png
@@ -170,9 +170,19 @@ every PNG the [PNG specification](https://www.w3.org/TR/png-3/) allows
 (grayscale, truecolor, and indexed, with or without alpha or `tRNS`, at every
 bit depth, interlaced or not), inflates with `node:zlib` capped at the size the
 header declares, and fails a file it cannot decode rather than passing it.
-Only PNG is decoded, because Node ships no JPEG, WebP, or GIF decoder and
-Metaplate adds no dependency: with the flag, any other format fails with
-`--require-content decodes PNG only`. Like the plate's `blank`
+
+JPEG is decoded without a dependency too. Baseline, extended, and progressive
+Huffman JPEGs are supported, with any chroma subsampling, restart markers,
+grayscale, and Adobe CMYK. The check reads the DCT coefficients directly: a
+JPEG is blank when every 8x8 block of every channel carries the same flat
+value, which decodes to one color, so a card with any detail is never
+failed. The reported color can differ by one from a decoder's output.
+Lossless, hierarchical, and arithmetic-coded JPEGs fail as undecodable.
+
+WebP and GIF are not decoded: with the flag, they fail with
+`--require-content decodes PNG and JPEG only`. For those formats, use the
+plate's `guards: { blank: "error" }`, which runs the same check on the pixels
+as the card renders. Like the plate's `blank`
 [render guard](rendering.md#render-guards), it catches a uniform image, not
 a gradient or photograph whose text is missing.
 
