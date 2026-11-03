@@ -18,6 +18,8 @@ export {
   type RenderGuardLevel,
   type RenderGuardName,
   type RenderGuards,
+  type AvoidGuard,
+  type SafeAreaGuard,
 } from "./guards.js";
 
 export type {
@@ -26,6 +28,13 @@ export type {
   RenderedPixels,
   ResvgRenderOptions,
 } from "./raster.js";
+
+/**
+ * Metaplate's `satori` option and what it hands `onNodeDetected`. Type a
+ * plate's `satori` with these, not Satori's own `SatoriOptions`, which also
+ * requires the width, height, and fonts that Metaplate sets.
+ */
+export type { SatoriFont, SatoriLayoutNode, SatoriNode, SatoriOptions } from "./svg.js";
 
 export type {
   PlateContext,

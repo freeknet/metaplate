@@ -1,6 +1,6 @@
 import type { ImageSize } from "../core/social-image.js";
 import type { EmojiLoader } from "../fonts/emoji.js";
-import { assertRenderGuards, type RenderGuards } from "./guards.js";
+import { assertRenderGuards, LAYOUT_GUARD_NAMES, type RenderGuards } from "./guards.js";
 import type { LanguageFontLoader } from "../fonts/language-fonts.js";
 import type { PlateContext, PlateElement, PlateVariants, PlateVersioning } from "./plate.js";
 import { loadSatori } from "../core/peers.js";
@@ -15,6 +15,8 @@ export {
   type RenderGuardLevel,
   type RenderGuardName,
   type RenderGuards,
+  type AvoidGuard,
+  type SafeAreaGuard,
 } from "./guards.js";
 
 /**
@@ -167,6 +169,6 @@ export type SvgOgDefinition<Copy, Variant extends string = string> = {
 export function createSvgOg<Copy, Variant extends string = string>(
   definition: SvgOgDefinition<Copy, Variant>,
 ) {
-  assertRenderGuards(definition.guards, ["missingGlyphs", "overflow"], "metaplate/render");
+  assertRenderGuards(definition.guards, LAYOUT_GUARD_NAMES, "metaplate/render");
   return createSvgPlate(definition, loadSatori);
 }
