@@ -675,6 +675,9 @@ Each guard takes `"error"`, `"warn"`, or `"off"`:
 | --- | --- | --- |
 | `missingGlyphs` | Text that no plate font covers and that nothing resolved to a font or image | `createSvgOg`, `createNodeOg`, `createEdgeOg` |
 | `overflow` | An element holding text whose laid-out box reaches outside the canvas | `createSvgOg`, `createNodeOg`, `createEdgeOg` |
+| `safeArea` | Text inside the canvas but outside the area every wide crop keeps | `createSvgOg`, `createNodeOg`, `createEdgeOg` |
+| `textOverlap` | Two text elements whose laid-out boxes intersect | `createSvgOg`, `createNodeOg`, `createEdgeOg` |
+| `avoid` | Text that comes too close to an element the plate keys, such as a photo | `createSvgOg`, `createNodeOg`, `createEdgeOg` |
 | `blank` | A rasterised image in which every pixel is the same color | `createNodeOg`, `createEdgeOg` |
 
 `"error"` rejects the render (and so `render`, `renderPixels`, `artifact`,
@@ -682,8 +685,9 @@ Each guard takes `"error"`, `"warn"`, or `"off"`:
 with a `RenderGuardError`. Its `issues` lists every error-level problem the
 render step found, each with `guard`, `message`, the `variant` and `size`
 being rendered, and the guard's own details: `languageCode` and `segment`
-for missing glyphs, `element`, `text`, and `box` for overflow, `color` for a
-blank image. Its `name` is `"RenderGuardError"`; `instanceof` works when the
+for missing glyphs, `element`, `text`, and `box` for overflow and the layout
+guards (plus `safeArea`, the `other` text, or the `avoided` element), `color`
+for a blank image. Its `name` is `"RenderGuardError"`; `instanceof` works when the
 class is imported from the same entry as the plate factory, because each
 entry is bundled separately.
 
@@ -727,6 +731,55 @@ with both reports all of them.
   RGB. It catches a solid-background card whose text never appeared. It does
   not catch a gradient or photograph whose text is missing; `overflow` and
   `missingGlyphs` cover those causes.
+- **`safeArea`, `textOverlap`, and `avoid`** read the same `onNodeDetected`
+  boxes as `overflow`, from the same text-bearing elements. They compare
+  boxes across the whole layout, so they report once Satori has finished.
+  They catch the failures that stay inside the canvas: a footer pushed into
+  the strip a crop removes, a line crowding the one below it, a headline
+  running under a photo.
+
+  `safeArea` takes a level, or `{ level, inset }`. By default the safe area
+  is what the centered 2:1 crop (X `summary_large_image`) and 1.91:1 crop
+  (Open Graph) of a landscape canvas both keep, the crops
+  [`metaplate preview`](preview.md) overlays. For 1200x630 that removes 15px
+  from the top and bottom. A square or portrait size has no default crop, so
+  its safe area is the whole canvas. `inset` replaces the default with a
+  margin in pixels: one number for every edge, or `{ x, y }` for the
+  left/right and top/bottom edges.
+
+  ```ts
+  guards: {
+    safeArea: { level: "error", inset: { x: 56, y: 44 } },
+    textOverlap: "error",
+    avoid: { level: "error", keys: ["photo"], gap: 20 },
+  }
+  ```
+
+  `textOverlap` reports each pair of text boxes that share more than half a
+  pixel both across and down; boxes that only touch pass. `avoid` reports
+  text whose box, grown by `gap` pixels (default 0), meets an element whose
+  React `key` is in `keys`. Key the element the text must keep clear of, such
+  as the `<img>`, not a container that holds the text too. A keyed element's
+  own text is not reported.
+
+  Boxes are layout boxes, so they include line height and padding, and a
+  block of text that fills its row is as wide as the row. Satori reports no
+  box for loose text beside other children (`Hello <span>world</span>`
+  reports only the span), so put text that must be checked in its own
+  element.
+
+The plate's `satori` option is typed by `SatoriOptions`, which
+`metaplate/render`, `metaplate/node`, and `metaplate/edge` export along with
+`SatoriLayoutNode`, the node `onNodeDetected` receives. Use those, not
+Satori's own `SatoriOptions`, which also requires the `width`, `height`, and
+`fonts` that Metaplate sets:
+
+```ts
+import { createNodeOg, type SatoriLayoutNode } from "metaplate/node";
+
+const boxes: SatoriLayoutNode[] = [];
+createNodeOg({ alt, fonts, component, satori: { onNodeDetected: (node) => boxes.push(node) } });
+```
 
 Both Satori hooks have the same contract across the supported peer range:
 `loadAdditionalAsset(code, segment)` and `onNodeDetected` with

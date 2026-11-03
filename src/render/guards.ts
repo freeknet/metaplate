@@ -28,11 +28,37 @@ export type RenderGuards = {
    */
   overflow?: RenderGuardLevel;
   /**
+   * Text whose laid-out box reaches outside the safe area: by default the
+   * part of a landscape canvas that survives the centered 2:1 (X
+   * `summary_large_image`) and 1.91:1 (Open Graph) crops, which trims 15px
+   * from the top and bottom of 1200x630. A square or portrait canvas has no
+   * default crop. `inset` replaces the default with a margin in pixels from
+   * every edge, or from the left/right (`x`) and top/bottom (`y`) edges.
+   */
+  safeArea?: SafeAreaGuard;
+  /** Two text-bearing elements whose laid-out boxes intersect. */
+  textOverlap?: RenderGuardLevel;
+  /**
+   * Text that comes within `gap` pixels (default 0) of an element whose
+   * React `key` is listed in `keys`, such as the photo a headline must not
+   * run under. Key the element to keep clear, not a container that holds
+   * the text.
+   */
+  avoid?: AvoidGuard;
+  /**
    * Receives each problem found by a guard set to `"warn"`. Without it,
    * warnings go to `console.warn`, so a `"warn"` guard is never silent.
    */
   onWarning?: (warning: RenderGuardIssue) => void;
 };
+
+/** `safeArea`: a level, or a level with its own inset. */
+export type SafeAreaGuard =
+  | RenderGuardLevel
+  | Readonly<{ level: RenderGuardLevel; inset?: number | Readonly<{ x: number; y: number }> }>;
+
+/** `avoid`: the keys of elements text must stay clear of, and by how much. */
+export type AvoidGuard = Readonly<{ level: RenderGuardLevel; keys: readonly (string | number)[]; gap?: number }>;
 
 /** Guards for renderers that rasterise, adding a check on the pixels. */
 export type RasterRenderGuards = RenderGuards & {
@@ -45,7 +71,7 @@ export type RasterRenderGuards = RenderGuards & {
   blank?: RenderGuardLevel;
 };
 
-export type RenderGuardName = "missingGlyphs" | "overflow" | "blank";
+export type RenderGuardName = "missingGlyphs" | "overflow" | "safeArea" | "textOverlap" | "avoid" | "blank";
 
 type IssueBase = Readonly<{
   /** The variant being rendered; `undefined` for the plate's default size. */
@@ -75,6 +101,30 @@ export type RenderGuardIssue =
       box: RenderGuardBox;
     }>)
   | (IssueBase & Readonly<{
+      guard: "safeArea";
+      element: string;
+      text: string;
+      box: RenderGuardBox;
+      /** The area text must stay inside. */
+      safeArea: RenderGuardBox;
+    }>)
+  | (IssueBase & Readonly<{
+      guard: "textOverlap";
+      element: string;
+      text: string;
+      box: RenderGuardBox;
+      /** The text this text overlaps. */
+      other: Readonly<{ element: string; text: string; box: RenderGuardBox }>;
+    }>)
+  | (IssueBase & Readonly<{
+      guard: "avoid";
+      element: string;
+      text: string;
+      box: RenderGuardBox;
+      /** The keyed element the text comes too close to. */
+      avoided: Readonly<{ element: string; key: string; box: RenderGuardBox }>;
+    }>)
+  | (IssueBase & Readonly<{
       guard: "blank";
       /** The single color of every pixel, as RGBA bytes. */
       color: readonly [number, number, number, number];
@@ -97,12 +147,42 @@ export class RenderGuardError extends Error {
 /** Where a render is happening, for issue reports. */
 export type GuardTarget = Readonly<{ variant: string | undefined; size: ImageSize }>;
 
-type GuardLevels = Readonly<Partial<Record<RenderGuardName, RenderGuardLevel>>> & {
+type GuardLevels = Readonly<{
+  [Name in RenderGuardName]?: RenderGuardLevel | Readonly<{ level: RenderGuardLevel }>;
+}> & {
   onWarning?: ((warning: RenderGuardIssue) => void) | undefined;
 };
 
 const LEVELS = new Set<unknown>(["error", "warn", "off"]);
-const GUARD_NAMES: readonly RenderGuardName[] = ["missingGlyphs", "overflow", "blank"];
+const GUARD_NAMES: readonly RenderGuardName[] = ["missingGlyphs", "overflow", "safeArea", "textOverlap", "avoid", "blank"];
+
+/** The guards that work on Satori's layout, which every renderer can run. */
+export const LAYOUT_GUARD_NAMES: readonly RenderGuardName[] = ["missingGlyphs", "overflow", "safeArea", "textOverlap", "avoid"];
+
+const isPixels = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0;
+
+/** The level of a guard written as a level or as `{ level, ... }`, validating the object form's options. */
+function configuredLevel(name: RenderGuardName, value: unknown): unknown {
+  if (typeof value !== "object" || value === null) {
+    if (name === "avoid") throw new TypeError("guards.avoid must be { level, keys, gap? }");
+    return value;
+  }
+  if (name !== "safeArea" && name !== "avoid") throw new TypeError(`guards.${name} must be "error", "warn", or "off"`);
+  const options = value as Record<string, unknown>;
+  if (name === "safeArea") {
+    const inset = options.inset as { x?: unknown; y?: unknown } | number | undefined;
+    const valid = inset === undefined || isPixels(inset) ||
+      (typeof inset === "object" && inset !== null && isPixels(inset.x) && isPixels(inset.y));
+    if (!valid) throw new TypeError("guards.safeArea.inset must be a non-negative number or { x, y } of them");
+  } else {
+    const { keys, gap } = options;
+    const validKeys = Array.isArray(keys) && keys.length > 0 &&
+      keys.every((key) => (typeof key === "string" && key !== "") || (typeof key === "number" && Number.isFinite(key)));
+    if (!validKeys) throw new TypeError("guards.avoid.keys must be a non-empty array of React keys");
+    if (gap !== undefined && !isPixels(gap)) throw new TypeError("guards.avoid.gap must be a non-negative number");
+  }
+  return options.level;
+}
 
 /**
  * Validates a plate's `guards` at definition time, so a typo such as
@@ -116,10 +196,11 @@ export function assertRenderGuards(guards: unknown, allowed: readonly RenderGuar
   }
   const record = guards as Record<string, unknown>;
   for (const name of GUARD_NAMES) {
-    const level = record[name];
-    if (level === undefined) continue;
+    if (record[name] === undefined) continue;
+    const level = configuredLevel(name, record[name]);
     if (!LEVELS.has(level)) {
-      throw new TypeError(`guards.${name} must be "error", "warn", or "off"`);
+      const field = typeof record[name] === "object" ? `guards.${name}.level` : `guards.${name}`;
+      throw new TypeError(`${field} must be "error", "warn", or "off"`);
     }
     if (level !== "off" && !allowed.includes(name)) {
       throw new TypeError(
@@ -134,7 +215,9 @@ export function assertRenderGuards(guards: unknown, allowed: readonly RenderGuar
 }
 
 export function guardLevel(guards: GuardLevels | undefined, name: RenderGuardName): RenderGuardLevel {
-  return guards?.[name] ?? "off";
+  const value = guards?.[name];
+  if (value === undefined) return "off";
+  return typeof value === "string" ? value : value.level;
 }
 
 /**
@@ -236,6 +319,7 @@ export type DetectedNode = {
   width: number;
   height: number;
   type: string;
+  key?: string | number | null;
   textContent?: unknown;
 };
 
@@ -280,6 +364,132 @@ export function overflowDetector(report: GuardReport, target: GuardTarget) {
         `${round(width)}x${round(height)}, outside ${describeTarget(target)}; ` +
         "a root with width/height 100% and padding needs boxSizing: \"border-box\"",
     });
+  };
+}
+
+type TextBox = { element: string; text: string; box: RenderGuardBox };
+type KeyedBox = { element: string; key: string; box: RenderGuardBox };
+
+/** The default safe area keeps what the centered 2:1 and 1.91:1 crops of a landscape canvas keep. */
+const WIDE_CROPS = [2, 1.91] as const;
+
+/** The safe area of a canvas, from `safeArea`'s inset or the default crops. */
+export function safeAreaBox(size: ImageSize, guard: SafeAreaGuard | undefined): RenderGuardBox {
+  const { width, height } = size;
+  const inset = typeof guard === "object" ? guard.inset : undefined;
+  let x = 0;
+  let y = 0;
+  if (inset !== undefined) {
+    x = typeof inset === "number" ? inset : inset.x;
+    y = typeof inset === "number" ? inset : inset.y;
+  } else if (width > height) {
+    for (const ratio of WIDE_CROPS) {
+      if (width / height > ratio) x = Math.max(x, (width - height * ratio) / 2);
+      else y = Math.max(y, (height - width / ratio) / 2);
+    }
+  }
+  return Object.freeze({ left: x, top: y, width: Math.max(0, width - 2 * x), height: Math.max(0, height - 2 * y) });
+}
+
+/** Whether `inner` lies within `outer`, give or take layout rounding. */
+function contains(outer: RenderGuardBox, inner: RenderGuardBox): boolean {
+  return (
+    inner.left >= outer.left - OVERFLOW_TOLERANCE &&
+    inner.top >= outer.top - OVERFLOW_TOLERANCE &&
+    inner.left + inner.width <= outer.left + outer.width + OVERFLOW_TOLERANCE &&
+    inner.top + inner.height <= outer.top + outer.height + OVERFLOW_TOLERANCE
+  );
+}
+
+/** Whether two boxes share more than layout rounding in both directions. */
+function intersects(a: RenderGuardBox, b: RenderGuardBox): boolean {
+  const across = Math.min(a.left + a.width, b.left + b.width) - Math.max(a.left, b.left);
+  const down = Math.min(a.top + a.height, b.top + b.height) - Math.max(a.top, b.top);
+  return across > OVERFLOW_TOLERANCE && down > OVERFLOW_TOLERANCE;
+}
+
+function describeBox({ left, top, width, height }: RenderGuardBox): string {
+  return `${round(left)},${round(top)} ${round(width)}x${round(height)}`;
+}
+
+/**
+ * The `safeArea`, `textOverlap`, and `avoid` guards. They compare boxes
+ * across the whole layout, so `detect` collects every text-bearing and keyed
+ * element and `finish` reports once Satori has laid out everything. Returns
+ * `undefined` when all three are off.
+ */
+export function layoutGuards(
+  guards: RenderGuards | undefined,
+  report: GuardReport,
+  target: GuardTarget,
+): { detect: (node: DetectedNode) => void; finish: () => void } | undefined {
+  const safe = guardLevel(guards, "safeArea") !== "off";
+  const overlap = guardLevel(guards, "textOverlap") !== "off";
+  const avoid = guardLevel(guards, "avoid") !== "off" ? guards?.avoid : undefined;
+  if (!safe && !overlap && !avoid) return undefined;
+  const avoidKeys = new Set((avoid?.keys ?? []).map(String));
+  const texts: TextBox[] = [];
+  const keyed: KeyedBox[] = [];
+  const at = { variant: target.variant, size: target.size };
+
+  function checkSafeArea() {
+    const area = safeAreaBox(target.size, guards?.safeArea);
+    for (const { element, text, box } of texts) {
+      if (contains(area, box)) continue;
+      report.add({
+        ...at, guard: "safeArea", element, text, box, safeArea: area,
+        message:
+          `Text ${quote(text)} in a <${element}> is laid out at ${describeBox(box)}, outside the safe area ` +
+          `${describeBox(area)} of ${describeTarget(target)}; move it inward or set guards.safeArea.inset`,
+      });
+    }
+  }
+
+  function checkOverlap() {
+    texts.forEach((first, index) => {
+      for (const second of texts.slice(index + 1)) {
+        if (!intersects(first.box, second.box)) continue;
+        report.add({
+          ...at, guard: "textOverlap", element: first.element, text: first.text, box: first.box,
+          other: Object.freeze({ ...second }),
+          message:
+            `Text ${quote(first.text)} (<${first.element}> at ${describeBox(first.box)}) overlaps text ` +
+            `${quote(second.text)} (<${second.element}> at ${describeBox(second.box)}) in ${describeTarget(target)}`,
+        });
+      }
+    });
+  }
+
+  function checkAvoid(gap: number) {
+    for (const { element, text, box } of texts) {
+      const reach = { left: box.left - gap, top: box.top - gap, width: box.width + 2 * gap, height: box.height + 2 * gap };
+      for (const avoided of keyed) {
+        // A keyed element's own text belongs to it rather than running into it.
+        if (avoided.box === box || !intersects(reach, avoided.box)) continue;
+        report.add({
+          ...at, guard: "avoid", element, text, box, avoided: Object.freeze({ ...avoided }),
+          message:
+            `Text ${quote(text)} in a <${element}> at ${describeBox(box)} is within ${gap}px of the element ` +
+            `keyed ${JSON.stringify(avoided.key)} (<${avoided.element}> at ${describeBox(avoided.box)}) in ${describeTarget(target)}`,
+        });
+      }
+    }
+  }
+
+  return {
+    detect(node) {
+      const box = Object.freeze({ left: node.left, top: node.top, width: node.width, height: node.height });
+      const text = ownText(node.textContent);
+      if (text.trim() !== "") texts.push({ element: node.type, text, box });
+      if (node.key !== undefined && node.key !== null && avoidKeys.has(String(node.key))) {
+        keyed.push({ element: node.type, key: String(node.key), box });
+      }
+    },
+    finish() {
+      if (safe) checkSafeArea();
+      if (overlap) checkOverlap();
+      if (avoid) checkAvoid(avoid.gap ?? 0);
+    },
   };
 }
 

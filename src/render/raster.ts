@@ -4,6 +4,7 @@ import {
   checkBlank,
   GuardReport,
   guardLevel,
+  LAYOUT_GUARD_NAMES,
   type RasterRenderGuards,
 } from "./guards.js";
 import { detectFormat, imageContentType, type ImageFormat, type OutputFormat } from "../image.js";
@@ -232,7 +233,7 @@ export function createRasterPlate<Copy, Variant extends string = string>(
   definition: RasterPlateDefinition<Copy, Variant>,
   backend: RasterBackend,
 ) {
-  assertRenderGuards(definition.guards, ["missingGlyphs", "overflow", "blank"], "this renderer");
+  assertRenderGuards(definition.guards, [...LAYOUT_GUARD_NAMES, "blank"], "this renderer");
   const svg = createSvgPlate(definition, backend.satori);
   const checksBlank = guardLevel(definition.guards, "blank") !== "off";
   // Every size the plate renders must survive Resvg unchanged, not only the
