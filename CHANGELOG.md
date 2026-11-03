@@ -18,6 +18,22 @@ All notable changes to Metaplate are documented in this file. The project uses
   error now names the plate's `guards: { blank: "error" }` as the check for
   those formats.
 
+### Changed
+
+- The `satori` peer range is now `>=0.38.2 <1` (was `>=0.33.3 <1`) (#165).
+  Older releases inside the old range drop content without an error, and no
+  render guard can see it:
+  - before 0.38.2, `inset` is ignored, so an absolutely positioned overlay
+    such as a scrim behind a headline collapses to 0x0;
+  - through 0.35.1, text with `color: "transparent"` draws nothing, so
+    outline type set with `WebkitTextStroke` disappears;
+  - 0.35.2 to 0.37.0 fail on import under Node ESM;
+  - before 0.38.2, a fragment is laid out as a box of its own.
+
+  All four were checked on Satori 0.33.5 through 0.63.2. A project on an
+  older Satori gets a peer-dependency warning and should upgrade. The
+  fragment constraint is gone from the rendering guide.
+
 ### Fixed
 
 - `verify-page` reads `twitter:image:type`, `twitter:image:width`, and
