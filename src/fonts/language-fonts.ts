@@ -14,7 +14,7 @@ import { loadedFont, memoizedFontLoader as memoize, type FontBytes, type FontWei
 
 /**
  * The language codes Satori passes to `loadAdditionalAsset` for text (its
- * `language.ts`, unchanged from Satori 0.33.3 through 0.63). `emoji` is
+ * `language.ts`, unchanged from Satori 0.38.2 through 0.63). `emoji` is
  * handled by the plate's `emoji` option instead.
  */
 export const LANGUAGE_CODES = [
