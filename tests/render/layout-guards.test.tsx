@@ -139,6 +139,7 @@ describe("avoid guard", () => {
       expect(under).toMatchObject([
         { guard: "avoid", text: "Headline", avoided: { key: "photo", element: "div", box: { left: 800 } } },
       ]);
+      expect(under[0]?.message).toContain('overlaps the element keyed "photo"');
       const near = await issues([photo(900), text("Headline", 80, 100, 800)], { avoid: { level: "warn", keys: ["photo"], gap: 24 } });
       expect(near).toHaveLength(1);
       expect(near[0]?.message).toContain('within 24px of the element keyed "photo"');

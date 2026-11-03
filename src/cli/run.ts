@@ -443,13 +443,11 @@ async function run(args: string[]): Promise<void> {
     await main(args);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    writeStderr(`${message}
-`);
+    writeStderr(`${message}\n`);
     // Argument errors already end with the command's usage; print it only once.
     const usage = COMMANDS.get(args[0] ?? "")?.usage ?? VERIFY_USAGE;
     if (!(error instanceof ReportedError) && !message.endsWith(usage)) {
-      writeStderr(`${usage}
-`);
+      writeStderr(`${usage}\n`);
     }
     markFailed();
   }

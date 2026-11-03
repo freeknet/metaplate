@@ -13,10 +13,13 @@ import type { ImageFormat } from "../image.js";
  * - An existing directory is every image file below it, by extension, limited
  *   to the operand's `--format` when one is given.
  * - Otherwise an operand with `*`, `?`, `[...]`, or `{a,b}` is a glob: `*` and
- *   `?` stay within one path segment, `**` spans any number of directories.
+ *   `?` stay within one path segment, `**` spans any number of directories,
+ *   and hidden entries match only a segment that starts with a dot.
  * - Anything else is left as written, so a missing file is reported as before.
  *
- * Results are sorted, and a file named by two operands is checked once.
+ * Symbolic links to files count as files; links to directories are not
+ * followed, so no walk can loop. Results are sorted, and a file named by two
+ * operands is checked once.
  */
 
 const EXTENSIONS: Readonly<Record<ImageFormat, readonly string[]>> = {
@@ -49,13 +52,22 @@ async function kind(file: string): Promise<"file" | "directory" | undefined> {
   }
 }
 
-/** Every file below `directory`, without following symbolic links. */
-async function walk(directory: string): Promise<string[]> {
+type Entry = { name: string; isFile(): boolean; isDirectory(): boolean; isSymbolicLink(): boolean };
+
+/** A file, or a symbolic link to one; links to directories are not followed, so a walk cannot loop. */
+async function isFileEntry(entry: Entry, full: string): Promise<boolean> {
+  if (entry.isFile()) return true;
+  return entry.isSymbolicLink() && (await kind(full)) === "file";
+}
+
+/** Every file below `directory`; with `skipHidden`, entries whose names start with a dot are left out. */
+async function walk(directory: string, skipHidden = false): Promise<string[]> {
   const files: string[] = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
+    if (skipHidden && entry.name.startsWith(".")) continue;
     const full = path.join(directory, entry.name);
-    if (entry.isDirectory()) files.push(...(await walk(full)));
-    else if (entry.isFile()) files.push(full);
+    if (entry.isDirectory()) files.push(...(await walk(full, skipHidden)));
+    else if (await isFileEntry(entry, full)) files.push(full);
   }
   return files;
 }
@@ -112,7 +124,7 @@ async function glob(pattern: string): Promise<string[]> {
     if (segment === "**") {
       // `**` matches no directory here, or descends into each one.
       if (last) {
-        found.push(...(await walk(directory)));
+        found.push(...(await walk(directory, true)));
         return;
       }
       await visit(directory, index + 1);
@@ -128,7 +140,7 @@ async function glob(pattern: string): Promise<string[]> {
       if (entry.name.startsWith(".") && !segment.startsWith(".")) continue;
       const full = path.join(directory, entry.name);
       if (last) {
-        if (entry.isFile()) found.push(full);
+        if (await isFileEntry(entry, full)) found.push(full);
       } else if (entry.isDirectory()) await visit(full, index + 1);
     }
   }
