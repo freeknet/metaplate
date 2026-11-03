@@ -339,6 +339,9 @@ every route is in [`deployment-evidence.json`](https://github.com/lnorton89/meta
 - `metaplate/assets` — Node readers for plate images: project files
   (`readImageAsset`, `fileImageLoader`) and remote images fetched only
   from allowlisted origins (`remoteImageLoader`). No renderer peers.
+- `metaplate/cli` — `runCli(args)` runs any `metaplate` command in-process
+  and resolves to its exit code, for build scripts that would otherwise
+  spawn the binary through a shell.
 
 [API reference](docs/api.md) lists every export by entry point, with the
 guide for each and the constants no guide covers.
