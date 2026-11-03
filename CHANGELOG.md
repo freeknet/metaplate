@@ -5,6 +5,19 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ## [Unreleased]
 
+### Added
+
+- `metaplate verify --require-content` and `verify-url --require-content`
+  check JPEG as well as PNG (#164), so cards encoded as JPEG, the format
+  [the rendering guide](docs/rendering.md) recommends for photographic
+  cards, can be checked after the build. The decoder adds no dependency. It
+  supports baseline, extended, and progressive Huffman JPEGs, any chroma
+  subsampling, restart markers, grayscale, and Adobe CMYK. It reads the DCT
+  coefficients and fails a JPEG only when every 8x8 block of every channel
+  holds the same flat value. WebP and GIF still fail with the flag; that
+  error now names the plate's `guards: { blank: "error" }` as the check for
+  those formats.
+
 ### Fixed
 
 - `verify-page` reads `twitter:image:type`, `twitter:image:width`, and
