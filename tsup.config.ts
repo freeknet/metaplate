@@ -14,6 +14,8 @@ export default defineConfig({
     image: "src/image.ts",
     assets: "src/assets.ts",
     cli: "src/cli/main.ts",
+    // `metaplate/cli`; dist/cli.js stays the binary, which runs on import.
+    "run-cli": "src/cli.ts",
   },
   format: ["esm"],
   dts: true,

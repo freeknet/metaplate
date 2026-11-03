@@ -5,6 +5,20 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ## [Unreleased]
 
+### Added
+
+- `metaplate verify` accepts directories and globs as well as files (#166).
+  A directory stands for every image file below it, limited to `--format`'s
+  extensions when given. Globs (`*`, `?`, `**`, `[...]`, `{a,b}`) are
+  expanded by metaplate, so `"out/og/*/og-image.jpg"` works from npm scripts
+  on Windows, where `cmd.exe` expands nothing. Files are checked in sorted
+  order, each once. A directory without images, or a glob that matches
+  nothing, is an error.
+- `metaplate/cli` exports `runCli(args, { stdout, stderr })`, which runs any
+  `metaplate` command in-process and resolves to its exit code (#166). It
+  leaves `process.exitCode` alone, and concurrent calls keep separate output.
+  The `metaplate` binary is unchanged.
+
 ## [0.8.0] - 2026-11-01
 
 ### Added
