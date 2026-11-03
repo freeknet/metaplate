@@ -24,7 +24,7 @@ export type VerifyInvocation = {
   url?: string;
   alt?: string;
   maxFileSize?: number;
-  /** Fail a PNG whose every pixel is one color (`--require-content`). */
+  /** Fail a PNG or JPEG whose every pixel is one color (`--require-content`). */
   requireContent?: boolean;
 };
 
