@@ -6,14 +6,18 @@ import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { npmPackResult } from "../../../../scripts/package/npm-pack-result.mjs";
 
 const here = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const root = resolve(here, "../../..");
-const run = (command, cwd) => execSync(command, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
+const run = (command, cwd, env = process.env) =>
+  execSync(command, { cwd, env, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
 
-run("npm run build", root);
+// Deno Deploy's builder has 3 GB of RAM, but Node sized its heap near 490 MB
+// there and tsup's declaration build ran out of memory; give it 2 GB.
+run("npm run build", root, { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --max-old-space-size=2048`.trim() });
 const packed = npmPackResult(run(`npm pack --json --pack-destination "${here}"`, root));
 const tarball = join(here, "metaplate.tgz");
 renameSync(join(here, packed.filename), tarball);
