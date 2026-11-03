@@ -174,8 +174,8 @@ export function validateSocketReport(report, now = new Date()) {
 
   if (report.schemaVersion !== 2) errors.push("schemaVersion must be 2");
   if (report.package !== "metaplate") errors.push("package must be metaplate");
-  if (report.version !== undefined && report.version !== "0.7.0")
-    errors.push("version must be the 0.7.0 Socket baseline");
+  if (report.version !== undefined && report.version !== "0.8.0")
+    errors.push("version must be the 0.8.0 Socket baseline");
 
   if (typeof report.source === "string") {
     const sourceError = validateSocketSource(report.source, "metaplate", report.version);
