@@ -5,6 +5,19 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ## [Unreleased]
 
+### Added
+
+- `metaplate verify --require-content` and `verify-url --require-content`
+  check JPEG as well as PNG (#164), so cards encoded as JPEG, the format
+  [the rendering guide](docs/rendering.md) recommends for photographic
+  cards, can be checked after the build. The decoder adds no dependency. It
+  supports baseline, extended, and progressive Huffman JPEGs, any chroma
+  subsampling, restart markers, grayscale, and Adobe CMYK. It reads the DCT
+  coefficients and fails a JPEG only when every 8x8 block of every channel
+  holds the same flat value. WebP and GIF still fail with the flag; that
+  error now names the plate's `guards: { blank: "error" }` as the check for
+  those formats.
+
 ### Changed
 
 - The `satori` peer range is now `>=0.38.2 <1` (was `>=0.33.3 <1`) (#165).
@@ -20,6 +33,19 @@ All notable changes to Metaplate are documented in this file. The project uses
   All four were checked on Satori 0.33.5 through 0.63.2. A project on an
   older Satori gets a peer-dependency warning and should upgrade. The
   fragment constraint is gone from the rendering guide.
+
+### Fixed
+
+- `verify-page` reads `twitter:image:type`, `twitter:image:width`, and
+  `twitter:image:height`, which Next.js emits from `og.metadata()` for a
+  JPEG plate, and checks them against the fetched bytes like the
+  `og:image:*` properties (#163). They are reported in `metadata.twitter` as
+  `imageType`, `imageWidth`, and `imageHeight`.
+- A `verify-page` target no longer reports "No media type is declared, so
+  raster compatibility cannot be confirmed" for an image it fetched. Without
+  a declared type, the format rule reads the fetched bytes' format, so the
+  `universal` target accepts an undeclared PNG or JPEG and `x` rejects an
+  undeclared SVG (#163).
 
 ## [0.8.0] - 2026-11-01
 

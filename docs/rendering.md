@@ -756,7 +756,7 @@ neither Satori's callbacks nor the pixels, so `createNextOg` rejects a
 card must be guarded (see [Render guards in Next.js](nextjs.md#render-guards-in-nextjs)
 for that route shape). `createSvgOg` has no pixels either, so it rejects
 `blank`. For images that already exist, `metaplate verify --require-content`
-runs the blank check on PNG files and URLs; see
+runs the blank check on PNG and JPEG files and URLs; see
 [the verification guide](verification.md#require-visible-content).
 
 [`examples/api/render-guards.ts`](https://github.com/lnorton89/metaplate/blob/main/examples/api/render-guards.ts) is a type-checked
