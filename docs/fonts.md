@@ -206,7 +206,7 @@ each run with the closest one.
 
 The keys are the language codes Satori passes, defined in its
 [`language.ts`](https://github.com/vercel/satori/blob/main/src/language.ts)
-and unchanged from Satori 0.33.3 (the oldest supported peer) through 0.63:
+and unchanged from Satori 0.38.2 (the oldest supported peer) through 0.63:
 
 | Code | Script (Unicode `Script_Extensions`) | Fontsource package |
 | --- | --- | --- |

@@ -29,6 +29,7 @@ import { verifySocialImage } from "../verify/social-verification.js";
 import { imageContentType, verifyImage, type ImageDimensions } from "../image.js";
 import type { RemotePageCrawlerReport } from "../verify/page-crawlers.js";
 import { hasError, redactUrl } from "../core/internal.js";
+import { jpegUniformColor } from "../image/jpeg-content.js";
 import { pngUniformColor } from "../image/png-content.js";
 import { verifyRemotePage, type RemotePageImageReport, type RemotePageVerification } from "../verify/page-verification.js";
 import { RemoteImageError, verifyRemoteImage } from "../verify/remote.js";
@@ -56,7 +57,7 @@ Options:
   --url URL        Metadata image URL for target checks (verify only)
   --alt TEXT       Metadata alt text for target checks
   --max-file-size N  Reject images larger than N bytes
-  --require-content  Fail a PNG whose every pixel is one color (verify and verify-url)
+  --require-content  Fail a PNG or JPEG whose every pixel is one color (verify and verify-url)
 
 verify-url options:
   --max-bytes N      Abort a download larger than N bytes (default 16 MiB)
@@ -221,15 +222,17 @@ async function runChecks(checks: readonly Check[], options: SocialOptions, listK
 
 /**
  * `--require-content`: a card that decodes to one color is blank whatever its
- * format and size checks say. Only PNG is decoded (Node ships zlib, not a
- * JPEG, WebP, or GIF decoder), so another format fails rather than passing
- * unchecked.
+ * format and size checks say. PNG and JPEG are decoded; another format fails
+ * rather than passing unchecked.
  */
 function assertContent(bytes: Uint8Array, format: string): void {
-  if (format !== "png") {
-    throw new Error(`--require-content decodes PNG only; this image is ${format}`);
+  if (format !== "png" && format !== "jpeg") {
+    throw new Error(
+      `--require-content decodes PNG and JPEG only; this image is ${format}. ` +
+        "A plate's guards: { blank: \"error\" } runs the same check when it renders.",
+    );
   }
-  const color = pngUniformColor(bytes);
+  const color = format === "png" ? pngUniformColor(bytes) : jpegUniformColor(bytes);
   if (color) {
     const [red, green, blue, alpha] = color;
     throw new Error(

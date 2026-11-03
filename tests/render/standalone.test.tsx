@@ -521,12 +521,9 @@ it("advertises the output content type in metadata", async () => {
   expect(plate.image("/docs", { title: "Docs" }).url).toBe("/docs/og-image.jpg");
 });
 
-// README "Plate constraints" documents that Satori releases before 0.38.2 lay
-// a fragment out as a box, so absolute children anchor to it rather than to
-// the positioned parent, while 0.38.2 and newer flatten fragments like the
-// DOM. This pins the current behavior of the audited Satori release; if it
-// regresses to the boxed layout, the README bullet needs its version
-// qualifier removed.
+// Satori releases before 0.38.2, below the peer floor, laid a fragment out as
+// a box, so absolute children anchored to it rather than to the positioned
+// parent. 0.38.2 and newer flatten fragments like the DOM; this pins that.
 it("anchors absolute children of a fragment to the positioned parent", async () => {
   const panel = (children: ReactNode) =>
     createElement(
