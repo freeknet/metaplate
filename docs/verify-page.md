@@ -46,6 +46,7 @@ From the page's `<head>`:
 | `og:image:secure_url`, `:type`, `:width`, `:height`, `:alt` | Properties of the most recent `og:image`. A property before any `og:image` is ignored and reported. |
 | `og:title`, `og:description` | Page fields, reported in `metadata`. |
 | `twitter:card`, `twitter:title`, `twitter:description`, `twitter:image`, `twitter:image:alt` | X Card fields. |
+| `twitter:image:type`, `:width`, `:height` | Properties of `twitter:image`, checked like their `og:image` counterparts. Next.js emits them, and `metadata` reports them as `imageType`, `imageWidth`, and `imageHeight`. |
 
 Anywhere in the document:
 
@@ -153,6 +154,10 @@ image on the page:
 - Later `og:image` entries and JSON-LD images get the structural and
   declared-metadata checks only, so a square fallback is not judged against
   LinkedIn's minimum size.
+
+A target's format rule reads the declared type when there is one, which must
+agree with the bytes. Without one, it reads the format of the fetched bytes,
+so an undeclared PNG passes and an undeclared SVG fails `x`.
 
 Targets judge the URL as the page publishes it, so a relative `og:image`
 fails a target that needs a crawler-ready absolute https URL. With a target,

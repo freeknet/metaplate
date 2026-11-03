@@ -39,6 +39,60 @@ really contain JPEG — pass `--format`:
 npx metaplate verify --format jpeg --size 1200x630 out/og-image.jpg
 ```
 
+### Directories and globs
+
+An operand can be a directory or a glob as well as a file, and metaplate
+expands it itself. Shell globbing is not needed, which matters because npm
+runs scripts through `cmd.exe` on Windows, and `cmd.exe` expands nothing:
+
+```sh
+npx metaplate verify --require-content --size 1200x630 out/og
+npx metaplate verify --size 1200x630 "out/og/*/og-image.jpg"
+```
+
+- A directory stands for every `.svg`, `.png`, `.jpg`, `.jpeg`, `.webp`, and
+  `.gif` file below it. With `--format`, only that format's extensions count.
+  A directory with no such file is an error.
+- In a glob, `*` and `?` match within one path segment, `**` matches any
+  number of directories, and `[abc]` and `{a,b}` work as in a shell. Hidden
+  entries match only a segment that starts with a dot. A glob that matches
+  nothing is an error. Quote globs so a POSIX shell passes them through
+  unchanged.
+- An operand that exists as a file is always that file, even when its name
+  contains glob characters.
+
+Files are checked in sorted order, and a file named by several operands is
+checked once. Each operand uses the `--size` and `--format` group it is in.
+
+### Run the CLI from a script
+
+`runCli` from `metaplate/cli` runs any `metaplate` command in-process. It
+needs no shell and no child process, so it avoids hard-coding
+`node_modules/metaplate/dist/cli.js` or Node's `DEP0190` warning for
+`spawn(..., { shell: true })`. It resolves to the exit code:
+
+```ts
+import { runCli } from "metaplate/cli";
+
+const code = await runCli(["verify", "--require-content", "--size", "1200x630", "out/og"]);
+if (code !== 0) process.exit(code);
+```
+
+`args` are the arguments after `metaplate`. Output goes to `process.stdout`
+and `process.stderr` unless `stdout` or `stderr` is given: anything with a
+`write(text)` method. With `--json`, `stdout` receives the one JSON report:
+
+```ts
+let json = "";
+await runCli(["verify", "--json", "--size", "1200x630", "out/og"], {
+  stdout: { write: (text: string) => { json += text; } },
+});
+const report = JSON.parse(json);
+```
+
+`runCli` never touches `process.exitCode`, and calls running at the same
+time keep their output and exit codes separate.
+
 Or import `verifyImage` from `metaplate/image` in a test, which returns the
 format it verified alongside the dimensions. `metaplate/png` remains available
 for PNG-only checks.
@@ -102,8 +156,8 @@ so they are rejected without at least one `--target`.
 
 Format, size, and structure checks accept a card whose every pixel is one
 color: a title drawn off the canvas or in a font that never loaded leaves the
-background behind, still a valid 1200x630 PNG. `--require-content` decodes the
-PNG and fails it when every pixel is the same color:
+background behind, still a valid 1200x630 PNG. `--require-content` decodes a
+PNG or JPEG and fails it when every pixel is the same color:
 
 ```sh
 npx metaplate verify --require-content --size 1200x630 public/og.png
@@ -116,9 +170,19 @@ every PNG the [PNG specification](https://www.w3.org/TR/png-3/) allows
 (grayscale, truecolor, and indexed, with or without alpha or `tRNS`, at every
 bit depth, interlaced or not), inflates with `node:zlib` capped at the size the
 header declares, and fails a file it cannot decode rather than passing it.
-Only PNG is decoded, because Node ships no JPEG, WebP, or GIF decoder and
-Metaplate adds no dependency: with the flag, any other format fails with
-`--require-content decodes PNG only`. Like the plate's `blank`
+
+JPEG is decoded without a dependency too. Baseline, extended, and progressive
+Huffman JPEGs are supported, with any chroma subsampling, restart markers,
+grayscale, and Adobe CMYK. The check reads the DCT coefficients directly: a
+JPEG is blank when every 8x8 block of every channel carries the same flat
+value, which decodes to one color, so a card with any detail is never
+failed. The reported color can differ by one from a decoder's output.
+Lossless, hierarchical, and arithmetic-coded JPEGs fail as undecodable.
+
+WebP and GIF are not decoded: with the flag, they fail with
+`--require-content decodes PNG and JPEG only`. For those formats, use the
+plate's `guards: { blank: "error" }`, which runs the same check on the pixels
+as the card renders. Like the plate's `blank`
 [render guard](rendering.md#render-guards), it catches a uniform image, not
 a gradient or photograph whose text is missing.
 
