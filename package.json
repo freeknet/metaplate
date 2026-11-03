@@ -81,6 +81,11 @@
       "types": "./dist/assets.d.ts",
       "import": "./dist/assets.js",
       "default": "./dist/assets.js"
+    },
+    "./cli": {
+      "types": "./dist/run-cli.d.ts",
+      "import": "./dist/run-cli.js",
+      "default": "./dist/run-cli.js"
     }
   },
   "bin": {

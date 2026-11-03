@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { writeStderr, writeStdout } from "./io.js";
 import { formatVerifyPath, parsePreviewInvocation } from "./args.js";
 import { ReportedError } from "./render.js";
 import {
@@ -26,7 +27,7 @@ export async function runPreview(args: string[]): Promise<void> {
   if (!existsSync(entry)) throw new ReportedError(`Cannot find render module ${invocation.module}`);
 
   if (!isLoopbackHost(invocation.host)) {
-    process.stderr.write(
+    writeStderr(
       `! --host ${invocation.host} makes the preview reachable from other machines. It has no ` +
         "authentication and renders your module's pages for anyone who can connect; use it only on a trusted network.\n",
     );
@@ -47,7 +48,7 @@ export async function runPreview(args: string[]): Promise<void> {
       tracksImports: stopTracking !== undefined,
       socialTargets: invocation.socialTargets,
       ...(invocation.maxFileSize === undefined ? {} : { maxFileSize: invocation.maxFileSize }),
-      log: (line) => process.stderr.write(`${line}\n`),
+      log: (line) => writeStderr(`${line}\n`),
       async load(generation, report) {
         track = report;
         try {
@@ -64,15 +65,15 @@ export async function runPreview(args: string[]): Promise<void> {
 
   // A plate's stray promise must not take the server down with it.
   process.on("unhandledRejection", (reason) => {
-    process.stderr.write(`✗ Unhandled rejection: ${messageOf(reason)}\n`);
+    writeStderr(`✗ Unhandled rejection: ${messageOf(reason)}\n`);
   });
   if (stopTracking === undefined) {
-    process.stderr.write(
+    writeStderr(
       `! Node ${process.versions.node} has no module.registerHooks (added in 22.15 and 23.5), so only ` +
         `${display} itself reloads on change; restart after editing a file it imports.\n`,
     );
   }
-  process.stdout.write(`metaplate preview of ${display} at ${server.url}\n`);
+  writeStdout(`metaplate preview of ${display} at ${server.url}\n`);
 
   const running = server;
   await new Promise<void>((resolve) => {

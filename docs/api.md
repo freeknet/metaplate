@@ -25,6 +25,7 @@ and small helpers that no guide covers are described below the table.
 | `metaplate/image` | `imageDimensions`, `verifyImage`, `detectFormat`, `imageContentType`, `imageAsset`, `imageAssetLoader`, `IMAGE_ASSET_DEFAULTS` | [Verification](verification.md), [Images and assets](rendering.md#images-and-assets) |
 | `metaplate/png` | `pngDimensions`, `verifyPng` | Below |
 | `metaplate/assets` | `readImageAsset`, `fileImageLoader`, `remoteImageLoader`, `imageAsset`, `imageAssetLoader`, `RemoteImageError`, `IMAGE_ASSET_DEFAULTS`, `REMOTE_IMAGE_LOADER_DEFAULTS` | [Images and assets](rendering.md#images-and-assets) |
+| `metaplate/cli` | `runCli` | [Run the CLI from a script](verification.md#run-the-cli-from-a-script) |
 
 The `metaplate preview` and `metaplate render` commands are documented in
 [Live preview](preview.md) and [Render CLI](render-cli.md).

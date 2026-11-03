@@ -1,6 +1,6 @@
 import { rm } from "node:fs/promises";
 import path from "node:path";
-import process from "node:process";
+import { markFailed, writeStderr, writeStdout } from "./io.js";
 import { formatVerifyPath, parseRenderInvocation } from "./args.js";
 import {
   importRenderModule,
@@ -20,17 +20,17 @@ export class ReportedError extends Error {}
 function reportOutcome(outcome: RenderOutcome): void {
   if (!outcome.valid) {
     const message = outcome.issues.map((issue) => issue.message).join("; ");
-    process.stderr.write(`✗ ${outcome.path} render failed: ${message}\n`);
+    writeStderr(`✗ ${outcome.path} render failed: ${message}\n`);
     return;
   }
   const { width, height } = outcome.size;
   const format = outcome.format ?? outcome.contentType;
   const reused = outcome.reused ? ", unchanged" : "";
-  process.stdout.write(`✓ ${outcome.path} ${width}x${height} ${format} (${outcome.bytes} bytes${reused})\n`);
+  writeStdout(`✓ ${outcome.path} ${width}x${height} ${format} (${outcome.bytes} bytes${reused})\n`);
 }
 
 function warn(message: string): void {
-  process.stderr.write(`${message}\n`);
+  writeStderr(`${message}\n`);
 }
 
 /**
@@ -85,16 +85,16 @@ export async function runRender(args: string[]): Promise<void> {
       manifest: failed === 0 ? manifest : null,
       images: outcomes,
     };
-    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    writeStdout(`${JSON.stringify(report, null, 2)}\n`);
   } else if (failed > 0) {
-    process.stderr.write(`${failed} of ${outcomes.length} images failed; no manifest was written\n`);
+    writeStderr(`${failed} of ${outcomes.length} images failed; no manifest was written\n`);
   } else if (reused > 0) {
-    process.stdout.write(
+    writeStdout(
       `Rendered ${outcomes.length - reused} and reused ${reused} unchanged of ${outcomes.length} images ` +
         `into ${out}; manifest ${manifest}\n`,
     );
   } else {
-    process.stdout.write(`Rendered ${outcomes.length} images into ${out}; manifest ${manifest}\n`);
+    writeStdout(`Rendered ${outcomes.length} images into ${out}; manifest ${manifest}\n`);
   }
-  if (failed > 0) process.exitCode = 1;
+  if (failed > 0) markFailed();
 }
