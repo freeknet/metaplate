@@ -5,6 +5,19 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ## [Unreleased]
 
+### Fixed
+
+- `verify-page` reads `twitter:image:type`, `twitter:image:width`, and
+  `twitter:image:height`, which Next.js emits from `og.metadata()` for a
+  JPEG plate, and checks them against the fetched bytes like the
+  `og:image:*` properties (#163). They are reported in `metadata.twitter` as
+  `imageType`, `imageWidth`, and `imageHeight`.
+- A `verify-page` target no longer reports "No media type is declared, so
+  raster compatibility cannot be confirmed" for an image it fetched. Without
+  a declared type, the format rule reads the fetched bytes' format, so the
+  `universal` target accepts an undeclared PNG or JPEG and `x` rejects an
+  undeclared SVG (#163).
+
 ## [0.8.0] - 2026-11-01
 
 ### Added
