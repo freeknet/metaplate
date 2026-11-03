@@ -102,6 +102,21 @@ describe("extractPageSocialMetadata: X Cards", () => {
     });
   });
 
+  it("reads the twitter:image type and dimensions that Next.js emits", () => {
+    const metadata = extract(`
+      <meta name="twitter:image" content="https://example.com/x.jpg">
+      <meta name="twitter:image:type" content="image/jpeg">
+      <meta name="twitter:image:width" content="1200">
+      <meta name="twitter:image:height" content="630">
+    `);
+    expect(metadata.twitter).toEqual({
+      image: "https://example.com/x.jpg",
+      imageType: "image/jpeg",
+      imageWidth: "1200",
+      imageHeight: "630",
+    });
+  });
+
   it("reads both keys when one tag carries name and property", () => {
     const metadata = extract(`<meta name="twitter:description" property="og:description" content="Both">`);
     expect(metadata.twitter.description).toBe("Both");

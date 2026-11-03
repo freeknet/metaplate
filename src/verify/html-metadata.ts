@@ -69,6 +69,12 @@ export type PageSocialMetadata = Readonly<{
     description?: string;
     image?: string;
     imageAlt?: string;
+    /** `twitter:image:type`, which Next.js and others emit beside `og:image:type`. */
+    imageType?: string;
+    /** `twitter:image:width`, as written. */
+    imageWidth?: string;
+    /** `twitter:image:height`, as written. */
+    imageHeight?: string;
   }>;
   jsonLd: Readonly<{
     /** Number of `application/ld+json` script elements. */
@@ -604,6 +610,9 @@ const TWITTER_PROPERTIES = {
   "twitter:description": "description",
   "twitter:image": "image",
   "twitter:image:alt": "imageAlt",
+  "twitter:image:type": "imageType",
+  "twitter:image:width": "imageWidth",
+  "twitter:image:height": "imageHeight",
 } as const satisfies Record<string, keyof TwitterFields>;
 
 function isTagKey<Table extends object>(table: Table, key: string): key is Extract<keyof Table, string> {
