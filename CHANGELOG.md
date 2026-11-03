@@ -5,6 +5,26 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ## [Unreleased]
 
+### Added
+
+- Three layout render guards for every renderer, for failures that stay
+  inside the canvas, which `overflow` cannot see (#168):
+  - `safeArea` reports text outside the area the centered 2:1 (X) and 1.91:1
+    (Open Graph) crops keep, which removes 15px from the top and bottom of
+    1200x630, or outside a margin given as `{ level, inset }`;
+  - `textOverlap` reports two text boxes that intersect;
+  - `avoid: { level, keys, gap }` reports text that comes within `gap` pixels
+    of an element whose React `key` is listed, such as a photo.
+
+  Each issue lists the text and its box, plus the safe area, the other text,
+  or the avoided element. See
+  [Render guards](docs/rendering.md#render-guards).
+- `metaplate/node` and `metaplate/edge` export the `SatoriOptions` and
+  `SatoriLayoutNode` types that `metaplate/render` already exported, so a
+  plate's `satori: { onNodeDetected }` can be typed without a cast to
+  Satori's own `SatoriOptions`, which requires `width`, `height`, and
+  `fonts` (#168).
+
 ## [0.8.0] - 2026-11-01
 
 ### Added

@@ -8,10 +8,11 @@ import {
   GuardReport,
   guardAssetLoader,
   guardLevel,
+  layoutGuards,
   overflowDetector,
   type GuardTarget,
 } from "./guards.js";
-import type { SatoriOptions, SvgOgDefinition } from "./svg.js";
+import type { SatoriLayoutNode, SatoriOptions, SvgOgDefinition } from "./svg.js";
 
 export const SVG_CONTENT_TYPE = "image/svg+xml" as const;
 
@@ -77,10 +78,11 @@ async function renderSvg<Copy, Variant extends string>(
   // typed against it).
   const report = new GuardReport(definition.guards);
   const target: GuardTarget = { variant: context.variant, size: context.size };
+  const layout = layoutGuards(definition.guards, report, target);
   const svg = await satori(
     element as Parameters<typeof satori>[0],
     {
-      ...(satoriOptions(definition, report, target) as unknown as Parameters<typeof satori>[1]),
+      ...(satoriOptions(definition, report, target, layout?.detect) as unknown as Parameters<typeof satori>[1]),
       ...(options?.debug === undefined ? {} : { debug: options.debug }),
       width: context.size.width,
       height: context.size.height,
@@ -89,6 +91,7 @@ async function renderSvg<Copy, Variant extends string>(
   );
   // Warnings are reported, and error-level issues thrown, only once Satori
   // has finished, so one RenderGuardError lists every issue in the layout.
+  layout?.finish();
   report.settle();
   return svg;
 }
@@ -133,6 +136,7 @@ function satoriOptions<Copy, Variant extends string>(
   definition: SvgOgDefinition<Copy, Variant>,
   report: GuardReport,
   target: GuardTarget,
+  detectLayout: ((node: SatoriLayoutNode) => void) | undefined,
 ): SatoriOptions | undefined {
   const { emoji, languageFonts, satori, guards } = definition;
   let loadAdditionalAsset = satori?.loadAdditionalAsset;
@@ -142,11 +146,14 @@ function satoriOptions<Copy, Variant extends string>(
   }
 
   let onNodeDetected = satori?.onNodeDetected;
-  if (guardLevel(guards, "overflow") !== "off") {
-    const detect = overflowDetector(report, target);
+  const detectors = [
+    ...(guardLevel(guards, "overflow") !== "off" ? [overflowDetector(report, target)] : []),
+    ...(detectLayout ? [detectLayout] : []),
+  ];
+  if (detectors.length > 0) {
     const callerDetect = onNodeDetected;
     onNodeDetected = (node) => {
-      detect(node);
+      for (const detect of detectors) detect(node);
       callerDetect?.(node);
     };
   }
