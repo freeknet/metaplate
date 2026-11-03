@@ -612,7 +612,7 @@ cards at build time with `metaplate/node`.
 
 ## Plate constraints
 
-A plate is a Satori layout that rasterises to an image, not a DOM tree. Six
+A plate is a Satori layout that rasterises to an image, not a DOM tree. Five
 differences bite in practice:
 
 - **Size a padded root as `border-box`.** Satori sizes boxes as
@@ -634,31 +634,6 @@ differences bite in practice:
   child need an explicit `display`, as does any element whose `children` is an
   array; see
   [Authoring without a JSX toolchain](#authoring-without-a-jsx-toolchain).
-- **A fragment is laid out as a box on Satori older than 0.38.2.** In the
-  DOM, `<>…</>` adds nothing to layout. Satori 0.38.2 and newer flatten it the
-  same way, but earlier releases inside the supported peer range give it a box
-  of its own, positioned by the parent's flex rules like any other child. Absolutely positioned children of a fragment
-  therefore resolve `left`/`top` against that box rather than against the
-  nearest positioned ancestor. Inside a parent that centers its children, the
-  fragment's box is zero-sized and sits at the parent's center, so a
-  full-bleed background placed with `left: 0, top: 0` starts from the middle
-  of the panel and is clipped to a quarter. Nothing errors. Unless every
-  deployment pins Satori 0.38.2 or newer, render such children directly, as
-  separate conditionals or a keyed array, rather than wrapped in a fragment:
-
-  ```tsx
-  // Clipped: the photo and its overlay anchor to the fragment's box.
-  {photo ? (
-    <>
-      <img src={photo} style={{ position: "absolute", left: 0, top: 0 }} />
-      <div style={{ position: "absolute", left: 0, top: 0, width: 160, height: "100%" }} />
-    </>
-  ) : null}
-
-  // Anchored to the panel.
-  {photo ? <img src={photo} style={{ position: "absolute", left: 0, top: 0 }} /> : null}
-  {photo ? <div style={{ position: "absolute", left: 0, top: 0, width: 160, height: "100%" }} /> : null}
-  ```
 - **Resvg may not resize the raster behind the plate's back.** Dimension-changing
   `fitTo` values and `crop` are rejected because metadata, `plate.size`, raw
   pixels, and encoded output must agree. Define the intended `size` on the
@@ -809,10 +784,10 @@ createNodeOg({ alt, fonts, component, satori: { onNodeDetected: (node) => boxes.
 Both Satori hooks have the same contract across the supported peer range:
 `loadAdditionalAsset(code, segment)` and `onNodeDetected` with
 `{ left, top, width, height, type, props, textContent }` behave identically in
-Satori 0.33.3, 0.38.2, 0.48.1, 0.55.5, and 0.63.2 (each probed with the same
+Satori 0.38.2, 0.48.1, 0.55.5, and 0.63.2 (each probed with the same
 layout). The guards report what the installed Satori lays out: the
 content-box root above grows past the canvas from 0.48.1 in that probe, while
-0.33.3 and 0.38.2 lay it out at the canvas size, so the same plate can pass
+0.38.2 lays it out at the canvas size, so the same plate can pass
 `overflow` on an older Satori and fail on a newer one.
 
 ### Why guards are off by default
@@ -834,7 +809,7 @@ neither Satori's callbacks nor the pixels, so `createNextOg` rejects a
 card must be guarded (see [Render guards in Next.js](nextjs.md#render-guards-in-nextjs)
 for that route shape). `createSvgOg` has no pixels either, so it rejects
 `blank`. For images that already exist, `metaplate verify --require-content`
-runs the blank check on PNG files and URLs; see
+runs the blank check on PNG and JPEG files and URLs; see
 [the verification guide](verification.md#require-visible-content).
 
 [`examples/api/render-guards.ts`](https://github.com/lnorton89/metaplate/blob/main/examples/api/render-guards.ts) is a type-checked

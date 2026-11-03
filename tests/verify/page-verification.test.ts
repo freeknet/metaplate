@@ -9,7 +9,7 @@ import {
 } from "../../src/verify/page-verification.js";
 import { REMOTE_USER_AGENT, type RemoteAddress } from "../../src/verify/remote.js";
 import { closeLocalServers, localServer, redirectTo, routes, serveBytes, type LocalServer } from "../helpers/http-fixtures.js";
-import { completePng } from "../helpers/image-fixtures.js";
+import { completeJpeg, completePng } from "../helpers/image-fixtures.js";
 
 afterEach(closeLocalServers);
 
@@ -281,11 +281,9 @@ describe("verifyRemotePage", () => {
     const [first, second, twitter] = report.images;
     // The first og:image serves every target except X, which reads twitter:image.
     expect(Object.keys(first!.targets)).toEqual(["discord", "linkedin"]);
-    // Discord accepts the relative URL; without og:image:type it can only warn.
-    expect(first!.targets.discord).toEqual({
-      compatible: true,
-      issues: [expect.objectContaining({ severity: "warning", code: "format", target: "discord" })],
-    });
+    // Discord accepts the relative URL, and without og:image:type the fetched
+    // PNG bytes settle the format check.
+    expect(first!.targets.discord).toEqual({ compatible: true, issues: [] });
     // LinkedIn needs a crawler-ready https URL; this one is relative.
     expect(first!.targets.linkedin?.compatible).toBe(false);
     // The square second og:image is not judged against LinkedIn's minimum size.
@@ -299,6 +297,64 @@ describe("verifyRemotePage", () => {
       linkedin: { compatible: false, issues: [] },
       x: { compatible: false, issues: [] },
     });
+  });
+
+  it("checks twitter:image against its declared type and dimensions", async () => {
+    const photo = completeJpeg(1200, 630);
+    const server = await site(() => ({
+      "/": serveHtml(page(`
+        <meta property="og:image" content="/og.jpg">
+        <meta property="og:image:alt" content="Card">
+        <meta name="twitter:card" content="summary_large_image">
+        <meta name="twitter:image" content="/og.jpg">
+        <meta name="twitter:image:alt" content="Card">
+        <meta name="twitter:image:type" content="image/jpeg">
+        <meta name="twitter:image:width" content="1200">
+        <meta name="twitter:image:height" content="630">
+      `)),
+      "/wrong": serveHtml(page(`
+        <meta property="og:image" content="/og.jpg">
+        <meta name="twitter:card" content="summary_large_image">
+        <meta name="twitter:image" content="/og.jpg">
+        <meta name="twitter:image:alt" content="Card">
+        <meta name="twitter:image:type" content="image/png">
+        <meta name="twitter:image:width" content="600">
+        <meta name="twitter:image:height" content="315">
+      `)),
+      "/og.jpg": serveBytes(photo, "image/jpeg"),
+    }));
+    const report = await verifyRemotePage(`${server.origin}/`, local(server, { targets: ["x"] }));
+    const twitter = report.images.find(({ source }) => source === "twitter:image")!;
+    expect(twitter.declared).toEqual({ url: "/og.jpg", alt: "Card", type: "image/jpeg", width: "1200", height: "630" });
+    // Only the loopback fixture's relative http URL is left to report.
+    expect(twitter.targets.x?.issues.map(({ code }) => code)).toEqual(["url"]);
+
+    const wrong = await verifyRemotePage(`${server.origin}/wrong`, local(server, { targets: ["x"] }));
+    const mismatched = wrong.images.find(({ source }) => source === "twitter:image")!;
+    expect(mismatched.valid).toBe(false);
+    expect(codes(mismatched)).toEqual(expect.arrayContaining(["dimensions", "format"]));
+  });
+
+  it("judges an undeclared image format by the fetched bytes", async () => {
+    const svg = new TextEncoder().encode(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630"><rect width="1200" height="630"/></svg>`,
+    );
+    const server = await site(() => ({
+      "/": serveHtml(page(`
+        <meta property="og:image" content="/og.svg">
+        <meta property="og:image:alt" content="Card">
+        <meta name="twitter:card" content="summary_large_image">
+      `)),
+      "/og.svg": serveBytes(svg, "image/svg+xml"),
+    }));
+    const report = await verifyRemotePage(`${server.origin}/`, local(server, { targets: ["x"] }));
+    expect(report.images[0]!.targets.x?.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        severity: "error",
+        code: "format",
+        message: expect.stringContaining("image/svg+xml is not an X Card image format"),
+      }),
+    ]));
   });
 
   it("makes a missing twitter:card an X target error", async () => {

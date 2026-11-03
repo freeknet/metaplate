@@ -6,7 +6,7 @@ import {
   type PageMetadataIssueCode,
   type PageSocialMetadata,
 } from "./html-metadata.js";
-import { imageDimensions, type ImageDimensions, type ImageFormat } from "../image.js";
+import { imageContentType, imageDimensions, type ImageDimensions, type ImageFormat } from "../image.js";
 import {
   checkCrawlers,
   requestedCrawlerTokens,
@@ -229,7 +229,13 @@ function references(metadata: PageSocialMetadata, targets: readonly SocialTarget
     list.push({
       source: "twitter:image",
       index: 0,
-      declared: { url: twitterImage, ...defined("alt", metadata.twitter.imageAlt) },
+      declared: {
+        url: twitterImage,
+        ...defined("width", metadata.twitter.imageWidth),
+        ...defined("height", metadata.twitter.imageHeight),
+        ...defined("type", metadata.twitter.imageType),
+        ...defined("alt", metadata.twitter.imageAlt),
+      },
       targets: targets.includes("x") ? ["x"] : [],
       hasAlt: true,
     });
@@ -331,15 +337,18 @@ function inspectBytes(
   options: RemotePageOptions,
   issues: ImageIssue[],
 ): Pick<RemotePageImageReport, "image" | "targets"> {
+  const dimensions = measure(remote);
   const descriptor: SocialImageVerificationDescriptor = {
     // Target URL checks judge the value as published, not as resolved.
     ...(reference.targets.length > 0 ? { url: reference.declared.url } : {}),
     // With a target, a missing alt fails the profile's alt contract.
     ...(reference.targets.length > 0 && reference.hasAlt ? { alt: reference.declared.alt ?? "" } : {}),
     ...(size ?? {}),
-    ...defined("type", reference.declared.type),
+    // Without a declared type the fetched bytes still settle the format
+    // checks; a declared type is compared against them instead.
+    type: reference.declared.type ?? imageContentType(dimensions.format),
   };
-  const report = verifySocialImageFacts(measure(remote), remote.byteLength, descriptor, {
+  const report = verifySocialImageFacts(dimensions, remote.byteLength, descriptor, {
     targets: reference.targets,
     ...defined("maxFileSize", options.maxFileSize),
   });

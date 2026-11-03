@@ -81,6 +81,11 @@
       "types": "./dist/assets.d.ts",
       "import": "./dist/assets.js",
       "default": "./dist/assets.js"
+    },
+    "./cli": {
+      "types": "./dist/run-cli.d.ts",
+      "import": "./dist/run-cli.js",
+      "default": "./dist/run-cli.js"
     }
   },
   "bin": {
@@ -110,7 +115,7 @@
     "@resvg/resvg-wasm": ">=2.6.2 <3",
     "next": ">=16.3.2 <17",
     "react": ">=18.2.0 <20",
-    "satori": ">=0.33.3 <1"
+    "satori": ">=0.38.2 <1"
   },
   "peerDependenciesMeta": {
     "@resvg/resvg-wasm": {

@@ -193,7 +193,7 @@ describe("--require-content", () => {
   }
 
   it(
-    "fails blank and non-PNG files in metaplate verify, and passes drawn ones",
+    "fails blank and undecodable files in metaplate verify, and passes drawn ones",
     async () => {
       const { drawn, blank } = plates();
       const dir = await mkdtemp(path.join(tmpdir(), "metaplate-content-"));
@@ -201,10 +201,14 @@ describe("--require-content", () => {
         drawn: path.join(dir, "drawn.png"),
         blank: path.join(dir, "blank.png"),
         jpeg: path.join(dir, "card.jpg"),
+        blankJpeg: path.join(dir, "blank.jpg"),
+        webp: path.join(dir, "card.webp"),
       };
       await writeFile(files.drawn, await drawn.render({ title: "Here" }));
       await writeFile(files.blank, await blank.render({ title: "Gone" }));
-      await writeFile(files.jpeg, fixture("card.jpg"));
+      await writeFile(files.jpeg, fixture("jpeg-content/gradient-progressive-420.jpg"));
+      await writeFile(files.blankJpeg, fixture("jpeg-content/flat-baseline-420.jpg"));
+      await writeFile(files.webp, fixture("card-lossy.webp"));
 
       // Without the flag the blank card passes, which is the gap it closes.
       const unchecked = await run(["verify", "--size", "1200x630", files.blank]);
@@ -216,9 +220,16 @@ describe("--require-content", () => {
       expect(report.files.map(({ valid }) => valid)).toEqual([true, false]);
       expect(report.files[1]?.globalIssues[0]?.message).toBe("image is blank: every pixel is rgba(17, 17, 17, 1)");
 
-      const jpeg = await run(["verify", "--require-content", "--format", "jpeg", "--size", "1200x630", files.jpeg]);
-      expect(jpeg.status).toBe(1);
-      expect(jpeg.stderr).toContain("--require-content decodes PNG only; this image is jpeg");
+      const jpeg = await run(["verify", "--require-content", "--format", "jpeg", "--size", "48x32", files.jpeg]);
+      expect(jpeg.status).toBe(0);
+      const blankJpeg = await run(["verify", "--require-content", "--size", "37x21", files.blankJpeg]);
+      expect(blankJpeg.status).toBe(1);
+      expect(blankJpeg.stderr).toContain("image is blank: every pixel is rgba(17, 34, 50, 1)");
+
+      const webp = await run(["verify", "--require-content", "--format", "webp", "--size", "1200x630", files.webp]);
+      expect(webp.status).toBe(1);
+      expect(webp.stderr).toContain("--require-content decodes PNG and JPEG only; this image is webp");
+      expect(webp.stderr).toContain('guards: { blank: "error" }');
     },
     RENDER_TIMEOUT,
   );

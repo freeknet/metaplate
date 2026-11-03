@@ -6,7 +6,7 @@ import type { ImageFormat } from "../image.js";
 import { isRobotsProductToken } from "../verify/robots.js";
 
 export const VERIFY_USAGE =
-  "Usage: metaplate verify [--json] [--require-content] [--target TARGET] [--url URL] [--alt TEXT] [--max-file-size BYTES] [--format svg|png|jpeg|webp|gif] --size WIDTHxHEIGHT <file> [...] [--size WIDTHxHEIGHT <file> [...]]";
+  "Usage: metaplate verify [--json] [--require-content] [--target TARGET] [--url URL] [--alt TEXT] [--max-file-size BYTES] [--format svg|png|jpeg|webp|gif] --size WIDTHxHEIGHT <file|dir|glob> [...] [--size WIDTHxHEIGHT <file|dir|glob> [...]]";
 
 const FORMATS = new Set<ImageFormat>(["svg", "png", "jpeg", "webp", "gif"]);
 const TARGETS = new Set<SocialTarget>(SOCIAL_TARGETS);
@@ -24,7 +24,7 @@ export type VerifyInvocation = {
   url?: string;
   alt?: string;
   maxFileSize?: number;
-  /** Fail a PNG whose every pixel is one color (`--require-content`). */
+  /** Fail a PNG or JPEG whose every pixel is one color (`--require-content`). */
   requireContent?: boolean;
 };
 
