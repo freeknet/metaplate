@@ -461,6 +461,7 @@ export function layoutGuards(
   }
 
   function checkAvoid(gap: number) {
+    const relation = gap === 0 ? "overlaps" : `is within ${gap}px of`;
     for (const { element, text, box } of texts) {
       const reach = { left: box.left - gap, top: box.top - gap, width: box.width + 2 * gap, height: box.height + 2 * gap };
       for (const avoided of keyed) {
@@ -469,7 +470,7 @@ export function layoutGuards(
         report.add({
           ...at, guard: "avoid", element, text, box, avoided: Object.freeze({ ...avoided }),
           message:
-            `Text ${quote(text)} in a <${element}> at ${describeBox(box)} is within ${gap}px of the element ` +
+            `Text ${quote(text)} in a <${element}> at ${describeBox(box)} ${relation} the element ` +
             `keyed ${JSON.stringify(avoided.key)} (<${avoided.element}> at ${describeBox(avoided.box)}) in ${describeTarget(target)}`,
         });
       }

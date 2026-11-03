@@ -357,7 +357,8 @@ deployment is reproducible from a commit:
   organization access token.
 
 The fixture deploys from GitHub, not by uploading a local directory with
-`deno deploy`; uploads stalled on Deno Deploy's side when this was set up
+`deno deploy`, so every deployment is built from a commit. Uploads stalled on
+Deno Deploy's side when this was set up, a regression Deno fixed on 2026-11-02
 ([denoland/deploy_feedback#954](https://github.com/denoland/deploy_feedback/issues/954)).
 
 ### Hosted Deno Deploy evidence

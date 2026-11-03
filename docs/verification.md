@@ -60,6 +60,8 @@ npx metaplate verify --size 1200x630 "out/og/*/og-image.jpg"
   unchanged.
 - An operand that exists as a file is always that file, even when its name
   contains glob characters.
+- A symbolic link to a file counts as a file. Links to directories are not
+  followed, so a walk cannot loop.
 
 Files are checked in sorted order, and a file named by several operands is
 checked once. Each operand uses the `--size` and `--format` group it is in.

@@ -19,9 +19,9 @@
 // into this directory (`npm run setup`), then run main.ts. Every push to the
 // repository then deploys.
 //
-// Local uploads (`deno deploy` from a directory) are not used: the server
-// never reports which files to upload, so every upload stalls until the
-// build is cancelled (denoland/deploy_feedback#954).
+// Local uploads (`deno deploy` from a directory) are not used, so every
+// deployment is built from a commit. They stalled when this was set up, a
+// Deno-side regression fixed on 2026-11-02 (denoland/deploy_feedback#954).
 import { execSync, spawnSync } from "node:child_process";
 import { copyFileSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
