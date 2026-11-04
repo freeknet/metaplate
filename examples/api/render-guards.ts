@@ -62,10 +62,26 @@ export function lenient(log: (issue: RenderGuardIssue) => void) {
   });
 }
 
+/**
+ * The layout guards for failures inside the canvas: text in the strip the
+ * wide crops remove, text overlapping text, and text running under the
+ * element keyed "photo".
+ */
+export const layout = createNodeOg({
+  alt: (copy: Copy) => copy.title,
+  fonts,
+  component: card,
+  guards: {
+    safeArea: { level: "error", inset: { x: 56, y: 44 } },
+    textOverlap: "error",
+    avoid: { level: "error", keys: ["photo"], gap: 20 },
+  },
+});
+
 /** SVG output has no pixels, so `metaplate/render` runs the layout guards only. */
 export const svg = createSvgOg({
   alt: (copy: Copy) => copy.title,
   fonts,
   component: card,
-  guards: { missingGlyphs: "error", overflow: "error" },
+  guards: { missingGlyphs: "error", overflow: "error", safeArea: "error" },
 });

@@ -5,6 +5,8 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-11-03
+
 ### Added
 
 - `metaplate verify --baseline DIR` compares every PNG or JPEG with the file
@@ -45,7 +47,8 @@ All notable changes to Metaplate are documented in this file. The project uses
   expanded by metaplate, so `"out/og/*/og-image.jpg"` works from npm scripts
   on Windows, where `cmd.exe` expands nothing. Files are checked in sorted
   order, each once. A directory without images, or a glob that matches
-  nothing, is an error.
+  nothing, is an error. Symbolic links to files count as files; links to
+  directories are not followed.
 - `metaplate/cli` exports `runCli(args, { stdout, stderr })`, which runs any
   `metaplate` command in-process and resolves to its exit code (#166). It
   leaves `process.exitCode` alone, and concurrent calls keep separate output.
@@ -1106,7 +1109,8 @@ reflects that `render` may return any consumer-encoded format ([#54]).
 - Typed package exports for framework-neutral, rendering, Node.js, Next.js,
   font, and PNG entry points.
 
-[Unreleased]: https://github.com/lnorton89/metaplate/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/lnorton89/metaplate/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/lnorton89/metaplate/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/lnorton89/metaplate/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/lnorton89/metaplate/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/lnorton89/metaplate/compare/v0.5.0...v0.6.0

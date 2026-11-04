@@ -64,12 +64,16 @@ environment fetches the newest npm (12 at the time of writing), whose
 
 ### Why not `deno deploy` from this directory
 
-Uploading a local directory is Deno Deploy's other route, and it does not work
-for this org today. The server creates the revision but never reports which
-files to upload, so the CLI waits until the build is cancelled after about
-five minutes. That held across CLI 0.0.9904 and 0.0.9908, Windows and Linux,
-and a new app. The report is
-[denoland/deploy_feedback#954](https://github.com/denoland/deploy_feedback/issues/954).
+Uploading a local directory is Deno Deploy's other route. When this fixture
+was set up it did not work: the server created the revision but never
+reported which files to upload, so the CLI waited until the build was
+cancelled after about five minutes. Deno traced that to a regression on their
+side between 2026-11-01 23:52 and 2026-11-02 03:37 UTC
+([denoland/deploy_feedback#954](https://github.com/denoland/deploy_feedback/issues/954)).
+A CLI upload with 0.0.9908 deployed in about four seconds on 2026-11-03, and
+`@deno/deploy` 0.0.9909 now exits with the revision's status instead of
+hanging if the server never asks for files. The fixture still deploys from
+GitHub, so every push builds exactly what was committed.
 
 ### The `deno deploy` wrapper
 

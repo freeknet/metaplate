@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -78,6 +78,38 @@ describe("verify operands", () => {
     const result = await cli(["verify", "--json", "--size", "1200x630", home, path.join(root, "og", "home"), "--size", "10x10", home]);
     expect(result.code).toBe(0);
     expect(checked(root, result.stdout)).toEqual(["og/home/og-image.png"]);
+  });
+
+  it("skips hidden entries under a trailing ** too", async () => {
+    const root = await cards();
+    const result = await cli(["verify", "--json", "--size", "1200x630", `${root}/og/**`, "--format", "png", "--size", "1200x630", `${root}/og/home/*.png`]);
+    // og/notes.txt is a file, so the trailing ** names it; og/.cache/og-image.png is hidden.
+    expect(checked(root, result.stdout)).toEqual([
+      "og/about/og-image.jpg",
+      "og/about/og-image.png",
+      "og/blog/post/og-image.png",
+      "og/home/og-image.png",
+      "og/notes.txt",
+    ]);
+  });
+
+  it("follows symbolic links to files, in directories and globs", async () => {
+    const root = await cards();
+    const target = path.join(root, "og", "home", "og-image.png");
+    const link = path.join(root, "linked", "og-image.png");
+    await mkdir(path.dirname(link));
+    try {
+      await symlink(target, link, "file");
+    } catch (error) {
+      // Windows needs Developer Mode or an elevated shell to create links.
+      if ((error as NodeJS.ErrnoException).code === "EPERM") return;
+      throw error;
+    }
+    const walked = await cli(["verify", "--json", "--size", "1200x630", path.join(root, "linked")]);
+    expect(checked(root, walked.stdout)).toEqual(["linked/og-image.png"]);
+    const globbed = await cli(["verify", "--json", "--size", "1200x630", `${root}/linked/*.png`]);
+    expect(globbed.code).toBe(0);
+    expect(checked(root, globbed.stdout)).toEqual(["linked/og-image.png"]);
   });
 
   it("leaves a missing plain file to fail as before", async () => {

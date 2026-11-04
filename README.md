@@ -3,7 +3,7 @@
 [![CI](https://github.com/lnorton89/metaplate/actions/workflows/ci.yml/badge.svg)](https://github.com/lnorton89/metaplate/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/lnorton89/metaplate/actions/workflows/codeql.yml/badge.svg)](https://github.com/lnorton89/metaplate/actions/workflows/codeql.yml)
 [![npm](https://img.shields.io/npm/v/metaplate)](https://www.npmjs.com/package/metaplate)
-[![Socket Badge](https://badge.socket.dev/npm/package/metaplate/0.7.0)](https://socket.dev/npm/package/metaplate/overview/0.7.0)
+[![Socket Badge](https://badge.socket.dev/npm/package/metaplate/0.8.0)](https://socket.dev/npm/package/metaplate/overview/0.8.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Composable, framework-neutral Open Graph image tooling for TypeScript.
@@ -283,8 +283,12 @@ runtime. Metaplate bundles no artwork; the guide covers each set's license.
 and platform rules, and `metaplate verify-url` runs the same checks on a
 deployed URL under a hardened fetch policy. `metaplate verify-page` audits a
 whole page: it reads the page's `og:image`, `twitter:card`, `twitter:image`,
-and JSON-LD images and verifies every image they name. `--require-content`
-decodes PNGs and fails one whose every pixel is the same color.
+and JSON-LD images and verifies every image they name. `verify` takes files,
+directories, and globs, and `--require-content` decodes PNG and JPEG and fails
+an image whose every pixel is the same color. `--baseline DIR` compares each
+card with a saved copy and fails one that changed, with a side-by-side diff
+image, so a Satori or font upgrade cannot change cards unnoticed. `runCli`
+from `metaplate/cli` runs any command from a script without a shell.
 [Verification guide](docs/verification.md) and
 [page audit guide](docs/verify-page.md)
 
