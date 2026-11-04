@@ -186,6 +186,71 @@ as the card renders. Like the plate's `blank`
 [render guard](rendering.md#render-guards), it catches a uniform image, not
 a gradient or photograph whose text is missing.
 
+### Compare against a baseline
+
+Guards and checks say nothing is broken, not that nothing changed. Upgrading
+Satori, Resvg, a font, or metaplate itself can move every card by a few pixels
+with no code change: a headline renders slightly larger, letter spacing
+shifts, a rotated element lands at a different angle. `--baseline` compares
+each PNG or JPEG with the file at the same relative path in a baseline
+directory:
+
+```sh
+# Record the current cards once, and commit or cache the directory.
+npx metaplate verify --baseline og-baseline --update-baseline --size 1200x630 out/og
+
+# After an upgrade: fail any card that changed, and write a picture of each change.
+npx metaplate verify --baseline og-baseline --write-diff og-diff --size 1200x630 out/og
+```
+
+Files match by their path relative to their operand: a directory's files
+relative to the directory, a glob's relative to the path before its first
+wildcard, and a file by its name. So `out/og/home/og-image.jpg` matches
+`og-baseline/home/og-image.jpg`. Every file runs the usual checks first, and
+the comparison only after they pass.
+
+A card fails when it changed, when it has no baseline, or when a baseline
+file has no current card. Each changed card reports the share of pixels that
+changed, such as
+`differs from og-baseline/home/og-image.jpg: 3.21% of pixels changed by more than 16/255 (--max-diff 0%)`.
+
+| Option | Effect |
+| --- | --- |
+| `--max-diff PCT` | Pass a card when at most `PCT` percent of its pixels changed, such as `--max-diff 0.5%`. The default, `0`, fails any change. |
+| `--threshold N` | Count a pixel as changed when any channel moves more than `N` of 255. The default is `0` when both files are PNG, and `16` when either is a JPEG, so re-encoding noise is not a change. |
+| `--write-diff DIR` | For each changed card, write `DIR/<path>.png`: the baseline, the current card, and the current card faded with every changed pixel in red, side by side. |
+| `--update-baseline` | After review, rewrite the baseline from the current cards: add new ones, replace changed ones, and delete baseline files with no card. Nothing fails for a difference. |
+
+Color is compared premultiplied by alpha, so two fully transparent pixels are
+equal whatever their RGB. Cards of different sizes count as entirely
+changed. With `--json`, each file's report has a `baseline` object with its
+`status` (`unchanged`, `within`, `changed`, `missing-baseline`, `added`, or
+`updated`), `changedPixels`, `changedRatio`, `meanDifference`,
+`maxDifference`, `threshold`, and `diff` when one was written, and the report
+lists baseline files with no card under `baseline.unmatched` (or
+`baseline.removed` with `--update-baseline`).
+
+Both formats decode without a dependency. JPEGs go through a full decode
+(inverse DCT and chroma upsampling) that stays within a few levels of
+libjpeg; both sides of a comparison use the same decoder, so that difference
+never counts as a change. WebP and GIF are not decoded and fail the
+comparison.
+
+For tests, `compareImages(baseline, current, options)` from `metaplate/node`
+is the same comparison on bytes. It takes `threshold` and `diffImage: true`,
+and returns the counts above plus `diffImage`, the side-by-side PNG:
+
+```ts
+import { readFile } from "node:fs/promises";
+import { compareImages } from "metaplate/node";
+
+const result = compareImages(await readFile("og-baseline/home.png"), await og.render({ title: "Home" }));
+expect(result.changedRatio).toBeLessThanOrEqual(0.005);
+```
+
+`decodeImagePixels(bytes)` returns a PNG or JPEG's pixels as 8-bit RGBA, and
+`JPEG_COMPARE_THRESHOLD` is the JPEG default, `16`.
+
 ### Verify a deployed URL
 
 `metaplate verify-url` fetches an image over http(s) and runs it through the
