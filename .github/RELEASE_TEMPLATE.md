@@ -43,12 +43,12 @@ example, Next.js).
 
 ## Documentation and support
 
-- [README](https://github.com/lnorton89/metaplate#readme)
+- [README](https://github.com/freeknet/metaplate#readme)
 - Add direct links to official framework documentation used by this release.
 - [npm package](https://www.npmjs.com/package/metaplate)
-- [Report a problem](https://github.com/lnorton89/metaplate/issues/new/choose)
+- [Report a problem](https://github.com/freeknet/metaplate/issues/new/choose)
 
 ## Full changelog
 
-- [Compare vPREVIOUS...vX.Y.Z](https://github.com/lnorton89/metaplate/compare/vPREVIOUS...vX.Y.Z)
-- [Detailed changelog](https://github.com/lnorton89/metaplate/blob/vX.Y.Z/CHANGELOG.md)
+- [Compare vPREVIOUS...vX.Y.Z](https://github.com/freeknet/metaplate/compare/vPREVIOUS...vX.Y.Z)
+- [Detailed changelog](https://github.com/freeknet/metaplate/blob/vX.Y.Z/CHANGELOG.md)

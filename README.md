@@ -1,7 +1,7 @@
 # Metaplate
 
-[![CI](https://github.com/lnorton89/metaplate/actions/workflows/ci.yml/badge.svg)](https://github.com/lnorton89/metaplate/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/lnorton89/metaplate/actions/workflows/codeql.yml/badge.svg)](https://github.com/lnorton89/metaplate/actions/workflows/codeql.yml)
+[![CI](https://github.com/freeknet/metaplate/actions/workflows/ci.yml/badge.svg)](https://github.com/freeknet/metaplate/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/freeknet/metaplate/actions/workflows/codeql.yml/badge.svg)](https://github.com/freeknet/metaplate/actions/workflows/codeql.yml)
 [![npm](https://img.shields.io/npm/v/metaplate)](https://www.npmjs.com/package/metaplate)
 [![Socket Badge](https://badge.socket.dev/npm/package/metaplate/0.8.0)](https://socket.dev/npm/package/metaplate/overview/0.8.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -298,8 +298,8 @@ Use a real `.png` or `.jpg` file on static hosts, the provider's Node runtime
 for `metaplate/node`, and `metaplate/edge` on Deno-based edges. Hosted
 certifications cover Vercel Functions, Next.js on Vercel, Netlify Functions,
 Netlify Edge Functions, and Deno Deploy, each from a dated deployment whose
-sources are in [`examples/hosted`](https://github.com/lnorton89/metaplate/tree/main/examples/hosted). The current status of
-every route is in [`deployment-evidence.json`](https://github.com/lnorton89/metaplate/blob/main/deployment-evidence.json).
+sources are in [`examples/hosted`](https://github.com/freeknet/metaplate/tree/main/examples/hosted). The current status of
+every route is in [`deployment-evidence.json`](https://github.com/freeknet/metaplate/blob/main/deployment-evidence.json).
 [Deployment guide](docs/deployment.md)
 
 ## Entry points

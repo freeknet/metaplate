@@ -154,8 +154,6 @@ jobs:
         # The `./` is significant: without it npm parses `release/name.tgz`
         # as GitHub shorthand (`release/name.tgz.git`) instead of a local file.
         run: npm publish ./release/*.tgz --access public --provenance --tag "${{ needs.verify.outputs.dist_tag }}"
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   verify-publication:
     name: Verify published artifact
