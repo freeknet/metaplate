@@ -130,5 +130,5 @@ out, the dimensions Resvg must return, the pixels the encoder receives, and the
 width and height its metadata advertises. Dimension-changing Resvg options are
 checked against every declared size, so a `fitTo` that preserves the landscape
 width but would rescale the square is rejected at definition.
-[`examples/api/size-variants.tsx`](https://github.com/lnorton89/metaplate/blob/main/examples/api/size-variants.tsx) type-checks the
+[`examples/api/size-variants.tsx`](https://github.com/freeknet/metaplate/blob/main/examples/api/size-variants.tsx) type-checks the
 whole pattern against the sources.

@@ -110,4 +110,4 @@ export default function Page() {
 }
 ```
 
-[`examples/api/json-ld.ts`](https://github.com/lnorton89/metaplate/blob/main/examples/api/json-ld.ts) type-checks both forms.
+[`examples/api/json-ld.ts`](https://github.com/freeknet/metaplate/blob/main/examples/api/json-ld.ts) type-checks both forms.

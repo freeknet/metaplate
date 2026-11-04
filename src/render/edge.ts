@@ -205,7 +205,7 @@ async function loadSatori(): Promise<SatoriRender> {
   }) as SatoriRender;
 }
 
-const EDGE_RUNTIMES_DOC = "https://github.com/lnorton89/metaplate/blob/main/docs/edge.md#edge-runtimes-with-metaplateedge";
+const EDGE_RUNTIMES_DOC = "https://github.com/freeknet/metaplate/blob/main/docs/edge.md#edge-runtimes-with-metaplateedge";
 
 /**
  * Satori's standalone build shapes text with a bundled HarfBuzz Emscripten

@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Do not open a public issue for a vulnerability. Use GitHub's
-[private vulnerability reporting](https://github.com/lnorton89/metaplate/security/advisories/new)
+[private vulnerability reporting](https://github.com/freeknet/metaplate/security/advisories/new)
 so the report, discussion, and any coordinated fix remain private.
 
 Include the affected Metaplate version or commit, Node.js version, runtime or
