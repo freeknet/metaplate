@@ -9,7 +9,7 @@ import { lifecycleScriptErrors, workflowPinErrors } from "../../scripts/supply-c
 
 const baseDeployment = {
   schemaVersion: 1,
-  release: "0.8.1",
+  release: "0.8.2",
   status: "in-progress",
   policy: {
     certifiedRequires: [

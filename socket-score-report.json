@@ -1,48 +1,48 @@
 {
   "schemaVersion": 2,
   "package": "metaplate",
-  "version": "0.8.0",
-  "source": "https://socket.dev/npm/package/metaplate@0.8.0",
-  "normalizedAt": "2026-11-03T02:59:24.638Z",
+  "version": "0.8.1",
+  "source": "https://socket.dev/npm/package/metaplate@0.8.1",
+  "normalizedAt": "2026-11-04T19:11:08.706Z",
   "captureKind": "socket-cli-import",
   "shallow": {
     "score": {
-      "overall": 78,
-      "supplyChain": 78,
-      "maintenance": 86,
+      "overall": 79,
+      "supplyChain": 79,
+      "maintenance": 92,
       "quality": 99,
       "vulnerability": 100,
       "license": 100
     },
     "alerts": [
       {
-        "category": "supplyChainRisk",
-        "example": "npm/metaplate@0.8.0",
-        "name": "recentlyPublished",
+        "category": "quality",
+        "example": "npm/metaplate@0.8.1",
+        "name": "unpopularPackage",
         "severity": "medium",
         "package": "metaplate",
-        "version": "0.8.0",
+        "version": "0.8.1",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [],
           "reachability": "unknown",
           "unresolved": true,
-          "reason": "metaplate@0.8.0 not found in the current dependency inventory"
+          "reason": "metaplate@0.8.1 not found in the current dependency inventory"
         }
       },
       {
         "category": "supplyChainRisk",
-        "example": "npm/metaplate@0.8.0",
+        "example": "npm/metaplate@0.8.1",
         "name": "urlStrings",
         "severity": "low",
         "package": "metaplate",
-        "version": "0.8.0",
+        "version": "0.8.1",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [],
           "reachability": "unknown",
           "unresolved": true,
-          "reason": "metaplate@0.8.0 not found in the current dependency inventory"
+          "reason": "metaplate@0.8.1 not found in the current dependency inventory"
         }
       }
     ]
@@ -71,7 +71,7 @@
       "maintenance": "npm/string.prototype.codepointat@0.2.1",
       "overall": "npm/@resvg/resvg-js-android-arm-eabi@2.6.2",
       "quality": "npm/@resvg/resvg-js-android-arm-eabi@2.6.2",
-      "supplyChain": "npm/next@16.4.4",
+      "supplyChain": "npm/next@16.4.5",
       "vulnerability": "npm/fflate@0.7.3"
     },
     "alerts": [
@@ -192,21 +192,6 @@
       },
       {
         "category": "supplyChainRisk",
-        "example": "npm/caniuse-lite@1.0.30001820",
-        "name": "recentlyPublished",
-        "severity": "medium",
-        "package": "caniuse-lite",
-        "version": "1.0.30001820",
-        "dependencyEvidence": {
-          "source": "package-lock.json",
-          "paths": [],
-          "reachability": "unknown",
-          "unresolved": true,
-          "reason": "caniuse-lite@1.0.30001820 not found in the current dependency inventory"
-        }
-      },
-      {
-        "category": "supplyChainRisk",
         "example": "npm/@resvg/resvg-js@2.6.2",
         "name": "shellAccess",
         "severity": "medium",
@@ -238,6 +223,21 @@
           "reachability": "runtime-peer-optional"
         },
         "dependencyPath": "metaplate > @astrojs/node > astro > sharp > @img/sharp-linux-s390x"
+      },
+      {
+        "category": "quality",
+        "example": "npm/metaplate@0.8.1",
+        "name": "unpopularPackage",
+        "severity": "medium",
+        "package": "metaplate",
+        "version": "0.8.1",
+        "dependencyEvidence": {
+          "source": "package-lock.json",
+          "paths": [],
+          "reachability": "unknown",
+          "unresolved": true,
+          "reason": "metaplate@0.8.1 not found in the current dependency inventory"
+        }
       },
       {
         "category": "supplyChainRisk",
@@ -296,17 +296,17 @@
       },
       {
         "category": "supplyChainRisk",
-        "example": "npm/next@16.4.4",
+        "example": "npm/next@16.4.5",
         "name": "dynamicRequire",
         "severity": "low",
         "package": "next",
-        "version": "16.4.4",
+        "version": "16.4.5",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [],
           "reachability": "unknown",
           "unresolved": true,
-          "reason": "next@16.4.4 not found in the current dependency inventory"
+          "reason": "next@16.4.5 not found in the current dependency inventory"
         }
       },
       {
@@ -408,17 +408,17 @@
       },
       {
         "category": "maintenance",
-        "example": "npm/metaplate@0.8.0",
+        "example": "npm/metaplate@0.8.1",
         "name": "unmaintained",
         "severity": "low",
         "package": "metaplate",
-        "version": "0.8.0",
+        "version": "0.8.1",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [],
           "reachability": "unknown",
           "unresolved": true,
-          "reason": "metaplate@0.8.0 not found in the current dependency inventory"
+          "reason": "metaplate@0.8.1 not found in the current dependency inventory"
         }
       },
       {
@@ -441,7 +441,7 @@
   },
   "provenance": {
     "importedFrom": "Socket CLI export",
-    "inputSha256": "8e4ca6aa54b49343c9f374915567ccb815dad3aa9675378f3fe05d8b7ede6421",
+    "inputSha256": "85597539a4cf87b204635b33209a9ecd6a5809243819dd16d691410714da246e",
     "dependencyEvidence": "package-lock.json via dependency-model.mjs"
   }
 }

@@ -5,6 +5,8 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-11-04
+
 ### Changed
 
 - The repository moved to [freeknet/metaplate](https://github.com/freeknet/metaplate).
@@ -1116,7 +1118,8 @@ reflects that `render` may return any consumer-encoded format ([#54]).
 - Typed package exports for framework-neutral, rendering, Node.js, Next.js,
   font, and PNG entry points.
 
-[Unreleased]: https://github.com/lnorton89/metaplate/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/freeknet/metaplate/compare/v0.8.2...HEAD
+[0.8.2]: https://github.com/freeknet/metaplate/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/lnorton89/metaplate/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/lnorton89/metaplate/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/lnorton89/metaplate/compare/v0.6.0...v0.7.0
