@@ -5,10 +5,11 @@ import { inflateSync } from "node:zlib";
  * --require-content`. It uses `node:zlib`, so only the Node CLI imports it;
  * the runtime-neutral `metaplate/png` stays header-only.
  *
- * It decodes exactly far enough to answer one question, whether every pixel
- * is the same color, for every PNG the specification allows: grayscale,
- * truecolor, indexed, and their alpha forms, at every legal bit depth, and
- * Adam7-interlaced images. https://www.w3.org/TR/png-3/
+ * It decodes every PNG the specification allows: grayscale, truecolor,
+ * indexed, and their alpha forms, at every legal bit depth, and
+ * Adam7-interlaced images. `pngUniformColor` stops at the first pixel that
+ * differs; `decodePngPixels` returns them all, for `compareImages`.
+ * https://www.w3.org/TR/png-3/
  */
 
 const SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
@@ -21,6 +22,12 @@ const COLOR_TYPES: ReadonlyMap<number, { channels: number; depths: readonly numb
   [4, { channels: 2, depths: [8, 16] }],
   [6, { channels: 4, depths: [8, 16] }],
 ]);
+
+/**
+ * The most pixels a full decode allocates for, 64 megapixels: 256 MiB of
+ * RGBA, far beyond any social card, so a hostile header cannot exhaust memory.
+ */
+export const MAX_DECODED_PIXELS = 64 * 1024 * 1024;
 
 /** Adam7 passes as [x start, y start, x step, y step]. */
 export const ADAM7 = [
@@ -115,16 +122,26 @@ function parseChunks(bytes: Uint8Array): Parsed {
   };
 }
 
-type Pass = { width: number; height: number; rowBytes: number };
+/** One reduced image, with where its pixels land in the full image. */
+type Pass = { width: number; height: number; rowBytes: number; x: number; y: number; dx: number; dy: number };
 
 /** The reduced images the scanlines are stored as: one, or seven for Adam7. */
 function passes(header: Header): Pass[] {
   const bits = header.channels * header.depth;
-  const pass = (width: number, height: number): Pass => ({ width, height, rowBytes: Math.ceil((width * bits) / 8) });
-  if (!header.interlaced) return [pass(header.width, header.height)];
-  return ADAM7.map(([x, y, dx, dy]) =>
-    pass(Math.max(0, Math.ceil((header.width - x) / dx)), Math.max(0, Math.ceil((header.height - y) / dy))),
-  ).filter((reduced) => reduced.width > 0 && reduced.height > 0);
+  const pass = (width: number, height: number, [x, y, dx, dy]: readonly number[]): Pass => ({
+    width,
+    height,
+    rowBytes: Math.ceil((width * bits) / 8),
+    x: x!,
+    y: y!,
+    dx: dx!,
+    dy: dy!,
+  });
+  if (!header.interlaced) return [pass(header.width, header.height, [0, 0, 1, 1])];
+  return ADAM7.map((origin) => {
+    const [x, y, dx, dy] = origin;
+    return pass(Math.max(0, Math.ceil((header.width - x) / dx)), Math.max(0, Math.ceil((header.height - y) / dy)), origin);
+  }).filter((reduced) => reduced.width > 0 && reduced.height > 0);
 }
 
 function paeth(left: number, up: number, upLeft: number): number {
@@ -203,12 +220,11 @@ function normalize(color: Color): Color {
 }
 
 /**
- * The single RGBA color (8 bits per channel) of every pixel of a PNG, or
- * `undefined` when any two pixels differ. Fully transparent pixels compare
- * equal whatever their color channels hold. Throws for bytes it cannot
- * decode, so a damaged file is never reported as having content.
+ * Inflates and unfilters the image data, calling `visit` with every pixel's
+ * position and RGBA color at the image's own sample precision, in storage
+ * order. `visit` returns `false` to stop early. Returns the parsed header.
  */
-export function pngUniformColor(bytes: Uint8Array): Color | undefined {
+function eachPixel(bytes: Uint8Array, visit: (x: number, y: number, color: Color) => boolean | void): Header {
   const parsed = parseChunks(bytes);
   const { header } = parsed;
   const reduced = passes(header);
@@ -226,7 +242,6 @@ export function pngUniformColor(bytes: Uint8Array): Color | undefined {
 
   const read = pixelReader(parsed);
   const stride = Math.max(1, (header.channels * header.depth) / 8);
-  let first: Color | undefined;
   let offset = 0;
   for (const pass of reduced) {
     let previous: Uint8Array = new Uint8Array(pass.rowBytes);
@@ -237,13 +252,57 @@ export function pngUniformColor(bytes: Uint8Array): Color | undefined {
       unfilter(filter, row, previous, stride);
       previous = row;
       for (let x = 0; x < pass.width; x += 1) {
-        const color = normalize(read(row, x));
-        if (!first) first = color;
-        else if (color.some((value, channel) => value !== first![channel])) return undefined;
+        if (visit(pass.x + x * pass.dx, pass.y + y * pass.dy, read(row, x)) === false) return header;
       }
     }
   }
-  if (!first) return undefined;
-  const scale = 255 / (2 ** (header.colorType === 3 ? 8 : header.depth) - 1);
-  return first.map((value) => Math.round(value * scale)) as Color;
+  return header;
+}
+
+/** Scales a sample at the image's precision to 8 bits. */
+function to8Bits(header: Header): (value: number) => number {
+  const max = 2 ** (header.colorType === 3 ? 8 : header.depth) - 1;
+  return max === 255 ? (value) => value : (value) => Math.round((value * 255) / max);
+}
+
+/**
+ * The single RGBA color (8 bits per channel) of every pixel of a PNG, or
+ * `undefined` when any two pixels differ. Fully transparent pixels compare
+ * equal whatever their color channels hold. Throws for bytes it cannot
+ * decode, so a damaged file is never reported as having content.
+ */
+export function pngUniformColor(bytes: Uint8Array): Color | undefined {
+  let first: Color | undefined;
+  let uniform = true;
+  const header = eachPixel(bytes, (_x, _y, pixel) => {
+    const color = normalize(pixel);
+    if (!first) first = color;
+    else if (color.some((value, channel) => value !== first![channel])) {
+      uniform = false;
+      return false;
+    }
+    return true;
+  });
+  if (!first || !uniform) return undefined;
+  return first.map(to8Bits(header)) as Color;
+}
+
+/** Decoded pixels: 8-bit RGBA, row by row, four bytes per pixel. */
+export type DecodedPixels = { width: number; height: number; data: Uint8Array };
+
+/**
+ * Every pixel of a PNG as 8-bit RGBA. Throws for bytes it cannot decode, and
+ * for an image larger than `maxPixels`.
+ */
+export function decodePngPixels(bytes: Uint8Array, maxPixels = MAX_DECODED_PIXELS): DecodedPixels {
+  const { header } = parseChunks(bytes);
+  const { width, height } = header;
+  if (width * height > maxPixels) fail(`${width}x${height} is more than ${maxPixels} pixels`);
+  const scale = to8Bits(header);
+  const data = new Uint8Array(width * height * 4);
+  eachPixel(bytes, (x, y, color) => {
+    const at = (y * width + x) * 4;
+    for (let channel = 0; channel < 4; channel += 1) data[at + channel] = scale(color[channel]!);
+  });
+  return { width, height, data };
 }

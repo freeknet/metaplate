@@ -7,6 +7,21 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Added
 
+- `metaplate verify --baseline DIR` compares every PNG or JPEG with the file
+  at the same relative path in `DIR`, to catch the visual changes a Satori,
+  Resvg, font, or metaplate upgrade makes without any code change (#174). A
+  card fails when more of its pixels changed than `--max-diff` allows
+  (default 0), when it has no baseline, or when a baseline file has no card.
+  `--threshold` sets how far a channel may move before a pixel counts as
+  changed (by default 0 for PNG, and 16 when either side is a JPEG, so
+  re-encoding noise does not count). `--write-diff DIR` writes the baseline,
+  the current card, and the changed pixels side by side for each changed
+  card, and `--update-baseline` rewrites the baseline after review. See
+  [Compare against a baseline](docs/verification.md#compare-against-a-baseline).
+- `metaplate/node` exports `compareImages(baseline, current, options)`, the
+  same comparison for tests, with `decodeImagePixels` and
+  `JPEG_COMPARE_THRESHOLD` (#174). JPEGs are fully decoded without a
+  dependency, within a few levels of libjpeg.
 - Three layout render guards for every renderer, for failures that stay
   inside the canvas, which `overflow` cannot see (#168):
   - `safeArea` reports text outside the area the centered 2:1 (X) and 1.91:1
