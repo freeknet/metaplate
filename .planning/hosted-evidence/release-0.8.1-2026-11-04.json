@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 1,
+  "release": "0.8.1",
+  "recordedAt": "2026-11-04",
+  "releaseCommit": "10cf551db2e301f20ac6aac51befad6424204751",
+  "publishedPackage": {
+    "name": "metaplate",
+    "version": "0.8.1",
+    "tarballSha256": "c0ead303d1da3dedbd620b801a3d467ca0059748c2eb329531450f93e5d443a0",
+    "integrity": "sha512-D0kpFKD34trd6STqq1t8WDmO9EWsKitmEayJvVhRAX3F1fuAfGPB/wSvcGU08/0qPi5muFyn4u9bMJwlPiMIBQ==",
+    "publishWorkflow": "https://github.com/lnorton89/metaplate/actions/runs/41758843905 (Verify release package, Publish to npm, and Verify published artifact all succeeded)"
+  },
+  "summary": "Post-release redeploy of the hosted fixtures promised in the v0.8.1 release notes. Deno Deploy was re-verified on 0.8.1. Netlify and Vercel were not redeployed: Netlify rejected new deploys because the account's credits were used up, and the Vercel CLI was logged out on the release machine. Their 0.8.0 certifications in deployment-evidence.json stand unchanged.",
+  "verifyTool": "npx metaplate@0.8.1 verify-url --json --require-content --format png --size 1200x630 <urls>, the published CLI installed from npm into a clean directory; each URL was then fetched again with a plain HTTPS GET",
+  "routes": {
+    "deno-deploy-edge-and-node": {
+      "result": "verified",
+      "app": "metaplate/metaplate-deno-github (built from GitHub on every push to main)",
+      "productionUrl": "https://metaplate-deno-github.metaplate.deno.net",
+      "build": "Deno Deploy's production build of main after the v0.8.1 release merge (10cf551); the PR check deploy/metaplate/metaplate-deno-github passed on the release PR head 53cfd3c",
+      "appReport": {
+        "deno": "2.9.8+e565d2b",
+        "metaplate": {
+          "version": "0.8.1",
+          "sha256": "1d6e8f8f9eab17ae694e9fc01d8fedda79c43c23e9e9eb901a1299dc27cb7f45",
+          "commit": null,
+          "dirty": null
+        }
+      },
+      "tarballNote": "The app installs a tarball it packs from the repository during its own build, not the npm tarball, so its SHA-256 differs from the published one; it is version 0.8.1 packed from the release source.",
+      "capturedAt": "2026-11-04T02:15:00Z",
+      "verifyUrlOutput": {
+        "schemaVersion": 1,
+        "urls": [
+          {
+            "url": "https://metaplate-deno-github.metaplate.deno.net/og/rel-081-edge-a",
+            "finalUrl": "https://metaplate-deno-github.metaplate.deno.net/og/rel-081-edge-a",
+            "redirects": [],
+            "contentType": "image/png",
+            "bytes": 23164,
+            "valid": true,
+            "image": {
+              "format": "png",
+              "width": 1200,
+              "height": 630,
+              "bytes": 23164
+            },
+            "globalIssues": [],
+            "targets": {}
+          },
+          {
+            "url": "https://metaplate-deno-github.metaplate.deno.net/og/rel-081-edge-b",
+            "finalUrl": "https://metaplate-deno-github.metaplate.deno.net/og/rel-081-edge-b",
+            "redirects": [],
+            "contentType": "image/png",
+            "bytes": 23380,
+            "valid": true,
+            "image": {
+              "format": "png",
+              "width": 1200,
+              "height": 630,
+              "bytes": 23380
+            },
+            "globalIssues": [],
+            "targets": {}
+          },
+          {
+            "url": "https://metaplate-deno-github.metaplate.deno.net/og-node/rel-081-node-a",
+            "finalUrl": "https://metaplate-deno-github.metaplate.deno.net/og-node/rel-081-node-a",
+            "redirects": [],
+            "contentType": "image/png",
+            "bytes": 23119,
+            "valid": true,
+            "image": {
+              "format": "png",
+              "width": 1200,
+              "height": 630,
+              "bytes": 23119
+            },
+            "globalIssues": [],
+            "targets": {}
+          },
+          {
+            "url": "https://metaplate-deno-github.metaplate.deno.net/og-node/rel-081-node-b",
+            "finalUrl": "https://metaplate-deno-github.metaplate.deno.net/og-node/rel-081-node-b",
+            "redirects": [],
+            "contentType": "image/png",
+            "bytes": 23071,
+            "valid": true,
+            "image": {
+              "format": "png",
+              "width": 1200,
+              "height": 630,
+              "bytes": 23071
+            },
+            "globalIssues": [],
+            "targets": {}
+          }
+        ]
+      },
+      "responses": [
+        {
+          "url": "https://metaplate-deno-github.metaplate.deno.net/og/rel-081-edge-a",
+          "status": 200,
+          "contentType": "image/png",
+          "cacheControl": "public, max-age=86400",
+          "sha256": "a8ec8c291ae227637b8cfe2328f156e5bd7248b5040ec7e000f88433944382db"
+        },
+        {
+          "url": "https://metaplate-deno-github.metaplate.deno.net/og/rel-081-edge-b",
+          "status": 200,
+          "contentType": "image/png",
+          "sha256": "9f21a938ec4e685b0132cdf053ddefc9296c2a210f71298359e7a1c0b98da6aa"
+        },
+        {
+          "url": "https://metaplate-deno-github.metaplate.deno.net/og-node/rel-081-node-a",
+          "status": 200,
+          "contentType": "image/png",
+          "cacheControl": "public, max-age=86400",
+          "sha256": "0b7b0faf038b1137783309d25a505069dc0c49af76982a955fcbc1a66678612b"
+        }
+      ],
+      "distinctBytesPerSlug": true,
+      "nonBlank": "--require-content passed for all four URLs"
+    },
+    "netlify-node-and-edge": {
+      "result": "not-redeployed",
+      "reason": "Two new sites were created for the redeploy and both deploys failed with HTTP 403: \"Account credit usage exceeded - new deploys are blocked until credits are added\". The empty sites were deleted. The fixtures were installed against metaplate@0.8.1 from npm (functions/ with --os=linux --cpu=x64 --libc=glibc) and are ready to deploy once credits are available.",
+      "tooling": "netlify-cli/27.16.2 win32-x64 node-v26.11.1",
+      "standingEvidence": ".planning/hosted-evidence/netlify-2026-11-01.json (0.8.0)"
+    },
+    "vercel-node-and-next": {
+      "result": "not-redeployed",
+      "reason": "The Vercel CLI reported \"Logged out\" on the release machine; a deploy needs the owner's sign-in.",
+      "standingEvidence": ".planning/hosted-evidence/vercel-2026-11-01.json (0.8.0)"
+    }
+  }
+}
