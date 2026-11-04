@@ -1,6 +1,6 @@
 {
   "name": "metaplate",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "description": "Typed social-image contracts for TypeScript: rendering, metadata, routes, and verification.",
   "keywords": [
     "open-graph",
