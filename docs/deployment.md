@@ -210,9 +210,9 @@ artifact; it does not prove a hosted provider build or account configuration.
 The `vercel-node` and `vercel-next` routes in `deployment-evidence.json` are
 certified from real production deployments made on 2026-11-01 from the packed
 0.8.0 tarball, each to a new Vercel project. The deployed sources are in
-[`examples/hosted/vercel`](https://github.com/lnorton89/metaplate/tree/main/examples/hosted/vercel) and the raw
+[`examples/hosted/vercel`](https://github.com/freeknet/metaplate/tree/main/examples/hosted/vercel) and the raw
 `verify-url` output, response headers, build logs, and deployment IDs are in
-[`.planning/hosted-evidence/vercel-2026-11-01.json`](https://github.com/lnorton89/metaplate/blob/main/.planning/hosted-evidence/vercel-2026-11-01.json).
+[`.planning/hosted-evidence/vercel-2026-11-01.json`](https://github.com/freeknet/metaplate/blob/main/.planning/hosted-evidence/vercel-2026-11-01.json).
 
 - **Vercel Function, Node.js runtime.** `api/og/[slug].mjs` exports
   `GET = og.handlerFrom(...)` and reads the slug from the request path. Vercel's
@@ -290,10 +290,10 @@ The `netlify-node` and `netlify-edge` routes in `deployment-evidence.json` are
 certified from production deployments made on 2026-11-01 from the packed 0.8.0
 tarball, each to a new Netlify site, with the Netlify CLI
 (`netlify deploy --prod --no-build`). The deployed sources are in
-[`examples/hosted/netlify`](https://github.com/lnorton89/metaplate/tree/main/examples/hosted/netlify)
+[`examples/hosted/netlify`](https://github.com/freeknet/metaplate/tree/main/examples/hosted/netlify)
 and the raw `verify-url` output, response headers, content checks, and
 deployment IDs are in
-[`.planning/hosted-evidence/netlify-2026-11-01.json`](https://github.com/lnorton89/metaplate/blob/main/.planning/hosted-evidence/netlify-2026-11-01.json).
+[`.planning/hosted-evidence/netlify-2026-11-01.json`](https://github.com/freeknet/metaplate/blob/main/.planning/hosted-evidence/netlify-2026-11-01.json).
 
 - **Netlify Functions, Node.js runtime.** `netlify/functions/og.mjs`
   default-exports `og.handlerFrom((_request, context) => ...)` with
@@ -370,9 +370,9 @@ at `36be0e9` on 2026-11-01, served at
 was checked with a one-line title and a wrapped title: `verify-url`, a plain
 GET for status and headers, distinct bytes per slug, and a decoded check that
 each image is not uniform. The fixture is
-[`examples/hosted/deno-deploy`](https://github.com/lnorton89/metaplate/tree/main/examples/hosted/deno-deploy),
+[`examples/hosted/deno-deploy`](https://github.com/freeknet/metaplate/tree/main/examples/hosted/deno-deploy),
 and the build log, build history, and raw outputs are in
-[`.planning/hosted-evidence/deno-deploy-2026-11-01.json`](https://github.com/lnorton89/metaplate/blob/main/.planning/hosted-evidence/deno-deploy-2026-11-01.json).
+[`.planning/hosted-evidence/deno-deploy-2026-11-01.json`](https://github.com/freeknet/metaplate/blob/main/.planning/hosted-evidence/deno-deploy-2026-11-01.json).
 
 The certification covers that dated build, Deno Deploy's runtime at the time,
 and the packed version; it is not a guarantee for later Deno Deploy releases.
@@ -452,7 +452,7 @@ Satori takes no precompiled HarfBuzz module, and every Satori release that
 exports `satori/layout.wasm` (0.35.2 and later) bundles this build, so the
 caller cannot work around it. `metaplate/edge` reports either failure as an
 error naming this limitation. The reproduction is
-[`examples/hosted/cloudflare`](https://github.com/lnorton89/metaplate/tree/main/examples/hosted/cloudflare),
+[`examples/hosted/cloudflare`](https://github.com/freeknet/metaplate/tree/main/examples/hosted/cloudflare),
 and the `cloudflare-workers` route in `deployment-evidence.json` records it.
 Vercel's Edge runtime also refuses to compile Wasm from a buffer, so it is
 expected to fail the same way (see [Vercel](#hosted-vercel-evidence)); that was
