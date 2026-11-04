@@ -154,3 +154,20 @@ export async function expandVerifyOperand(operand: string, format: ImageFormat |
   if (matches.size === 0) throw new Error(`No files match ${operand}`);
   return [...matches].sort();
 }
+
+/**
+ * The directory an operand's files are named relative to, for matching them
+ * against a baseline: a directory is its own base, a glob's base is the
+ * literal path before its first wildcard segment, and a file's is the
+ * directory that holds it.
+ */
+export async function verifyOperandBase(operand: string): Promise<string> {
+  const found = await kind(operand);
+  if (found === "directory") return operand;
+  if (found === "file" || !GLOB_CHARACTERS.test(operand)) return path.dirname(operand);
+  const parts = operand.split(SEPARATORS);
+  const literal = parts.slice(0, parts.findIndex((part) => GLOB_CHARACTERS.test(part)));
+  if (literal.length === 0) return ".";
+  const base = literal.join(path.sep);
+  return base === "" ? path.sep : /^[A-Za-z]:$/.test(base) ? base + path.sep : base;
+}
