@@ -285,8 +285,10 @@ deployed URL under a hardened fetch policy. `metaplate verify-page` audits a
 whole page: it reads the page's `og:image`, `twitter:card`, `twitter:image`,
 and JSON-LD images and verifies every image they name. `verify` takes files,
 directories, and globs, and `--require-content` decodes PNG and JPEG and fails
-an image whose every pixel is the same color. `runCli` from `metaplate/cli`
-runs any command from a script without a shell.
+an image whose every pixel is the same color. `--baseline DIR` compares each
+card with a saved copy and fails one that changed, with a side-by-side diff
+image, so a Satori or font upgrade cannot change cards unnoticed. `runCli`
+from `metaplate/cli` runs any command from a script without a shell.
 [Verification guide](docs/verification.md) and
 [page audit guide](docs/verify-page.md)
 
