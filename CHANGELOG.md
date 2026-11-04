@@ -5,6 +5,13 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ## [Unreleased]
 
+### Changed
+
+- The repository moved to [freeknet/metaplate](https://github.com/freeknet/metaplate).
+  The package metadata, documentation links, security reporting links, and the
+  edge runtime error message now point there; old `lnorton89/metaplate` links
+  redirect.
+
 ## [0.8.1] - 2026-11-03
 
 ### Added

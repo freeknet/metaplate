@@ -1,7 +1,7 @@
 # Deno Deploy certification fixture
 
 The app deployed for the dated Deno Deploy evidence in
-[`.planning/hosted-evidence/deno-deploy-2026-11-01.json`](https://github.com/lnorton89/metaplate/blob/main/.planning/hosted-evidence/deno-deploy-2026-11-01.json),
+[`.planning/hosted-evidence/deno-deploy-2026-11-01.json`](https://github.com/freeknet/metaplate/blob/main/.planning/hosted-evidence/deno-deploy-2026-11-01.json),
 which `deployment-evidence.json` references from the `deno-deploy-edge` and
 `deno-deploy-node` routes. One Deno Deploy app serves both entry points:
 

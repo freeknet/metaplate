@@ -94,7 +94,7 @@ const posts = { plate: og, pages } satisfies RenderJob<Copy>;
 export default [posts] satisfies RenderModule;
 ```
 
-[`examples/api/render-module.ts`](https://github.com/lnorton89/metaplate/blob/main/examples/api/render-module.ts) type-checks a
+[`examples/api/render-module.ts`](https://github.com/freeknet/metaplate/blob/main/examples/api/render-module.ts) type-checks a
 complete module against the sources.
 
 ## Where files go
@@ -259,7 +259,7 @@ unwritten.
 ### Manifest
 
 One entry of the manifest written for
-[`examples/api/render-module.ts`](https://github.com/lnorton89/metaplate/blob/main/examples/api/render-module.ts):
+[`examples/api/render-module.ts`](https://github.com/freeknet/metaplate/blob/main/examples/api/render-module.ts):
 
 ```json
 {
@@ -421,7 +421,7 @@ must use only erasable syntax:
 - **No `.tsx` or `.jsx`.** Node does not transform JSX in any version.
 
 So a TypeScript module authors its plate with plain `{ type, props }`
-objects, as [`examples/api/render-module.ts`](https://github.com/lnorton89/metaplate/blob/main/examples/api/render-module.ts) does
+objects, as [`examples/api/render-module.ts`](https://github.com/freeknet/metaplate/blob/main/examples/api/render-module.ts) does
 (see also
 [Authoring without a JSX toolchain](rendering.md#authoring-without-a-jsx-toolchain)).
 For a plate written in JSX, either compile the module first (with `tsc`, your

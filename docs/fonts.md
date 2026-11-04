@@ -176,7 +176,7 @@ with the first font that has it, so Latin text stays in Inter and only the
 characters Inter lacks fall back. The option works the same way in
 `createSvgOg` (`metaplate/render`), `createNodeOg` (`metaplate/node`), and
 `createEdgeOg` (`metaplate/edge`).
-[`examples/api/language-fonts.ts`](https://github.com/lnorton89/metaplate/blob/main/examples/api/language-fonts.ts) is a
+[`examples/api/language-fonts.ts`](https://github.com/freeknet/metaplate/blob/main/examples/api/language-fonts.ts) is a
 type-checked version of the Node and edge setups. `metaplate/next` renders
 through `ImageResponse`, which does not take `loadAdditionalAsset`, so the
 option does not apply there; `ImageResponse` loads Google Fonts on its own.

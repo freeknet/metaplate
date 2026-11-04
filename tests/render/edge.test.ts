@@ -528,7 +528,7 @@ async function renderFailure(error: unknown): Promise<unknown> {
 }
 
 const HARFBUZZ_RUNTIME =
-  /Satori's bundled HarfBuzz text shaper compiles WebAssembly at runtime and expects self\.location, which this runtime forbids \(Cloudflare Workers and other V8 isolates that disallow Wasm code generation\)\. metaplate\/edge runs on edge runtimes that allow it, such as Deno and Netlify Edge Functions\. See https:\/\/github\.com\/lnorton89\/metaplate\/blob\/main\/docs\/edge\.md#edge-runtimes-with-metaplateedge/;
+  /Satori's bundled HarfBuzz text shaper compiles WebAssembly at runtime and expects self\.location, which this runtime forbids \(Cloudflare Workers and other V8 isolates that disallow Wasm code generation\)\. metaplate\/edge runs on edge runtimes that allow it, such as Deno and Netlify Edge Functions\. See https:\/\/github\.com\/freeknet\/metaplate\/blob\/main\/docs\/edge\.md#edge-runtimes-with-metaplateedge/;
 
 /** Asserts that a render failing with `original` rejects with the explanation. */
 async function expectExplained(original: Error): Promise<void> {
