@@ -3,7 +3,7 @@
  * (`main.ts`) and by `runCli` from `metaplate/cli`.
  */
 
-import { readFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, rmdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import {
@@ -18,9 +18,11 @@ import {
   VERIFY_PAGE_USAGE,
   VERIFY_URL_USAGE,
   VERIFY_USAGE,
+  type BaselineOptions,
   type VerifyTarget,
 } from "./args.js";
-import { expandVerifyOperand } from "./expand.js";
+import { expandVerifyOperand, verifyOperandBase } from "./expand.js";
+import { compareImages } from "../image/compare.js";
 import { runPreview } from "./preview.js";
 import { ReportedError, runRender } from "./render.js";
 import type { SocialTarget } from "../verify/compatibility-profiles.js";
@@ -58,6 +60,15 @@ Options:
   --alt TEXT       Metadata alt text for target checks
   --max-file-size N  Reject images larger than N bytes
   --require-content  Fail a PNG or JPEG whose every pixel is one color (verify and verify-url)
+
+verify baseline options:
+  --baseline DIR     Compare each PNG or JPEG with the file at the same relative path in DIR;
+                     fail a changed card, a card with no baseline, and a baseline with no card
+  --max-diff PCT     Pass a card when at most PCT% of its pixels changed (default 0)
+  --threshold N      Count a pixel as changed when a channel moves more than N of 255
+                     (default 0 for PNG, 16 when either side is JPEG)
+  --write-diff DIR   Write baseline | current | changes side by side as DIR/<path>.png
+  --update-baseline  Rewrite DIR from the current files instead of failing
 
 verify-url options:
   --max-bytes N      Abort a download larger than N bytes (default 16 MiB)
@@ -120,6 +131,8 @@ type Loaded = {
   details?: Record<string, unknown>;
   /** Suffix for the human success line. */
   note?: string;
+  /** Errors found after the image itself verified, such as a baseline difference. */
+  issues?: CliIssue[];
 };
 
 type Check = {
@@ -159,8 +172,17 @@ function socialReports(check: Check, loaded: Loaded, options: SocialOptions) {
   return { globalIssues: reportIssues.filter((issue) => issue.target === undefined), targets };
 }
 
+/** Findings that belong to no one check, such as baseline files with no current file. */
+type Afterword = { failures: string[]; lines: string[]; json: Record<string, unknown> };
+
 /** Runs every check, reports each outcome, and sets the exit code once. */
-async function runChecks(checks: readonly Check[], options: SocialOptions, listKey: string, noun: string) {
+async function runChecks(
+  checks: readonly Check[],
+  options: SocialOptions,
+  listKey: string,
+  noun: string,
+  after?: () => Promise<Afterword>,
+) {
   const failures: string[] = [];
   const failed = new Set<string>();
   const reports: JsonReport[] = [];
@@ -168,7 +190,9 @@ async function runChecks(checks: readonly Check[], options: SocialOptions, listK
   for (const check of checks) {
     try {
       const loaded = await check.load();
-      const { globalIssues, targets } = socialReports(check, loaded, options);
+      const social = socialReports(check, loaded, options);
+      const { targets } = social;
+      const globalIssues = [...social.globalIssues, ...(loaded.issues ?? [])];
       const valid = !hasError(globalIssues);
       const targetFailures = Object.entries(targets).filter(([, report]) => !report.compatible);
       if (!valid) {
@@ -210,14 +234,16 @@ async function runChecks(checks: readonly Check[], options: SocialOptions, listK
     }
   }
 
+  const afterword = after ? await after() : { failures: [], lines: [], json: {} };
   if (options.json) {
-    writeStdout(`${JSON.stringify({ schemaVersion: 1, [listKey]: reports }, null, 2)}\n`);
-  } else if (failures.length > 0) {
-    for (const failure of failures) writeStderr(`${failure}\n`);
-    writeStderr(`${failed.size} of ${checks.length} ${noun} failed verification\n`);
+    writeStdout(`${JSON.stringify({ schemaVersion: 1, [listKey]: reports, ...afterword.json }, null, 2)}\n`);
+  } else {
+    for (const line of afterword.lines) writeStdout(`${line}\n`);
+    for (const failure of [...failures, ...afterword.failures]) writeStderr(`${failure}\n`);
+    if (failed.size > 0) writeStderr(`${failed.size} of ${checks.length} ${noun} failed verification\n`);
   }
 
-  if (failures.length > 0) markFailed();
+  if (failures.length > 0 || afterword.failures.length > 0) markFailed();
 }
 
 /**
@@ -241,17 +267,153 @@ function assertContent(bytes: Uint8Array, format: string): void {
   }
 }
 
+/** A file to verify, with its path relative to its operand's base for baseline matching. */
+type FileTarget = VerifyTarget & { relative: string };
+
+function isMissing(error: unknown): boolean {
+  return typeof error === "object" && error !== null && (error as { code?: unknown }).code === "ENOENT";
+}
+
+async function readOptional(file: string): Promise<Uint8Array | undefined> {
+  try {
+    return await readFile(file);
+  } catch (error) {
+    if (isMissing(error)) return undefined;
+    throw error;
+  }
+}
+
+async function writeCreating(file: string, bytes: Uint8Array): Promise<void> {
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, bytes);
+}
+
+const percent = (ratio: number) => `${Math.round(ratio * 10_000) / 100}%`;
+
+/**
+ * `--baseline`: compares one verified file with its baseline. A card with
+ * no baseline, or one that changed more than `--max-diff`, is an error unless
+ * `--update-baseline` rewrites the baseline from it.
+ */
+async function compareWithBaseline(bytes: Uint8Array, relative: string, options: BaselineOptions): Promise<Partial<Loaded>> {
+  const file = path.join(options.dir, relative);
+  const shown = formatVerifyPath(file);
+  const previous = await readOptional(file);
+  if (!previous) {
+    if (options.update) {
+      await writeCreating(file, bytes);
+      return { details: { baseline: { file: shown, status: "added" } }, note: " (added to the baseline)" };
+    }
+    return {
+      details: { baseline: { file: shown, status: "missing-baseline" } },
+      issues: [{ severity: "error", code: "baseline_missing", message: `has no baseline at ${shown}; --update-baseline adds it` }],
+    };
+  }
+
+  const comparison = compareImages(previous, bytes, {
+    ...(options.threshold !== undefined ? { threshold: options.threshold } : {}),
+    diffImage: options.writeDiff !== undefined,
+  });
+  const exceeded = comparison.changedRatio > options.maxDiff;
+  let diff: string | undefined;
+  if (comparison.diffImage && comparison.changedPixels > 0) {
+    const target = path.join(options.writeDiff!, relative.replace(/\.[^./\\]+$/, "") + ".png");
+    await writeCreating(target, comparison.diffImage);
+    diff = formatVerifyPath(target);
+  }
+  let status = comparison.changedPixels === 0 ? "unchanged" : exceeded ? "changed" : "within";
+  if (options.update && comparison.changedPixels > 0) {
+    await writeCreating(file, bytes);
+    status = "updated";
+  }
+  const { baseline, current, sameSize, threshold, changedPixels, changedRatio, meanDifference, maxDifference } = comparison;
+  const details = {
+    baseline: {
+      file: shown,
+      status,
+      sameSize,
+      threshold,
+      changedPixels,
+      changedRatio,
+      meanDifference,
+      maxDifference,
+      ...(diff ? { diff } : {}),
+    },
+  };
+  const changed = sameSize
+    ? `${percent(changedRatio)} of pixels changed by more than ${threshold}/255`
+    : `is ${current.width}x${current.height}, its baseline ${baseline.width}x${baseline.height}`;
+  const diffNote = diff ? `; diff at ${diff}` : "";
+  if (status === "updated") return { details, note: ` (baseline updated: ${changed})` };
+  if (status === "unchanged") return { details, note: " (matches the baseline)" };
+  if (status === "within") return { details, note: ` (${changed}, within --max-diff${diffNote})` };
+  return {
+    details,
+    issues: [{
+      severity: "error",
+      code: "baseline_changed",
+      message: `differs from ${shown}: ${changed} (--max-diff ${percent(options.maxDiff)})${diffNote}`,
+    }],
+  };
+}
+
+/** Baseline files no current file matched: errors, or removed by `--update-baseline`. */
+async function unmatchedBaselines(options: BaselineOptions, matched: ReadonlySet<string>): Promise<Afterword> {
+  let files: string[] = [];
+  try {
+    files = await expandVerifyOperand(options.dir, undefined);
+  } catch {
+    // No baseline directory, or one with no images: nothing is unmatched.
+  }
+  const unmatched = files.filter((file) => !matched.has(path.relative(options.dir, file).split(path.sep).join("/")));
+  const shown = unmatched.map((file) => formatVerifyPath(file));
+  if (options.update) {
+    const root = path.resolve(options.dir);
+    for (const file of unmatched) {
+      await rm(file);
+      // Remove the directories the file leaves empty, up to the baseline itself.
+      for (let directory = path.dirname(path.resolve(file)); directory.startsWith(root + path.sep);) {
+        if ((await readdir(directory)).length > 0) break;
+        await rmdir(directory);
+        directory = path.dirname(directory);
+      }
+    }
+    return {
+      failures: [],
+      lines: shown.map((file) => `✓ ${file} removed from the baseline: no current file matches it`),
+      json: { baseline: { removed: shown, unmatched: [] } },
+    };
+  }
+  return {
+    failures: shown.map((file) => `✗ ${file} has no current file; --update-baseline removes it`),
+    lines: [],
+    json: { baseline: { removed: [], unmatched: shown } },
+  };
+}
+
 async function verifyFiles(args: string[]) {
   const invocation = parseVerifyInvocation(args);
+  const { baseline } = invocation;
   // Directories and globs become files; a file named twice is checked once.
   const seen = new Set<string>();
-  const targets: VerifyTarget[] = [];
+  const targets: FileTarget[] = [];
+  const relatives = new Map<string, string>();
   for (const target of invocation.targets) {
+    const base = await verifyOperandBase(target.file);
     for (const file of await expandVerifyOperand(target.file, target.format)) {
       const key = path.resolve(file);
       if (seen.has(key)) continue;
       seen.add(key);
-      targets.push({ ...target, file });
+      const relative = path.relative(base, file).split(path.sep).join("/");
+      const other = relatives.get(relative);
+      if (baseline && other !== undefined) {
+        throw new Error(
+          `${formatVerifyPath(other)} and ${formatVerifyPath(file)} both match ${relative} in the baseline; ` +
+            "name their common directory instead",
+        );
+      }
+      relatives.set(relative, file);
+      targets.push({ ...target, file, relative });
     }
   }
   const checks = targets.map((target): Check => {
@@ -264,11 +426,18 @@ async function verifyFiles(args: string[]) {
         const bytes = await readFile(target.file);
         const dimensions = verifyImage(bytes, target.size, target.format);
         if (invocation.requireContent) assertContent(bytes, dimensions.format);
-        return { bytes, dimensions, ...(invocation.url !== undefined ? { metadataUrl: invocation.url } : {}) };
+        const compared = baseline ? await compareWithBaseline(bytes, target.relative, baseline) : {};
+        return {
+          bytes,
+          dimensions,
+          ...(invocation.url !== undefined ? { metadataUrl: invocation.url } : {}),
+          ...compared,
+        };
       },
     };
   });
-  return runChecks(checks, invocation, "files", "files");
+  const after = baseline ? () => unmatchedBaselines(baseline, new Set(relatives.keys())) : undefined;
+  return runChecks(checks, invocation, "files", "files", after);
 }
 
 function verifyUrls(args: string[]) {
