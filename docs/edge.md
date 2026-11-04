@@ -32,7 +32,7 @@ naming this limitation. [Vercel's Edge runtime](https://vercel.com/docs/function
 also forbids compiling Wasm from bytes and is expected to fail the same way
 (not observed: its deployment was refused for size first). On those platforms,
 use `metaplate/node` on the provider's Node runtime or generate images at
-build time. The [Workers reproduction](https://github.com/lnorton89/metaplate/tree/main/examples/hosted/cloudflare)
+build time. The [Workers reproduction](https://github.com/freeknet/metaplate/tree/main/examples/hosted/cloudflare)
 runs locally with `wrangler dev`.
 
 Every edge plate needs two WebAssembly modules: Resvg's,
@@ -149,8 +149,8 @@ The boundary is deliberately narrow:
   `metaplate/node`, and the package gate renders from the packed tarball. A
   Netlify Edge Functions deployment of 2026-11-01 is hosted-certified, with the
   Wasm modules and font fetched from the site's own static files
-  ([fixture](https://github.com/lnorton89/metaplate/tree/main/examples/hosted/netlify/edge)).
+  ([fixture](https://github.com/freeknet/metaplate/tree/main/examples/hosted/netlify/edge)).
   A Deno Deploy production build of 2026-11-01 is hosted-certified too, with
   the Wasm modules read from its `node_modules`
-  ([fixture](https://github.com/lnorton89/metaplate/tree/main/examples/hosted/deno-deploy)).
+  ([fixture](https://github.com/freeknet/metaplate/tree/main/examples/hosted/deno-deploy)).
   Cloudflare Workers fail every render (above).

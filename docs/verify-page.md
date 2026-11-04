@@ -407,7 +407,7 @@ it takes HTML you already have and returns the `metadata` fields plus
 `documentUrl`, `baseUrl`, and markup `issues`, without any network access.
 Values are returned as written; resolve them against `baseUrl`.
 
-[`examples/api/page-verification.ts`](https://github.com/lnorton89/metaplate/blob/main/examples/api/page-verification.ts) is a
+[`examples/api/page-verification.ts`](https://github.com/freeknet/metaplate/blob/main/examples/api/page-verification.ts) is a
 post-deploy check built on `verifyRemotePage`.
 
 ## Limitations

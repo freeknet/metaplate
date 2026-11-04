@@ -166,10 +166,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/lnorton89/metaplate.git"
+    "url": "git+https://github.com/freeknet/metaplate.git"
   },
   "bugs": {
-    "url": "https://github.com/lnorton89/metaplate/issues"
+    "url": "https://github.com/freeknet/metaplate/issues"
   },
-  "homepage": "https://github.com/lnorton89/metaplate#readme"
+  "homepage": "https://github.com/freeknet/metaplate#readme"
 }
