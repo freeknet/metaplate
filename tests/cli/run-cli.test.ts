@@ -3,21 +3,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { describe, expect, it } from "vitest";
-import { runCli } from "../../src/cli.js";
+import { captureCli } from "../helpers/capture-cli.js";
 import { completeJpeg, completePng } from "../helpers/image-fixtures.js";
 
 type Report = { files: { file: string; valid: boolean }[] };
 
-/** Runs a command, collecting its output. */
-async function cli(args: string[]) {
-  let stdout = "";
-  let stderr = "";
-  const code = await runCli(args, {
-    stdout: { write: (text: string) => { stdout += text; } },
-    stderr: { write: (text: string) => { stderr += text; } },
-  });
-  return { code, stdout, stderr };
-}
+const cli = captureCli;
 
 /** A per-page card tree like a static export's `out/og/<page>/og-image.*`. */
 async function cards() {

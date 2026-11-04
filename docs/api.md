@@ -15,6 +15,7 @@ and small helpers that no guide covers are described below the table.
 | | `socialImageCompatibility`, `verifySocialImage` | [Compatibility](compatibility.md), [Verification](verification.md) |
 | `metaplate/render` | `createSvgOg`, `RenderGuardError`, `SVG_CONTENT_TYPE` | [Rendering](rendering.md) |
 | `metaplate/node` | `createNodeOg`, `RenderGuardError`, `memoryRenderCache`, `MEMORY_RENDER_CACHE_DEFAULTS` | [Rendering](rendering.md) |
+| | `compareImages`, `decodeImagePixels`, `JPEG_COMPARE_THRESHOLD` | [Compare against a baseline](verification.md#compare-against-a-baseline) |
 | | `fetchRemoteImage`, `verifyRemoteImage`, `RemoteImageError`, `REMOTE_FETCH_DEFAULTS`, `REMOTE_USER_AGENT` | [Verification](verification.md#verify-a-deployed-url) |
 | | `verifyRemotePage`, `extractPageSocialMetadata`, `REMOTE_PAGE_DEFAULTS`, `CRAWLER_HTML_LIMITS`, `SOCIAL_CRAWLERS`, `findSocialCrawler`, `parseRobotsTxt`, `evaluateRobots`, `isRobotsProductToken`, `REMOTE_ROBOTS_DEFAULTS` | [Page audits](verify-page.md) |
 | `metaplate/edge` | `createEdgeOg`, `initEdgeRenderer`, `RenderGuardError`, `memoryRenderCache`, `MEMORY_RENDER_CACHE_DEFAULTS` | [Edge runtimes](edge.md) |
