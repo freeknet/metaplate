@@ -2,19 +2,28 @@
  * Not an entry point: the JPEG decoder behind `metaplate verify
  * --require-content`, beside the PNG one in `png-content.ts`.
  *
- * It answers one question, whether every pixel is the same color, without
- * an inverse DCT: it entropy-decodes the DCT coefficients of baseline,
- * extended, and progressive Huffman JPEGs (ITU T.81 Annex F and G) and
- * reports a single color only when every 8x8 block that covers the image, in
- * every component, holds the same DC value and no AC energy. Such blocks
- * decode to one flat sample, chroma upsampling keeps it flat, and color
- * conversion maps it to one color, so a card with content is never reported
- * blank. https://www.w3.org/Graphics/JPEG/itu-t81.pdf
+ * It entropy-decodes the DCT coefficients of baseline, extended, and
+ * progressive Huffman JPEGs (ITU T.81 Annex F and G).
+ * https://www.w3.org/Graphics/JPEG/itu-t81.pdf
+ *
+ * `jpegUniformColor` needs no inverse DCT: it reports a single color only
+ * when every 8x8 block that covers the image, in every component, holds the
+ * same DC value and no AC energy. Such blocks decode to one flat sample,
+ * chroma upsampling keeps it flat, and color conversion maps it to one
+ * color, so a card with content is never reported blank.
+ *
+ * `decodeJpegPixels` runs the full decode for `compareImages`: dequantization,
+ * a floating-point inverse DCT, bilinear chroma upsampling between sample
+ * centers, and color conversion. Its output can differ from libjpeg's by a
+ * few levels where chroma changes sharply; both sides of a comparison go
+ * through the same decoder, so that never reads as a change.
  *
  * Lossless, hierarchical, and arithmetic-coded JPEGs are refused, as is any
  * file it cannot decode, so a damaged file is never reported as having
  * content.
  */
+
+import { MAX_DECODED_PIXELS, type DecodedPixels } from "./png-content.js";
 
 type Color = [number, number, number, number];
 
@@ -366,32 +375,38 @@ function ycc(y: number, cb: number, cr: number): [number, number, number] {
   ];
 }
 
-/** Converts flat component samples to RGBA, following JFIF and Adobe's APP14 transform flag. */
-function toColor(samples: number[], frame: Frame, adobeTransform: number | undefined): Color {
-  if (samples.length === 1) return [samples[0]!, samples[0]!, samples[0]!, 255];
-  if (samples.length === 3) {
+/**
+ * Converts component samples to RGBA, following JFIF and Adobe's APP14
+ * transform flag. The choice is made once per frame, not per pixel.
+ */
+function colorConverter(frame: Frame, adobeTransform: number | undefined): (samples: readonly number[]) => Color {
+  const count = frame.components.length;
+  if (count === 1) return ([gray]) => [clamp(gray!), clamp(gray!), clamp(gray!), 255];
+  if (count === 3) {
     const rgbIds = frame.components.map(({ id }) => id).join() === "82,71,66";
-    const transform = adobeTransform ?? (rgbIds ? 0 : 1);
-    const [a, b, c] = samples as [number, number, number];
-    return [...(transform === 0 ? [a, b, c] : ycc(a, b, c)), 255] as Color;
+    if ((adobeTransform ?? (rgbIds ? 0 : 1)) === 0) return ([r, g, b]) => [clamp(r!), clamp(g!), clamp(b!), 255];
+    return ([y, cb, cr]) => [...ycc(y!, cb!, cr!), 255];
   }
   // Four components: CMYK, or YCCK with transform 2; Adobe stores them inverted.
-  const [a, b, c, k] = samples as [number, number, number, number];
-  const cmy = adobeTransform === 2 ? ycc(a, b, c).map((value) => 255 - value) : [a, b, c];
   const inverted = adobeTransform !== undefined;
   const light = (value: number) => (inverted ? value : 255 - value);
-  return [...cmy.map((value) => clamp((light(value) * light(k)) / 255)), 255] as Color;
+  return ([a, b, c, k]) => {
+    const cmy = adobeTransform === 2 ? ycc(a!, b!, c!).map((value) => 255 - value) : [a!, b!, c!];
+    return [...cmy.map((value) => clamp((light(value) * light(k!)) / 255)), 255] as Color;
+  };
 }
 
-/**
- * The single RGBA color (8 bits per channel) of every pixel of a JPEG, or
- * `undefined` when any 8x8 block has detail or two blocks differ. The color
- * is the flat sample's value before the decoder's rounding, so it may differ
- * from a decoder's output by one. Throws for bytes it cannot decode.
- */
-export function jpegUniformColor(bytes: Uint8Array): Color | undefined {
+type Parsed = {
+  frame: Frame;
+  /** Each table's 64 steps, in zigzag order like the coefficients. */
+  quantization: Map<number, Int32Array>;
+  adobeTransform: number | undefined;
+};
+
+/** Reads every marker segment and entropy-decodes every scan into the frame's coefficients. */
+function parseJpeg(bytes: Uint8Array): Parsed {
   if (bytes[0] !== 0xff || bytes[1] !== 0xd8) fail("not a JPEG");
-  const quantization = new Map<number, number>();
+  const quantization = new Map<number, Int32Array>();
   const dcTables = new Map<number, Huffman>();
   const acTables = new Map<number, Huffman>();
   let frame: Frame | undefined;
@@ -423,7 +438,11 @@ export function jpegUniformColor(bytes: Uint8Array): Color | undefined {
         const id = segment[at]! & 15;
         const size = precision === 0 ? 64 : 128;
         if (at + 1 + size > segment.length || id > 3) fail("invalid DQT segment");
-        quantization.set(id, precision === 0 ? segment[at + 1]! : readUint16(segment, at + 1));
+        const steps = new Int32Array(64);
+        for (let k = 0; k < 64; k += 1) {
+          steps[k] = precision === 0 ? segment[at + 1 + k]! : readUint16(segment, at + 1 + k * 2);
+        }
+        quantization.set(id, steps);
         at += 1 + size;
       }
     } else if (marker === 0xc4) {
@@ -477,16 +496,130 @@ export function jpegUniformColor(bytes: Uint8Array): Color | undefined {
 
   if (!frame) fail("no frame header");
   if (frame.components.some(({ scanned }) => !scanned)) fail("a component has no scan");
+  for (const component of frame.components) {
+    if (!quantization.has(component.quantTable)) fail(`quantization table ${component.quantTable} is not defined`);
+  }
+  return { frame, quantization, adobeTransform };
+}
+
+/**
+ * The single RGBA color (8 bits per channel) of every pixel of a JPEG, or
+ * `undefined` when any 8x8 block has detail or two blocks differ. The color
+ * is the flat sample's value before the decoder's rounding, so it may differ
+ * from a decoder's output by one. Throws for bytes it cannot decode.
+ */
+export function jpegUniformColor(bytes: Uint8Array): Color | undefined {
+  const { frame, quantization, adobeTransform } = parseJpeg(bytes);
   const samples: number[] = [];
   for (const component of frame.components) {
     const dc = flatDc(component);
     if (dc === undefined) return undefined;
-    const step = quantization.get(component.quantTable);
-    if (step === undefined) fail(`quantization table ${component.quantTable} is not defined`);
+    const step = quantization.get(component.quantTable)![0]!;
     // A block with only a DC coefficient decodes to DC * Q / 8 around the level shift.
     const center = frame.precision === 12 ? 2048 : 128;
     const value = (dc * step) / 8 + center;
     samples.push(clamp(frame.precision === 12 ? value / 16 : value));
   }
-  return toColor(samples, frame, adobeTransform);
+  return colorConverter(frame, adobeTransform)(samples);
+}
+
+/** Natural (row-major) position of each zigzag-ordered coefficient. */
+const ZIGZAG = Uint8Array.from([
+  0, 1, 8, 16, 9, 2, 3, 10, 17, 24, 32, 25, 18, 11, 4, 5, 12, 19, 26, 33, 40, 48, 41, 34, 27, 20, 13, 6, 7, 14, 21,
+  28, 35, 42, 49, 56, 57, 50, 43, 36, 29, 22, 15, 23, 30, 37, 44, 51, 58, 59, 52, 45, 38, 31, 39, 46, 53, 60, 61, 54,
+  47, 55, 62, 63,
+]);
+
+/** `COSINES[x * 8 + u]` is C(u) / 2 * cos((2x + 1) u pi / 16), the A.3.3 IDCT basis. */
+const COSINES = Float64Array.from({ length: 64 }, (_, index) => {
+  const x = index >> 3;
+  const u = index & 7;
+  return ((u === 0 ? Math.SQRT1_2 : 1) / 2) * Math.cos(((2 * x + 1) * u * Math.PI) / 16);
+});
+
+/** Dequantizes and inverse-transforms every block of a component into 8-bit samples. */
+function componentSamples(component: Component, steps: Int32Array, precision: number): Uint8Array {
+  const width = component.blocksPerLine * 8;
+  const samples = new Uint8Array(width * component.blocksPerColumn * 8);
+  const block = new Float64Array(64);
+  const rows = new Float64Array(64);
+  const center = precision === 12 ? 2048 : 128;
+  const scale = precision === 12 ? 1 / 16 : 1;
+  for (let blockRow = 0; blockRow < component.blocksPerColumn; blockRow += 1) {
+    for (let blockColumn = 0; blockColumn < component.blocksPerLine; blockColumn += 1) {
+      const base = (blockRow * component.blocksPerLine + blockColumn) * 64;
+      for (let k = 0; k < 64; k += 1) block[ZIGZAG[k]!] = component.coefficients[base + k]! * steps[k]!;
+      // Rows first: rows[v * 8 + x] is the sum over u of C(x, u) F(v, u).
+      for (let v = 0; v < 8; v += 1) {
+        for (let x = 0; x < 8; x += 1) {
+          let sum = 0;
+          for (let u = 0; u < 8; u += 1) sum += COSINES[x * 8 + u]! * block[v * 8 + u]!;
+          rows[v * 8 + x] = sum;
+        }
+      }
+      for (let y = 0; y < 8; y += 1) {
+        const line = (blockRow * 8 + y) * width + blockColumn * 8;
+        for (let x = 0; x < 8; x += 1) {
+          let sum = 0;
+          for (let v = 0; v < 8; v += 1) sum += COSINES[y * 8 + v]! * rows[v * 8 + x]!;
+          samples[line + x] = clamp((sum + center) * scale);
+        }
+      }
+    }
+  }
+  return samples;
+}
+
+/**
+ * Every pixel of a JPEG as 8-bit RGBA (alpha always 255). Throws for bytes
+ * it cannot decode, and for an image larger than `maxPixels`.
+ */
+export function decodeJpegPixels(bytes: Uint8Array, maxPixels = MAX_DECODED_PIXELS): DecodedPixels {
+  const { frame, quantization, adobeTransform } = parseJpeg(bytes);
+  const { width, height, maxH, maxV } = frame;
+  if (width * height > maxPixels) fail(`${width}x${height} is more than ${maxPixels} pixels`);
+  const planes = frame.components.map((component) => {
+    const scaleX = component.h / maxH;
+    const scaleY = component.v / maxV;
+    return {
+      samples: componentSamples(component, quantization.get(component.quantTable)!, frame.precision),
+      lineWidth: component.blocksPerLine * 8,
+      // The last sample that covers the image, so edges repeat it instead of padding.
+      lastX: Math.ceil(width * scaleX) - 1,
+      lastY: Math.ceil(height * scaleY) - 1,
+      scaleX,
+      scaleY,
+      full: scaleX === 1 && scaleY === 1,
+    };
+  });
+  const convert = colorConverter(frame, adobeTransform);
+  const data = new Uint8Array(width * height * 4);
+  const values = new Array<number>(planes.length).fill(0);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      for (let index = 0; index < planes.length; index += 1) {
+        const plane = planes[index]!;
+        if (plane.full) {
+          values[index] = plane.samples[y * plane.lineWidth + x]!;
+          continue;
+        }
+        // Subsampled planes are interpolated between sample centers, as
+        // libjpeg's default "fancy" upsampling does for 2:1 factors.
+        const sampleX = Math.min(plane.lastX, Math.max(0, (x + 0.5) * plane.scaleX - 0.5));
+        const sampleY = Math.min(plane.lastY, Math.max(0, (y + 0.5) * plane.scaleY - 0.5));
+        const left = Math.floor(sampleX);
+        const top = Math.floor(sampleY);
+        const right = Math.min(plane.lastX, left + 1);
+        const bottom = Math.min(plane.lastY, top + 1);
+        const fx = sampleX - left;
+        const fy = sampleY - top;
+        const at = (column: number, row: number) => plane.samples[row * plane.lineWidth + column]!;
+        const upper = at(left, top) * (1 - fx) + at(right, top) * fx;
+        const lower = at(left, bottom) * (1 - fx) + at(right, bottom) * fx;
+        values[index] = upper * (1 - fy) + lower * fy;
+      }
+      data.set(convert(values), (y * width + x) * 4);
+    }
+  }
+  return { width, height, data };
 }

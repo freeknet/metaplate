@@ -6,7 +6,7 @@ import type { ImageFormat } from "../image.js";
 import { isRobotsProductToken } from "../verify/robots.js";
 
 export const VERIFY_USAGE =
-  "Usage: metaplate verify [--json] [--require-content] [--target TARGET] [--url URL] [--alt TEXT] [--max-file-size BYTES] [--format svg|png|jpeg|webp|gif] --size WIDTHxHEIGHT <file|dir|glob> [...] [--size WIDTHxHEIGHT <file|dir|glob> [...]]";
+  "Usage: metaplate verify [--json] [--require-content] [--baseline DIR [--max-diff PERCENT] [--threshold N] [--write-diff DIR] [--update-baseline]] [--target TARGET] [--url URL] [--alt TEXT] [--max-file-size BYTES] [--format svg|png|jpeg|webp|gif] --size WIDTHxHEIGHT <file|dir|glob> [...] [--size WIDTHxHEIGHT <file|dir|glob> [...]]";
 
 const FORMATS = new Set<ImageFormat>(["svg", "png", "jpeg", "webp", "gif"]);
 const TARGETS = new Set<SocialTarget>(SOCIAL_TARGETS);
@@ -26,6 +26,21 @@ export type VerifyInvocation = {
   maxFileSize?: number;
   /** Fail a PNG or JPEG whose every pixel is one color (`--require-content`). */
   requireContent?: boolean;
+  /** Compare every file with its counterpart under a baseline directory (`--baseline`). */
+  baseline?: BaselineOptions;
+};
+
+export type BaselineOptions = {
+  /** The baseline directory; files match by their path relative to their operand. */
+  dir: string;
+  /** The largest share of changed pixels, from 0 to 1, a card may have and pass (`--max-diff`, default 0). */
+  maxDiff: number;
+  /** Per-channel tolerance from 0 to 255 (`--threshold`); `compareImages` picks one by format when omitted. */
+  threshold?: number;
+  /** Where to write a side-by-side PNG for each changed card (`--write-diff`). */
+  writeDiff?: string;
+  /** Rewrite the baseline from the current files instead of failing (`--update-baseline`). */
+  update: boolean;
 };
 
 /** Formats a stable, concise path for CLI logs, including duplicate basenames. */
@@ -231,13 +246,66 @@ function entryTarget<Key extends string>(key: Key, { value, size, format }: Grou
   };
 }
 
+/** Parses a share of pixels written as a percentage, such as `0.5%` or `0.5`. */
+function parsePercent(value: string | undefined, usage: string): number {
+  const match = /^(\d+(?:\.\d+)?)%?$/.exec(value ?? "");
+  const percent = match ? Number(match[1]) : Number.NaN;
+  if (!(percent >= 0 && percent <= 100)) throw new Error(`Invalid max diff. ${usage}`);
+  return percent / 100;
+}
+
+/** The `--baseline` flags. The option is present only when `--baseline` was given. */
+function baselineFlags(usage: string) {
+  let dir: string | undefined;
+  let maxDiff: number | undefined;
+  let threshold: number | undefined;
+  let writeDiff: string | undefined;
+  let update = false;
+  const path = (label: string) => (value: string | undefined) => {
+    if (!value || value.startsWith("--")) throw new Error(`Invalid ${label} directory. ${usage}`);
+    return value;
+  };
+  return {
+    switches: { "--update-baseline": () => { update = true; } },
+    values: {
+      "--baseline": (value: string | undefined) => { dir = path("baseline")(value); },
+      "--max-diff": (value: string | undefined) => { maxDiff = parsePercent(value, usage); },
+      "--threshold": (value: string | undefined) => { threshold = parseInteger(value, "threshold", usage, 0, 255); },
+      "--write-diff": (value: string | undefined) => { writeDiff = path("diff")(value); },
+    },
+    option: (): { baseline?: BaselineOptions } => {
+      if (dir === undefined) {
+        const given = [
+          maxDiff !== undefined && "--max-diff",
+          threshold !== undefined && "--threshold",
+          writeDiff !== undefined && "--write-diff",
+          update && "--update-baseline",
+        ].filter(Boolean);
+        if (given.length > 0) throw new Error(`${given.join(", ")} require${given.length === 1 ? "s" : ""} --baseline. ${usage}`);
+        return {};
+      }
+      return {
+        baseline: {
+          dir,
+          maxDiff: maxDiff ?? 0,
+          ...(threshold !== undefined ? { threshold } : {}),
+          ...(writeDiff !== undefined ? { writeDiff } : {}),
+          update,
+        },
+      };
+    },
+  };
+}
+
 /** Parses one or more size-delimited groups of image paths and social checks. */
 export function parseVerifyInvocation(args: string[]): VerifyInvocation {
   let url: string | undefined;
   const content = requireContentFlag();
+  const baseline = baselineFlags(VERIFY_USAGE);
   const { entries, ...parsed } = parseGroups(args, "verify", VERIFY_USAGE, {
-    switches: content.switches,
+    switches: { ...content.switches, ...baseline.switches },
     values: {
+      ...baseline.values,
       "--url": (value) => {
         if (!value) throw new Error(`Invalid URL. ${VERIFY_USAGE}`);
         url = value;
@@ -255,6 +323,7 @@ export function parseVerifyInvocation(args: string[]): VerifyInvocation {
     ...parsed,
     ...(url ? { url } : {}),
     ...content.option(),
+    ...baseline.option(),
   };
 }
 
