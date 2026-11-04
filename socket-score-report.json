@@ -1,20 +1,51 @@
 {
   "schemaVersion": 2,
   "package": "metaplate",
-  "version": "0.7.0",
-  "source": "https://socket.dev/npm/package/metaplate@0.7.0",
-  "normalizedAt": "2026-11-01T02:11:14.434Z",
+  "version": "0.8.0",
+  "source": "https://socket.dev/npm/package/metaplate@0.8.0",
+  "normalizedAt": "2026-11-03T02:59:24.638Z",
   "captureKind": "socket-cli-import",
   "shallow": {
     "score": {
-      "overall": 80,
-      "supplyChain": 80,
-      "maintenance": 93,
+      "overall": 78,
+      "supplyChain": 78,
+      "maintenance": 86,
       "quality": 99,
       "vulnerability": 100,
       "license": 100
     },
-    "alerts": []
+    "alerts": [
+      {
+        "category": "supplyChainRisk",
+        "example": "npm/metaplate@0.8.0",
+        "name": "recentlyPublished",
+        "severity": "medium",
+        "package": "metaplate",
+        "version": "0.8.0",
+        "dependencyEvidence": {
+          "source": "package-lock.json",
+          "paths": [],
+          "reachability": "unknown",
+          "unresolved": true,
+          "reason": "metaplate@0.8.0 not found in the current dependency inventory"
+        }
+      },
+      {
+        "category": "supplyChainRisk",
+        "example": "npm/metaplate@0.8.0",
+        "name": "urlStrings",
+        "severity": "low",
+        "package": "metaplate",
+        "version": "0.8.0",
+        "dependencyEvidence": {
+          "source": "package-lock.json",
+          "paths": [],
+          "reachability": "unknown",
+          "unresolved": true,
+          "reason": "metaplate@0.8.0 not found in the current dependency inventory"
+        }
+      }
+    ]
   },
   "deep": {
     "score": {
@@ -25,7 +56,7 @@
       "vulnerability": 98,
       "license": 70
     },
-    "dependencyCount": 90,
+    "dependencyCount": 89,
     "capabilities": [
       "env",
       "eval",
@@ -40,7 +71,7 @@
       "maintenance": "npm/string.prototype.codepointat@0.2.1",
       "overall": "npm/@resvg/resvg-js-android-arm-eabi@2.6.2",
       "quality": "npm/@resvg/resvg-js-android-arm-eabi@2.6.2",
-      "supplyChain": "npm/next@16.4.3",
+      "supplyChain": "npm/next@16.4.4",
       "vulnerability": "npm/fflate@0.7.3"
     },
     "alerts": [
@@ -145,34 +176,34 @@
       },
       {
         "category": "supplyChainRisk",
-        "example": "npm/yoga-layout@3.2.1",
+        "example": "npm/@resvg/resvg-wasm@2.6.2",
         "name": "networkAccess",
         "severity": "medium",
-        "package": "yoga-layout",
-        "version": "3.2.1",
+        "package": "@resvg/resvg-wasm",
+        "version": "2.6.2",
+        "dependencyEvidence": {
+          "source": "package-lock.json",
+          "paths": [
+            "metaplate > @resvg/resvg-wasm"
+          ],
+          "reachability": "runtime-peer-optional"
+        },
+        "dependencyPath": "metaplate > @resvg/resvg-wasm"
+      },
+      {
+        "category": "supplyChainRisk",
+        "example": "npm/caniuse-lite@1.0.30001820",
+        "name": "recentlyPublished",
+        "severity": "medium",
+        "package": "caniuse-lite",
+        "version": "1.0.30001820",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [],
           "reachability": "unknown",
           "unresolved": true,
-          "reason": "yoga-layout@3.2.1 not found in the current dependency inventory"
+          "reason": "caniuse-lite@1.0.30001820 not found in the current dependency inventory"
         }
-      },
-      {
-        "category": "supplyChainRisk",
-        "example": "npm/@next/env@16.4.3",
-        "name": "recentlyPublished",
-        "severity": "medium",
-        "package": "@next/env",
-        "version": "16.4.3",
-        "dependencyEvidence": {
-          "source": "package-lock.json",
-          "paths": [
-            "metaplate > next > @next/env"
-          ],
-          "reachability": "runtime-peer-optional"
-        },
-        "dependencyPath": "metaplate > next > @next/env"
       },
       {
         "category": "supplyChainRisk",
@@ -210,30 +241,24 @@
       },
       {
         "category": "supplyChainRisk",
-        "example": "npm/@emnapi/runtime@1.11.3",
+        "example": "npm/@img/sharp-wasm32@0.35.5",
         "name": "usesEval",
         "severity": "medium",
-        "package": "@emnapi/runtime",
-        "version": "1.11.3",
+        "package": "@img/sharp-wasm32",
+        "version": "0.35.5",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [
-            "metaplate > @astrojs/node > astro > @astrojs/compiler-rs > @astrojs/compiler-binding > @astrojs/compiler-binding-wasm32-wasi > @emnapi/runtime",
-            "metaplate > @astrojs/node > astro > @astrojs/compiler-rs > @astrojs/compiler-binding > @astrojs/compiler-binding-wasm32-wasi > @napi-rs/wasm-runtime > @emnapi/runtime",
-            "metaplate > @astrojs/node > astro > @astrojs/markdown-satteri > satteri > @bruits/satteri-wasm32-wasi > @napi-rs/wasm-runtime > @emnapi/runtime",
-            "metaplate > @astrojs/node > astro > sharp > @img/sharp-freebsd-wasm32 > @img/sharp-wasm32 > @emnapi/runtime",
-            "metaplate > @astrojs/node > astro > sharp > @img/sharp-webcontainers-wasm32 > @img/sharp-wasm32 > @emnapi/runtime",
-            "metaplate > astro > @astrojs/compiler-rs > @astrojs/compiler-binding > @astrojs/compiler-binding-wasm32-wasi > @emnapi/runtime",
-            "metaplate > astro > @astrojs/compiler-rs > @astrojs/compiler-binding > @astrojs/compiler-binding-wasm32-wasi > @napi-rs/wasm-runtime > @emnapi/runtime",
-            "metaplate > astro > @astrojs/markdown-satteri > satteri > @bruits/satteri-wasm32-wasi > @napi-rs/wasm-runtime > @emnapi/runtime",
-            "metaplate > astro > sharp > @img/sharp-freebsd-wasm32 > @img/sharp-wasm32 > @emnapi/runtime",
-            "metaplate > astro > sharp > @img/sharp-webcontainers-wasm32 > @img/sharp-wasm32 > @emnapi/runtime",
-            "metaplate > next > sharp > @img/sharp-freebsd-wasm32 > @img/sharp-wasm32 > @emnapi/runtime",
-            "metaplate > next > sharp > @img/sharp-webcontainers-wasm32 > @img/sharp-wasm32 > @emnapi/runtime"
+            "metaplate > @astrojs/node > astro > sharp > @img/sharp-freebsd-wasm32 > @img/sharp-wasm32",
+            "metaplate > @astrojs/node > astro > sharp > @img/sharp-webcontainers-wasm32 > @img/sharp-wasm32",
+            "metaplate > astro > sharp > @img/sharp-freebsd-wasm32 > @img/sharp-wasm32",
+            "metaplate > astro > sharp > @img/sharp-webcontainers-wasm32 > @img/sharp-wasm32",
+            "metaplate > next > sharp > @img/sharp-freebsd-wasm32 > @img/sharp-wasm32",
+            "metaplate > next > sharp > @img/sharp-webcontainers-wasm32 > @img/sharp-wasm32"
           ],
           "reachability": "runtime-peer-optional"
         },
-        "dependencyPath": "metaplate > @astrojs/node > astro > @astrojs/compiler-rs > @astrojs/compiler-binding > @astrojs/compiler-binding-wasm32-wasi > @emnapi/runtime"
+        "dependencyPath": "metaplate > @astrojs/node > astro > sharp > @img/sharp-freebsd-wasm32 > @img/sharp-wasm32"
       },
       {
         "category": "license",
@@ -271,19 +296,18 @@
       },
       {
         "category": "supplyChainRisk",
-        "example": "npm/next@16.4.3",
+        "example": "npm/next@16.4.4",
         "name": "dynamicRequire",
         "severity": "low",
         "package": "next",
-        "version": "16.4.3",
+        "version": "16.4.4",
         "dependencyEvidence": {
           "source": "package-lock.json",
-          "paths": [
-            "metaplate > next"
-          ],
-          "reachability": "runtime-peer-optional"
-        },
-        "dependencyPath": "metaplate > next"
+          "paths": [],
+          "reachability": "unknown",
+          "unresolved": true,
+          "reason": "next@16.4.4 not found in the current dependency inventory"
+        }
       },
       {
         "category": "supplyChainRisk",
@@ -384,45 +408,18 @@
       },
       {
         "category": "maintenance",
-        "example": "npm/escape-html@1.0.3",
+        "example": "npm/metaplate@0.8.0",
         "name": "unmaintained",
         "severity": "low",
-        "package": "escape-html",
-        "version": "1.0.3",
+        "package": "metaplate",
+        "version": "0.8.0",
         "dependencyEvidence": {
           "source": "package-lock.json",
-          "paths": [
-            "metaplate > @astrojs/node > send > escape-html",
-            "metaplate > @react-router/dev > @react-router/serve > @react-router/express > express > escape-html",
-            "metaplate > @react-router/dev > @react-router/serve > @react-router/express > express > finalhandler > escape-html",
-            "metaplate > @react-router/dev > @react-router/serve > @react-router/express > express > send > escape-html",
-            "metaplate > @react-router/dev > @react-router/serve > @react-router/express > express > serve-static > escape-html",
-            "metaplate > @react-router/dev > @react-router/serve > @react-router/express > express > serve-static > send > escape-html",
-            "metaplate > @react-router/dev > @react-router/serve > express > escape-html",
-            "metaplate > @react-router/dev > @react-router/serve > express > finalhandler > escape-html",
-            "metaplate > @react-router/dev > @react-router/serve > express > send > escape-html",
-            "metaplate > @react-router/dev > @react-router/serve > express > serve-static > escape-html",
-            "metaplate > @react-router/dev > @react-router/serve > express > serve-static > send > escape-html",
-            "metaplate > @react-router/serve > @react-router/express > express > escape-html",
-            "metaplate > @react-router/serve > @react-router/express > express > finalhandler > escape-html",
-            "metaplate > @react-router/serve > @react-router/express > express > send > escape-html",
-            "metaplate > @react-router/serve > @react-router/express > express > serve-static > escape-html",
-            "metaplate > @react-router/serve > @react-router/express > express > serve-static > send > escape-html",
-            "metaplate > @react-router/serve > express > escape-html",
-            "metaplate > @react-router/serve > express > finalhandler > escape-html",
-            "metaplate > @react-router/serve > express > send > escape-html",
-            "metaplate > @react-router/serve > express > serve-static > escape-html",
-            "metaplate > @react-router/serve > express > serve-static > send > escape-html",
-            "metaplate > express > escape-html",
-            "metaplate > express > finalhandler > escape-html",
-            "metaplate > express > send > escape-html",
-            "metaplate > express > serve-static > escape-html",
-            "metaplate > express > serve-static > send > escape-html",
-            "metaplate > satori > escape-html"
-          ],
-          "reachability": "runtime-peer"
-        },
-        "dependencyPath": "metaplate > @astrojs/node > send > escape-html"
+          "paths": [],
+          "reachability": "unknown",
+          "unresolved": true,
+          "reason": "metaplate@0.8.0 not found in the current dependency inventory"
+        }
       },
       {
         "category": "supplyChainRisk",
@@ -444,7 +441,7 @@
   },
   "provenance": {
     "importedFrom": "Socket CLI export",
-    "inputSha256": "f6248d50ee8a60912bb28f85138fd6120eb11d977743266387993a2fb97bf330",
+    "inputSha256": "8e4ca6aa54b49343c9f374915567ccb815dad3aa9675378f3fe05d8b7ede6421",
     "dependencyEvidence": "package-lock.json via dependency-model.mjs"
   }
 }
