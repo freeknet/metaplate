@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/freeknet/.github/main/brand/social/metaplate.png" alt="$ metaplate: Composable, framework-neutral Open Graph image tooling for TypeScript" width="100%">
+</p>
+
 # Metaplate
 
 [![CI](https://github.com/freeknet/metaplate/actions/workflows/ci.yml/badge.svg)](https://github.com/freeknet/metaplate/actions/workflows/ci.yml)
