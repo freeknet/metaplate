@@ -55,7 +55,8 @@ For more than one card, or any plate with size variants, use
 every size to the path the plate's metadata URL names (without `basePath`, so
 the output can be published under a project-site prefix), verifies each file on
 disk, writes a manifest with each file's SHA-256, and exits non-zero on any
-failure. A single card needs no more than a script like this one:
+failure. [Static Next.js sites](static-next-site.md) walks through this setup from
+start to finish. A single card needs no more than a script like this one:
 
 ```ts
 // scripts/build-og.ts
@@ -143,10 +144,19 @@ for = "/og-image"
 
 ## Static hosts
 
+A real extension avoids this section entirely: a host serves `og-image.png` or
+`og-image.jpg` with the right type on its own, including hosts that take no header
+rules at all, such as GitHub Pages. To get one, render with
+[`metaplate render`](render-cli.md), or name a Next route folder after the file, as
+in `app/<route>/og-image.png/route.ts`.
+
 Extension-free route-handler output may be served as a generic download by a
-static host. Set the `Content-Type` explicitly for `/og-image` and `/*/og-image`
-— `image/png` by default, or the `plate.contentType` of a custom-output plate
-(`image/jpeg`, `image/webp`, …). For Netlify, a PNG plate:
+static host, and crawlers reject that. If the URL has to stay, set the
+`Content-Type` explicitly for `/og-image` and `/*/og-image`: `image/png` by default,
+or the `plate.contentType` of a custom-output plate (`image/jpeg`, `image/webp`, …).
+Check the result after the deploy with
+[`metaplate verify-url`](verification.md#verify-a-deployed-url), because a host that
+ignores the rule fails only at the crawler. For Netlify, a PNG plate:
 
 ```toml
 [[headers]]
@@ -161,6 +171,21 @@ for = "/*/og-image"
 ```
 
 A JPEG plate uses `Content-Type = "image/jpeg"` for the same two paths.
+
+For [Cloudflare Workers static assets](https://developers.cloudflare.com/workers/static-assets/headers/),
+which determine a file's type from its extension, put a `_headers` file in the
+published directory, such as `public/_headers` in a Next export:
+
+```text
+/og-image
+  Content-Type: image/png
+
+/*/og-image
+  Content-Type: image/png
+```
+
+These rules apply only to responses served as assets. A route that runs Worker code
+first, through `run_worker_first`, sets its headers on its own `Response`.
 
 ## Vercel Node.js Functions
 

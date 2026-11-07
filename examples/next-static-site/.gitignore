@@ -1,0 +1,6 @@
+.next/
+out/
+next-env.d.ts
+.og-manifest.json
+# Rendered by `npm run cards` before every dev server and build.
+public/**/og-image.png
