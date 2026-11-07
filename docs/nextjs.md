@@ -1,6 +1,11 @@
 # Next.js
 
 The `metaplate/next` adapter, static export with `basePath`, and JPEG or WebP cards in Next.js.
+
+Building a site with `output: "export"`? Start with
+[Static Next.js sites](static-next-site.md), which walks through the whole setup and
+compares the approaches. This page is the reference for the adapter itself.
+
 ## Next.js adapter
 
 Next applications can use the native `next/og` pipeline while keeping the same
@@ -132,6 +137,35 @@ can never disagree. A plate that needs a second size declares it as a
 [variant](variants.md), whose view keeps the same rule. Size values must be integers between 1 and 65535; `socialImage`,
 `socialImageMetadata`, and every plate definition reject anything else at the
 boundary.
+
+### Dynamic routes
+
+A route with a dynamic segment takes `handlerFrom`, which passes Next's route
+arguments to a resolver that returns the copy. Under `output: "export"`, the route
+also needs `generateStaticParams` and `dynamicParams = false`:
+
+```tsx
+// src/app/posts/[slug]/og-image/route.tsx
+import { og } from "@/lib/og";
+import { posts, postCopy } from "@/lib/posts";
+
+export const dynamic = "force-static";
+export const dynamicParams = false;
+
+export function generateStaticParams() {
+  return posts.map((post) => ({ slug: post.slug }));
+}
+
+export const GET = og.handlerFrom(
+  async (_request: Request, { params }: { params: Promise<{ slug: string }> }) =>
+    postCopy((await params).slug),
+);
+```
+
+For a site with many routes, a module that holds every card's copy scales better
+than exporting `copy` from each page. Pages and routes then read the same record, and
+a `Record` over the route list makes a route with no card a type error; see
+[Write what each card says](static-next-site.md#2-write-what-each-card-says).
 
 ### Next.js static export and `basePath`
 

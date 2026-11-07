@@ -5,6 +5,34 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ## [Unreleased]
 
+### Documentation
+
+- New guides, built from how real projects use Metaplate, with each behavior they
+  describe checked against a packed tarball:
+  - [Static Next.js sites](docs/static-next-site.md) goes from the first file to
+    the post-deploy check, compares the five ways to produce cards, and adds a
+    troubleshooting table. A complete
+    [example](examples/next-static-site) is type-checked with the other examples.
+  - [Card recipes](docs/recipes.md) covers text beside a photograph, photos of any
+    shape, logos, long titles, several fonts, brand colors, one card per record, and
+    a remote image that may be missing.
+  - [Testing your cards](docs/testing.md) says what each check catches, with a unit
+    test, an offline audit of a whole export, and a browser test.
+  - [Upgrading](docs/upgrading.md) lists each breaking change with what to do, and
+    how to compare cards before and after.
+  - The [plate reference](docs/plate.md) lists every option and returned member by
+    factory. A test fails if a plate gains a member it does not list.
+- `verifySocialImage` documents that a plate's relative URLs fail its crawler-ready
+  URL check, and the three ways to handle that (#181).
+- `metaplate render` documents a JSX recipe that works on Windows, through `runCli`
+  under `tsx`, and its error for a `.tsx` module now names that route (#185).
+- The plate constraints now say that an inline SVG `<title>` shows as text through
+  `createNextOg` only, and add that an `<img>` stretches without `objectFit`, and
+  that CSS variables and unloaded fonts are ignored with no error.
+- The static hosts guide leads with using a real file extension, and adds Cloudflare
+  Workers static assets. Next.js dynamic routes under `output: "export"` are
+  documented.
+
 ## [0.8.2] - 2026-11-04
 
 ### Changed

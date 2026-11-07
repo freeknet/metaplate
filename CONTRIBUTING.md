@@ -97,7 +97,10 @@ run with `--ignore-scripts`.
   (dependency inventory, Socket dispositions, and workflow policy), and
   `lib/` (shared helpers).
 - `examples/api/` holds single-file API examples, and `examples/astro`,
-  `examples/next-app`, and `examples/hosted` are full apps.
+  `examples/next-app`, `examples/next-static-site`, and `examples/hosted` are full
+  apps. The code blocks in `docs/static-next-site.md`, `docs/testing.md`, and
+  `docs/recipes.md` that start with a file's path must match that example file;
+  `tests/repo/documentation.test.ts` checks them.
 
 ## Design constraints
 

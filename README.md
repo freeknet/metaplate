@@ -25,6 +25,7 @@ It works with plain Node, static build scripts, Next.js, Astro, React Router, Sv
 - [Install](#install)
   - [Dependency behavior](#dependency-behavior)
 - [Quick start](#quick-start)
+- [Where to go next](#where-to-go-next)
 - [Guides](#guides)
   - [Rendering and routes](#rendering-and-routes)
   - [Static files with `metaplate render`](#static-files-with-metaplate-render)
@@ -136,6 +137,20 @@ const fetchable = og.fetchableFrom((request: Request) => ({
   alt: "Social card",
 }));
 ```
+
+## Where to go next
+
+- **A static Next.js site?** [Static Next.js sites](docs/static-next-site.md) takes
+  you from the first file to the post-deploy check, with a complete, type-checked
+  [example](https://github.com/freeknet/metaplate/tree/main/examples/next-static-site).
+- **A particular design?** [Card recipes](docs/recipes.md) covers text beside a
+  photograph, long titles, several fonts, one card per record, and more.
+- **Making sure a card never ships broken?** [Testing your cards](docs/testing.md)
+  shows which check catches what, including an offline audit of a whole export.
+- **On an older version?** [Upgrading](docs/upgrading.md) lists each breaking change
+  and how to compare your cards before and after.
+- **Looking up an option or method?** The [plate reference](docs/plate.md) lists them
+  all, and the [API reference](docs/api.md) lists every export.
 
 ## Guides
 
