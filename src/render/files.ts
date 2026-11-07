@@ -663,7 +663,9 @@ function loadError(file: string, error: unknown): unknown {
     return new Error(
       `Cannot load ${file}: Node does not transform JSX. Compile it to .js first, ` +
         "author the plate with plain { type, props } objects in a .ts or .mjs module, " +
-        "or register a JSX-capable loader through NODE_OPTIONS (for example NODE_OPTIONS=\"--import tsx\").",
+        "or run the command through runCli from metaplate/cli under tsx, which works on every platform " +
+        "(see docs/render-cli.md#loading-typescript-and-jsx). On a POSIX shell, " +
+        "NODE_OPTIONS=\"--import tsx\" also registers a JSX-capable loader.",
       { cause: error },
     );
   }

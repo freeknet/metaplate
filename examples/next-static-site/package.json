@@ -1,0 +1,29 @@
+{
+  "name": "metaplate-example-next-static-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "cards": "tsx scripts/render-cards.mts",
+    "predev": "npm run cards",
+    "dev": "next dev",
+    "prebuild": "npm run cards",
+    "build": "next build",
+    "postbuild": "tsx scripts/audit-export.mts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fontsource/inter": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "metaplate": "^0.8.2",
+    "next": "^16.4.3",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.5"
+  }
+}
