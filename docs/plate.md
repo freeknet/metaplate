@@ -138,7 +138,7 @@ These build no image and load no renderer, so a page can call them freely.
 | Member | Returns |
 | --- | --- |
 | `fingerprint()` | `Promise<string>` identifying what this view renders, apart from copy. Code the component imports is not seen, which is what `revision` is for. |
-| `cached(options?)` | A view that renders each distinct copy once. See [Caching renders](rendering.md#caching-renders). |
+| `cached(options?)` | A view that renders each distinct copy once, with the plate's route forms; its `handlerFrom` and `fetchableFrom` take the same `{ signed }` option. See [Caching renders](rendering.md#caching-renders). |
 
 ## Calling members on their own
 
