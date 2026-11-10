@@ -303,6 +303,58 @@ describe("createRenderCache", () => {
     expect(calls).toEqual(["A"]);
   });
 
+  it("answers HEAD with the GET response's fields and no body", async () => {
+    const { plate } = fakePlate();
+    const cache = createRenderCache(plate);
+    const get = await cache.response({ title: "A" });
+    const head = new Request("https://example.com/og.png", { method: "HEAD" });
+    for (const response of [
+      await cache.response({ title: "A" }, head),
+      await cache.handler({ title: "A" })(head),
+      await cache.fetchableFrom((request: Request) => ({ title: new URL(request.url).hostname === "example.com" ? "A" : "B" })).fetch(head),
+    ]) {
+      expect(response.status).toBe(200);
+      expect(response.body).toBeNull();
+      expect(response.headers.get("etag")).toBe(get.headers.get("etag"));
+      expect(response.headers.get("content-length")).toBe(String("png:A".length));
+      expect(response.headers.get("content-type")).toBe("image/png");
+    }
+  });
+
+  it("checks a signed route's signature before resolving copy or reading the cache", async () => {
+    const { plate, calls } = fakePlate();
+    const cache = createRenderCache(plate);
+    const secret = "route-secret-0123456789abcdefghijklmn";
+    const retired = "retired-secret-0123456789abcdefghijkl";
+    const resolve = vi.fn((request: Request) => ({ title: new URL(request.url).pathname }));
+    const { signImagePath } = await import("../../src/index.js");
+    const signedUrl = await signImagePath("https://example.com/posts/a/og-image.png", secret);
+
+    const get = cache.handlerFrom(resolve, { signed: { secret } });
+    const unsigned = await get(new Request("https://example.com/posts/a/og-image.png"));
+    expect(unsigned.status).toBe(403);
+    expect(unsigned.headers.get("cache-control")).toBe("no-store");
+    const tampered = await cache.fetchableFrom(resolve, { signed: { secret, status: 404 } })
+      .fetch(new Request(signedUrl.replace("posts/a", "posts/b")));
+    expect(tampered.status).toBe(404);
+    expect(resolve).not.toHaveBeenCalled();
+    expect(calls).toEqual([]);
+
+    // A valid signature renders once, then serves the cached image; a
+    // retiring secret still verifies, and a custom URL extractor is honored.
+    expect((await get(new Request(signedUrl))).status).toBe(200);
+    expect((await get(new Request(signedUrl))).status).toBe(200);
+    const rotated = cache.handlerFrom(resolve, { signed: { secrets: [retired, secret] } });
+    expect((await rotated(new Request(signedUrl))).status).toBe(200);
+    const proxied = cache.handlerFrom(
+      (context: { path: string }) => ({ title: context.path }),
+      { signed: { secret, url: (context) => `https://example.com${context.path}` } },
+    );
+    expect((await proxied({ path: new URL(signedUrl).pathname })).status).toBe(200);
+    // Every valid request resolved the same copy, so one render served them all.
+    expect(calls).toHaveLength(1);
+  });
+
   it("refuses two plates with one fingerprint in one store, and allows one plate to attach twice", async () => {
     const store = memoryRenderCache();
     const first = fakePlate().plate;
@@ -436,6 +488,13 @@ describe("metaplate/edge cached()", { timeout: 30_000 }, () => {
       headers: { "If-None-Match": first.headers.get("etag")! },
     }));
     expect(again.status).toBe(304);
+    expect(renders).toBe(1);
+    // Signed routes are checked on the edge cached view too.
+    const signed = cached.fetchableFrom(
+      (request: Request) => ({ title: new URL(request.url).pathname }),
+      { signed: { secret: "route-secret-0123456789abcdefghijklmn" } },
+    );
+    expect((await signed.fetch(new Request("https://example.com/edge"))).status).toBe(403);
     expect(renders).toBe(1);
     // The same definition fingerprints differently per renderer.
     expect(await og.fingerprint()).not.toBe(await createNodeOg(definition).fingerprint());
