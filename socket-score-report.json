@@ -1,48 +1,63 @@
 {
   "schemaVersion": 2,
   "package": "metaplate",
-  "version": "0.8.1",
-  "source": "https://socket.dev/npm/package/metaplate@0.8.1",
-  "normalizedAt": "2026-11-04T19:11:08.706Z",
+  "version": "0.8.2",
+  "source": "https://socket.dev/npm/package/metaplate@0.8.2",
+  "normalizedAt": "2026-11-10T02:38:11.569Z",
   "captureKind": "socket-cli-import",
   "shallow": {
     "score": {
       "overall": 79,
       "supplyChain": 79,
-      "maintenance": 92,
+      "maintenance": 93,
       "quality": 99,
       "vulnerability": 100,
       "license": 100
     },
     "alerts": [
       {
-        "category": "quality",
-        "example": "npm/metaplate@0.8.1",
-        "name": "unpopularPackage",
+        "category": "supplyChainRisk",
+        "example": "npm/metaplate@0.8.2",
+        "name": "recentlyPublished",
         "severity": "medium",
         "package": "metaplate",
-        "version": "0.8.1",
+        "version": "0.8.2",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [],
           "reachability": "unknown",
           "unresolved": true,
-          "reason": "metaplate@0.8.1 not found in the current dependency inventory"
+          "reason": "metaplate@0.8.2 not found in the current dependency inventory"
+        }
+      },
+      {
+        "category": "quality",
+        "example": "npm/metaplate@0.8.2",
+        "name": "unpopularPackage",
+        "severity": "medium",
+        "package": "metaplate",
+        "version": "0.8.2",
+        "dependencyEvidence": {
+          "source": "package-lock.json",
+          "paths": [],
+          "reachability": "unknown",
+          "unresolved": true,
+          "reason": "metaplate@0.8.2 not found in the current dependency inventory"
         }
       },
       {
         "category": "supplyChainRisk",
-        "example": "npm/metaplate@0.8.1",
+        "example": "npm/metaplate@0.8.2",
         "name": "urlStrings",
         "severity": "low",
         "package": "metaplate",
-        "version": "0.8.1",
+        "version": "0.8.2",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [],
           "reachability": "unknown",
           "unresolved": true,
-          "reason": "metaplate@0.8.1 not found in the current dependency inventory"
+          "reason": "metaplate@0.8.2 not found in the current dependency inventory"
         }
       }
     ]
@@ -71,7 +86,7 @@
       "maintenance": "npm/string.prototype.codepointat@0.2.1",
       "overall": "npm/@resvg/resvg-js-android-arm-eabi@2.6.2",
       "quality": "npm/@resvg/resvg-js-android-arm-eabi@2.6.2",
-      "supplyChain": "npm/next@16.4.5",
+      "supplyChain": "npm/next@16.4.6",
       "vulnerability": "npm/fflate@0.7.3"
     },
     "alerts": [
@@ -172,6 +187,21 @@
         "dependencyPath": "metaplate > satori > @shuding/opentype.js"
       },
       {
+        "category": "supplyChainRisk",
+        "example": "npm/@next/swc-darwin-x64@16.4.6",
+        "name": "hasNativeCode",
+        "severity": "medium",
+        "package": "@next/swc-darwin-x64",
+        "version": "16.4.6",
+        "dependencyEvidence": {
+          "source": "package-lock.json",
+          "paths": [],
+          "reachability": "unknown",
+          "unresolved": true,
+          "reason": "@next/swc-darwin-x64@16.4.6 not found in the current dependency inventory"
+        }
+      },
+      {
         "category": "vulnerability",
         "example": "npm/fflate@0.7.3",
         "name": "mediumCVE",
@@ -203,6 +233,21 @@
           "reachability": "runtime-peer-optional"
         },
         "dependencyPath": "metaplate > @resvg/resvg-wasm"
+      },
+      {
+        "category": "supplyChainRisk",
+        "example": "npm/semver@7.8.6",
+        "name": "recentlyPublished",
+        "severity": "medium",
+        "package": "semver",
+        "version": "7.8.6",
+        "dependencyEvidence": {
+          "source": "package-lock.json",
+          "paths": [],
+          "reachability": "unknown",
+          "unresolved": true,
+          "reason": "semver@7.8.6 not found in the current dependency inventory"
+        }
       },
       {
         "category": "supplyChainRisk",
@@ -240,39 +285,47 @@
       },
       {
         "category": "quality",
-        "example": "npm/metaplate@0.8.1",
+        "example": "npm/metaplate@0.8.2",
         "name": "unpopularPackage",
         "severity": "medium",
         "package": "metaplate",
-        "version": "0.8.1",
+        "version": "0.8.2",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [],
           "reachability": "unknown",
           "unresolved": true,
-          "reason": "metaplate@0.8.1 not found in the current dependency inventory"
+          "reason": "metaplate@0.8.2 not found in the current dependency inventory"
         }
       },
       {
         "category": "supplyChainRisk",
-        "example": "npm/@img/sharp-wasm32@0.35.5",
+        "example": "npm/@emnapi/runtime@1.11.3",
         "name": "usesEval",
         "severity": "medium",
-        "package": "@img/sharp-wasm32",
-        "version": "0.35.5",
+        "package": "@emnapi/runtime",
+        "version": "1.11.3",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [
-            "metaplate > @astrojs/node > astro > sharp > @img/sharp-freebsd-wasm32 > @img/sharp-wasm32",
-            "metaplate > @astrojs/node > astro > sharp > @img/sharp-webcontainers-wasm32 > @img/sharp-wasm32",
-            "metaplate > astro > sharp > @img/sharp-freebsd-wasm32 > @img/sharp-wasm32",
-            "metaplate > astro > sharp > @img/sharp-webcontainers-wasm32 > @img/sharp-wasm32",
-            "metaplate > next > sharp > @img/sharp-freebsd-wasm32 > @img/sharp-wasm32",
-            "metaplate > next > sharp > @img/sharp-webcontainers-wasm32 > @img/sharp-wasm32"
+            "metaplate > @astrojs/node > astro > @astrojs/compiler-rs > @astrojs/compiler-binding > @astrojs/compiler-binding-wasm32-wasi > @emnapi/runtime",
+            "metaplate > @astrojs/node > astro > @astrojs/compiler-rs > @astrojs/compiler-binding > @astrojs/compiler-binding-wasm32-wasi > @napi-rs/wasm-runtime > @emnapi/runtime",
+            "metaplate > @astrojs/node > astro > @astrojs/markdown-satteri > satteri > @bruits/satteri-wasm32-wasi > @napi-rs/wasm-runtime > @emnapi/runtime",
+            "metaplate > @astrojs/node > astro > rolldown > @rolldown/binding-wasm32-wasi > @napi-rs/wasm-runtime > @emnapi/runtime",
+            "metaplate > @astrojs/node > astro > sharp > @img/sharp-freebsd-wasm32 > @img/sharp-wasm32 > @emnapi/runtime",
+            "metaplate > @astrojs/node > astro > sharp > @img/sharp-webcontainers-wasm32 > @img/sharp-wasm32 > @emnapi/runtime",
+            "metaplate > astro > @astrojs/compiler-rs > @astrojs/compiler-binding > @astrojs/compiler-binding-wasm32-wasi > @emnapi/runtime",
+            "metaplate > astro > @astrojs/compiler-rs > @astrojs/compiler-binding > @astrojs/compiler-binding-wasm32-wasi > @napi-rs/wasm-runtime > @emnapi/runtime",
+            "metaplate > astro > @astrojs/markdown-satteri > satteri > @bruits/satteri-wasm32-wasi > @napi-rs/wasm-runtime > @emnapi/runtime",
+            "metaplate > astro > rolldown > @rolldown/binding-wasm32-wasi > @napi-rs/wasm-runtime > @emnapi/runtime",
+            "metaplate > astro > sharp > @img/sharp-freebsd-wasm32 > @img/sharp-wasm32 > @emnapi/runtime",
+            "metaplate > astro > sharp > @img/sharp-webcontainers-wasm32 > @img/sharp-wasm32 > @emnapi/runtime",
+            "metaplate > next > sharp > @img/sharp-freebsd-wasm32 > @img/sharp-wasm32 > @emnapi/runtime",
+            "metaplate > next > sharp > @img/sharp-webcontainers-wasm32 > @img/sharp-wasm32 > @emnapi/runtime"
           ],
           "reachability": "runtime-peer-optional"
         },
-        "dependencyPath": "metaplate > @astrojs/node > astro > sharp > @img/sharp-freebsd-wasm32 > @img/sharp-wasm32"
+        "dependencyPath": "metaplate > @astrojs/node > astro > @astrojs/compiler-rs > @astrojs/compiler-binding > @astrojs/compiler-binding-wasm32-wasi > @emnapi/runtime"
       },
       {
         "category": "license",
@@ -310,19 +363,18 @@
       },
       {
         "category": "supplyChainRisk",
-        "example": "npm/next@16.4.5",
+        "example": "npm/next@16.4.6",
         "name": "dynamicRequire",
         "severity": "low",
         "package": "next",
-        "version": "16.4.5",
+        "version": "16.4.6",
         "dependencyEvidence": {
           "source": "package-lock.json",
-          "paths": [
-            "metaplate > next"
-          ],
-          "reachability": "runtime-peer-optional"
-        },
-        "dependencyPath": "metaplate > next"
+          "paths": [],
+          "reachability": "unknown",
+          "unresolved": true,
+          "reason": "next@16.4.6 not found in the current dependency inventory"
+        }
       },
       {
         "category": "supplyChainRisk",
@@ -423,17 +475,17 @@
       },
       {
         "category": "maintenance",
-        "example": "npm/metaplate@0.8.1",
+        "example": "npm/metaplate@0.8.2",
         "name": "unmaintained",
         "severity": "low",
         "package": "metaplate",
-        "version": "0.8.1",
+        "version": "0.8.2",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [],
           "reachability": "unknown",
           "unresolved": true,
-          "reason": "metaplate@0.8.1 not found in the current dependency inventory"
+          "reason": "metaplate@0.8.2 not found in the current dependency inventory"
         }
       },
       {
@@ -456,7 +508,7 @@
   },
   "provenance": {
     "importedFrom": "Socket CLI export",
-    "inputSha256": "85597539a4cf87b204635b33209a9ecd6a5809243819dd16d691410714da246e",
+    "inputSha256": "8f3899016498c4701a8588fec35e5df992795117b715b5545a2df1a80b7217d8",
     "dependencyEvidence": "package-lock.json via dependency-model.mjs"
   }
 }
