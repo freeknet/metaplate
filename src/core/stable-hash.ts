@@ -48,6 +48,23 @@ function bytesOf(value: ArrayBuffer | ArrayBufferView): Uint8Array {
  * collide on one key.
  */
 export function taggedSerialize(value: unknown, label = "value"): string {
+  return serializeTagged(value, label, false);
+}
+
+/**
+ * The serialization behind render-cache keys and `metaplate render
+ * --incremental` input hashes, which must be equal only for copy that renders
+ * identically. Unlike `taggedSerialize`, object keys keep their insertion
+ * order, because a component can read it (`Object.values(copy)`), and a
+ * function throws, because its source text cannot see what it closes over: two
+ * closures with one source but different captured values would share a key.
+ * A cache that cannot key a copy must not serve it a stored image.
+ */
+export function copyIdentity(value: unknown, label = "copy"): string {
+  return serializeTagged(value, label, true);
+}
+
+function serializeTagged(value: unknown, label: string, identity: boolean): string {
   const ancestors = new Set<object>();
 
   function walk(current: unknown, path: string): string {
@@ -63,6 +80,12 @@ export function taggedSerialize(value: unknown, label = "value"): string {
       case "string":
         return `s${JSON.stringify(current)}`;
       case "function":
+        if (identity) {
+          throw new TypeError(
+            `Cannot key the function at ${path}: its source text cannot see what it closes over, ` +
+              "so pass the data it uses instead",
+          );
+        }
         return `F${JSON.stringify(Function.prototype.toString.call(current))}`;
       case "symbol":
         throw new TypeError(`Cannot serialize the symbol at ${path}`);
@@ -98,9 +121,11 @@ export function taggedSerialize(value: unknown, label = "value"): string {
     }
     if (isPlainObject(object)) {
       const record = object as Record<string, unknown>;
-      const entries = Object.keys(record)
-        .sort()
-        .map((key) => `${JSON.stringify(key)}:${walk(record[key], `${path}.${key}`)}`);
+      const keys = Object.keys(record);
+      // Insertion order is the order Object.keys, Object.values, and for...in
+      // report, which is what a component sees.
+      if (!identity) keys.sort();
+      const entries = keys.map((key) => `${JSON.stringify(key)}:${walk(record[key], `${path}.${key}`)}`);
       return `{${entries.join(",")}}`;
     }
     const toJSON = (object as { toJSON?: unknown }).toJSON;

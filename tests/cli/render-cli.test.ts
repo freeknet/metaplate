@@ -438,6 +438,42 @@ describe("renderFiles", { timeout: 30_000 }, () => {
     expect(existsSync(path.join(out, "fine", "og-image.png"))).toBe(true);
   });
 
+  it("leaves a good file in place when its replacement fails a check, and leaves no staged file", async () => {
+    const out = await temporary("atomic");
+    let bytes = completePng(1200, 630);
+    const plate = fakePlate({ variants: [], artifact: async () => bytes });
+    const plan = () => planImages([{ plate, pages: [{ route: "/a", copy: 1 }] }], out);
+    const file = path.join(out, "a", "og-image.png");
+
+    expect((await renderFiles(plan(), { outDir: out, concurrency: 1 }))[0]!.valid).toBe(true);
+    // A previous build's card, distinct from anything this run renders.
+    const good = new TextEncoder().encode("the previous build's card");
+    await writeFile(file, good);
+
+    // Wrong dimensions, then a target rule, each fail without touching the file.
+    bytes = completePng(1080, 1080);
+    expect((await renderFiles(plan(), { outDir: out, concurrency: 1 }))[0]!.valid).toBe(false);
+    expect(new Uint8Array(await readFile(file))).toEqual(good);
+
+    bytes = completePng(1200, 630);
+    const tooLarge = await renderFiles(plan(), { outDir: out, concurrency: 1, checks: { targets: [], maxFileSize: 10 } });
+    expect(tooLarge[0]!.valid).toBe(false);
+    expect(new Uint8Array(await readFile(file))).toEqual(good);
+
+    expect(await readdir(path.join(out, "a"))).toEqual(["og-image.png"]);
+  });
+
+  it("removes the staged file and keeps the target when the staged bytes fail their check", async () => {
+    const dir = await temporary("staged");
+    const target = path.join(dir, "og.png");
+    await writeFile(target, "previous");
+    await expect(writeFileAtomic(target, new Uint8Array([1, 2, 3]), async () => {
+      throw new Error("read back differently");
+    })).rejects.toThrow("read back differently");
+    expect(await readFile(target, "utf8")).toBe("previous");
+    expect(await readdir(dir)).toEqual(["og.png"]);
+  });
+
   it("refuses to write through a linked directory that leaves the output directory", async () => {
     const root = await temporary("link");
     const out = path.join(root, "out");
@@ -802,9 +838,10 @@ describe("incremental inputs", () => {
     const plate = fakePlate({ fingerprint: "v1" });
     const base = await inputHash(plan(plate, { title: "A", tags: ["x"] }), NO_PEERS);
     expect(base).toMatch(/^[0-9a-f]{64}$/);
-    // Key order is not data.
-    expect(await inputHash(plan(plate, { tags: ["x"], title: "A" }), NO_PEERS)).toBe(base);
+    expect(await inputHash(plan(plate, { title: "A", tags: ["x"] }), NO_PEERS)).toBe(base);
     const changed = await Promise.all([
+      // Key order counts: a component can read it.
+      inputHash(plan(plate, { tags: ["x"], title: "A" }), NO_PEERS),
       inputHash(plan(plate, { title: "B", tags: ["x"] }), NO_PEERS),
       inputHash(plan(plate, { title: "A", tags: ["x"] }, "/b"), NO_PEERS),
       inputHash(plan(fakePlate({ fingerprint: "v2" }), { title: "A", tags: ["x"] }), NO_PEERS),
@@ -821,6 +858,16 @@ describe("incremental inputs", () => {
     const plate = fakePlate({ fingerprint: "v1" });
     expect(await inputHash(plan(plate, cycle), NO_PEERS)).toBeNull();
     expect(await inputHash(plan(plate, { when: new (class Moment {})() }), NO_PEERS)).toBeNull();
+    // A function's captured values are invisible to its source, so it always renders.
+    expect(await inputHash(plan(plate, { title: "A", label: () => "x" }), NO_PEERS)).toBeNull();
+  });
+
+  it("hashes copy in key order, so a reorder a component can see never reuses the old file", async () => {
+    const plate = fakePlate({ fingerprint: "v1" });
+    const first = await inputHash(plan(plate, { a: "A", b: "B" }), NO_PEERS);
+    expect(first).toMatch(/^[0-9a-f]{64}$/);
+    expect(await inputHash(plan(plate, { b: "B", a: "A" }), NO_PEERS)).not.toBe(first);
+    expect(await inputHash(plan(plate, { a: "A", b: "B" }), NO_PEERS)).toBe(first);
   });
 
   it("reads installed peer versions from the module's location, and null where none are installed", async () => {

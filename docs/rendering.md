@@ -208,17 +208,25 @@ export const GET = cached.handlerFrom(({ params }) => ({
 
 The cached view has the same route forms as the plate (`render`, `response`,
 `handler`, `handlerFrom`, `fetchable`, `fetchableFrom`; `metaplate/edge`
-omits `handler`, as its plates do), plus `entry(copy)` and `key(copy)`.
+omits `handler`, as its plates do), plus `entry(copy)` and `key(copy)`. Its
+`handlerFrom` and `fetchableFrom` take the same options as the plate's, so a
+[signed route](signed-routes.md) stays signed when you add `.cached()`: a
+missing or invalid signature is answered before the resolver runs or the cache
+is read, and a valid one is served from the cache.
 
 - **Keys.** Each entry is keyed by the SHA-256 of the plate size's
-  `fingerprint()` and the copy, serialized with object keys sorted. The
+  `fingerprint()` and the copy, with object keys in insertion order, because a
+  component can read that order (`Object.values(copy)`), so two copies that differ
+  only in key order are two entries. The
   fingerprint covers the Metaplate version, the renderer, `revision`, size,
   output format, guard levels, font bytes, the source text of `component` and the
   definition's other functions, and the `satori`, `emoji`, `languageFonts`,
   and `resvg` options. Different copy can never share an entry, and a changed design
   misses rather than serving the old card. Copy must be plain data (objects,
   arrays, strings, numbers, booleans, `Date`, `URL`, byte arrays); anything
-  else rejects the request with a `TypeError` naming the field.
+  else rejects the request with a `TypeError` naming the field. That includes a
+  function: its source text cannot see what it closes over, so two closures with
+  one source would share an entry. Pass the data the function uses instead.
 - **What the key cannot see.** A function's source text excludes what it
   imports or closes over, and images fetched during the render are not
   hashed. Set the plate's `revision` and change it when such a dependency
@@ -238,7 +246,10 @@ omits `handler`, as its plates do), plus `entry(copy)` and `key(copy)`.
   requires. Matching uses the weak comparison, so `W/"…"` from a proxy that
   recompressed the image still matches, and `*` matches any card. A 304
   keeps the 200's headers, such as `Cache-Control` and `Vary`, and drops
-  `Content-Type` and `Content-Length`.
+  `Content-Type` and `Content-Length`. A `HEAD` request that would get a 200
+  gets the same headers, `ETag` and `Content-Length` included, and no body. The
+  uncached handlers return the body for `HEAD` too; the servers they run behind,
+  such as Node's `http` module and Next.js, do not send it.
 - **Concurrent requests** for one uncached card share a single render.
 - **Expiry.** Entries do not expire by default, because the key changes with
   every known input. `ttl` (seconds) bounds how long one is served, for

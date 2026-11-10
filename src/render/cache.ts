@@ -1,4 +1,5 @@
-import { taggedSerialize } from "../core/stable-hash.js";
+import { copyIdentity, taggedSerialize } from "../core/stable-hash.js";
+import { signatureGate, type PlateRouteOptions } from "./plate.js";
 
 /**
  * Not an entry point: the runtime render cache behind `plate.cached()` in
@@ -242,6 +243,9 @@ function respond(entry: RenderCacheEntry, headers: Headers, request: Conditional
     const status = method === "GET" || method === "HEAD" ? 304 : 412;
     return new Response(null, { status, headers });
   }
+  // HEAD gets the GET response's fields, Content-Length and ETag included,
+  // and no content (RFC 9110 section 9.3.2).
+  if (request?.method.toUpperCase() === "HEAD") return new Response(null, { headers });
   const { bytes } = entry;
   const body = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
   return new Response(body, { headers });
@@ -250,7 +254,8 @@ function respond(entry: RenderCacheEntry, headers: Headers, request: Conditional
 /**
  * Wraps a plate view so each distinct copy renders once. The key is the
  * SHA-256 of the plate's fingerprint (Metaplate version, `revision`, size,
- * fonts, component source, and options) and the stable-serialized copy, so
+ * fonts, component source, and options) and the copy, in key order (see
+ * `copyIdentity`), so
  * different copy can never share an entry. Concurrent misses for one key
  * share a single render.
  */
@@ -284,10 +289,8 @@ export function createRenderCache<Copy>(plate: CacheablePlate<Copy>, options: Re
   async function key(copy: Copy): Promise<string> {
     const fingerprint = await plate.fingerprint();
     claim(store, fingerprint, identity);
-    const source = taggedSerialize(
-      { cache: "metaplate-render-cache/1", plate: fingerprint, copy },
-      "copy",
-    );
+    // The copy keeps its key order and rejects functions; see `copyIdentity`.
+    const source = taggedSerialize({ cache: "metaplate-render-cache/2", plate: fingerprint, copy: copyIdentity(copy) });
     return plate.sha256(encoder.encode(source));
   }
 
@@ -331,6 +334,21 @@ export function createRenderCache<Copy>(plate: CacheablePlate<Copy>, options: Re
     return respond(cached, plate.headers(cached.bytes.byteLength, cached.etag), request);
   }
 
+  /**
+   * A resolver route with the plate's own route options. A `signed` route
+   * answers a missing or invalid signature before the resolver runs or the
+   * cache is read, exactly as the uncached `handlerFrom` does.
+   */
+  function route<Arguments extends unknown[]>(
+    resolve: (...arguments_: Arguments) => Copy | Promise<Copy>,
+    routeOptions: PlateRouteOptions<Arguments> | undefined,
+  ) {
+    const gate = signatureGate(routeOptions?.signed);
+    return async (...arguments_: Arguments): Promise<Response> =>
+      (gate ? await gate(arguments_) : undefined) ??
+        response(await resolve(...arguments_), requestFrom(arguments_));
+  }
+
   return Object.freeze({
     store,
     key,
@@ -340,16 +358,15 @@ export function createRenderCache<Copy>(plate: CacheablePlate<Copy>, options: Re
     handler: (copy: Copy) => (...arguments_: unknown[]) => response(copy, requestFrom(arguments_)),
     handlerFrom: <Arguments extends unknown[]>(
       resolve: (...arguments_: Arguments) => Copy | Promise<Copy>,
-    ) =>
-      async (...arguments_: Arguments) => response(await resolve(...arguments_), requestFrom(arguments_)),
+      routeOptions?: PlateRouteOptions<Arguments>,
+    ) => route(resolve, routeOptions),
     fetchable: (copy: Copy) => ({
       fetch: (...arguments_: unknown[]) => response(copy, requestFrom(arguments_)),
     }),
     fetchableFrom: <Arguments extends unknown[]>(
       resolve: (...arguments_: Arguments) => Copy | Promise<Copy>,
-    ) => ({
-      fetch: async (...arguments_: Arguments) => response(await resolve(...arguments_), requestFrom(arguments_)),
-    }),
+      routeOptions?: PlateRouteOptions<Arguments>,
+    ) => ({ fetch: route(resolve, routeOptions) }),
   });
 }
 
