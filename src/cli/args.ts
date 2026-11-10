@@ -408,7 +408,7 @@ export function parseVerifyTargets(args: string[]): VerifyTarget[] {
 }
 
 export const RENDER_USAGE =
-  "Usage: metaplate render [--json] [--incremental] [--out DIR] [--manifest FILE] [--concurrency N] <module>";
+  "Usage: metaplate render [--json] [--incremental] [--out DIR] [--manifest FILE] [--concurrency N] [--target TARGET] [--max-file-size BYTES] <module>";
 
 export const MANIFEST_FILENAME = "metaplate-manifest.json";
 
@@ -424,9 +424,12 @@ export type RenderInvocation = {
   json: boolean;
   /** Reuse files whose input hash matches the previous manifest. */
   incremental: boolean;
+  /** Platform profiles every file must pass, as `metaplate verify --target` checks them. */
+  socialTargets: SocialTarget[];
+  maxFileSize?: number;
 };
 
-/** Parses `render`: one module path plus output, manifest, and pool options. */
+/** Parses `render`: one module path plus output, manifest, pool, and target options. */
 export function parseRenderInvocation(args: string[]): RenderInvocation {
   const usage = RENDER_USAGE;
   if (args[0] !== "render") throw new Error(usage);
@@ -436,6 +439,8 @@ export function parseRenderInvocation(args: string[]): RenderInvocation {
   let json = false;
   let incremental = false;
   let module: string | undefined;
+  const socialTargets = new Set<SocialTarget>();
+  let maxFileSize: number | undefined;
 
   for (let index = 1; index < args.length; index += 1) {
     const argument = args[index]!;
@@ -444,6 +449,13 @@ export function parseRenderInvocation(args: string[]): RenderInvocation {
       json = true;
     } else if (argument === "--incremental") {
       incremental = true;
+    } else if (argument === "--target") {
+      if (!value || !TARGETS.has(value as SocialTarget)) throw new Error(`Invalid target. ${usage}`);
+      socialTargets.add(value as SocialTarget);
+      index += 1;
+    } else if (argument === "--max-file-size") {
+      maxFileSize = parseInteger(value, "max file size", usage);
+      index += 1;
     } else if (argument === "--out" || argument === "--manifest") {
       if (!value || value.startsWith("--")) throw new Error(`Invalid ${argument.slice(2)} path. ${usage}`);
       if (argument === "--out") outDir = value;
@@ -467,6 +479,8 @@ export function parseRenderInvocation(args: string[]): RenderInvocation {
     concurrency,
     json,
     incremental,
+    socialTargets: [...socialTargets],
+    ...(maxFileSize !== undefined ? { maxFileSize } : {}),
   };
 }
 

@@ -195,13 +195,26 @@ The one exception is an encoder declared with `checkSignature: false` (a
 format Metaplate cannot recognize, such as AVIF): its file is still written
 and hashed, but recorded with `"format": null` and `"verified": false`.
 
-To check the files against a platform profile as well, run
-[`metaplate verify --target`](verification.md#verify-generated-files) over them.
+To hold every file to a platform's published rules as well, pass `--target`,
+once per platform, and `--max-file-size` for a limit of your own:
+
+```sh
+npx metaplate render og.render.mjs --out public --target whatsapp --target linkedin
+```
+
+These are the checks [`metaplate verify --target`](verification.md#verify-generated-files)
+makes, such as WhatsApp's 600 KB limit or LinkedIn's minimum size, so the render
+step needs no second command with the sizes repeated. A file that fails one counts
+as a failed image: it is reported, the command exits `1`, and no manifest is
+written. The image URL is checked only when it is absolute (when the plate sets
+`origin`), because a root-relative URL is resolved by the page that publishes it,
+as Next.js does with `metadataBase`. An image reused by `--incremental` is checked
+again, because the targets are not part of its input hash.
 
 ## Command line
 
 ```text
-metaplate render [--json] [--incremental] [--out DIR] [--manifest FILE] [--concurrency N] <module>
+metaplate render [--json] [--incremental] [--out DIR] [--manifest FILE] [--concurrency N] [--target TARGET] [--max-file-size BYTES] <module>
 ```
 
 | Option | Meaning |
@@ -211,6 +224,8 @@ metaplate render [--json] [--incremental] [--out DIR] [--manifest FILE] [--concu
 | `--manifest FILE` | Where to write the manifest. Default `DIR/metaplate-manifest.json`. Pass a path outside `DIR` to keep the manifest out of the published site. |
 | `--concurrency N` | Render at most `N` images at once, 1 to 256. Default 4. |
 | `--incremental` | Reuse each image whose inputs and file are unchanged since the previous manifest; see [Incremental builds](#incremental-builds). |
+| `--target TARGET` | Fail any file that breaks this platform's rules. Repeat for several. The names are the [compatibility profiles](compatibility.md). |
+| `--max-file-size BYTES` | Fail any file larger than this. |
 | `--json` | Print one JSON report instead of a line per image. |
 
 Without `--json`, each image prints `✓ <path> <width>x<height> <format> (<bytes>

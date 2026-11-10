@@ -5,6 +5,15 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ## [Unreleased]
 
+### Added
+
+- `metaplate render --target TARGET` and `--max-file-size BYTES` apply the checks
+  `metaplate verify --target` makes to every file the render writes (#184). A card
+  over WhatsApp's 600 KB limit, or under LinkedIn's minimum size, now fails the
+  render step: it is reported, the command exits 1, and no manifest is written. The
+  image URL is checked only when it is absolute, and an image reused by
+  `--incremental` is checked again.
+
 ### Documentation
 
 - New guides, built from how real projects use Metaplate, with each behavior they
