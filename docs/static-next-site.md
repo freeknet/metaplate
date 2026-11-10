@@ -568,5 +568,5 @@ crawlers reject. Rename the folder, or add
 | The card is set in the wrong typeface, with no error | `fontFamily` must equal the family's name exactly, such as `"JetBrains Mono"`. See [Several fonts](recipes.md#several-fonts). |
 | A shared link shows the old card | The crawler cached the old URL. `version: "copy"` gives changed copy a new URL; raise `revision` when only the layout changed. See [Versioned image URLs](metadata.md#versioned-image-urls). |
 | `verify-page` cannot resolve your host on a local run | The tags name the production origin. Use [the audit](testing.md#audit-the-whole-export) before the deploy. |
-| `verifySocialImage` reports an absolute HTTPS URL is required | The plate has no `origin`. See [Check bytes against the descriptor](testing.md#check-bytes-against-the-descriptor). |
+| `verifySocialImage` reports an absolute HTTPS URL is required | The plate has no `origin`, or the build's origin is `http://localhost`. Set `origin`, or pass `checkUrl: false` for builds that are never crawled. See [Check bytes against the descriptor](testing.md#check-bytes-against-the-descriptor). |
 | The overflow guard says the text needs more room than its container has | The text is too long for the card. See [Long titles](recipes.md#long-titles). |
