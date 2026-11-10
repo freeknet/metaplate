@@ -374,7 +374,8 @@ export default listingCards;
 ```
 
 `metaplate render` already renders concurrently, reports every failure, and exits
-`1` if any card failed, so a build script does not need its own queue. It does two
+`1` if any card failed, so a build script does not need its own queue. With
+`--target`, it also fails a card that breaks a platform's rules. It does two
 things you may want to add for a large, changing set. It does not delete the card of
 a record that has gone away, and files written before a failure stay in place. So
 render into a scratch directory and swap it in only when the whole run succeeds:

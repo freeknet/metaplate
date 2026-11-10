@@ -15,6 +15,12 @@ are intact but whose payload cannot decode is outside its scope:
 npx metaplate verify --size 1200x630 public/og.png
 ```
 
+`--size` applies to the files after it, so it comes first. A file before any
+`--size` fails with `--size WIDTHxHEIGHT is required before the first file`,
+naming the file. For cards [`metaplate render`](render-cli.md) writes, its own
+`--target` applies the platform checks below as it writes them, with no sizes to
+repeat.
+
 Files of different sizes can be checked in one invocation by repeating the
 size group:
 
