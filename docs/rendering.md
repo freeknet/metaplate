@@ -612,7 +612,7 @@ cards at build time with `metaplate/node`.
 
 ## Plate constraints
 
-A plate is a Satori layout that rasterises to an image, not a DOM tree. Five
+A plate is a Satori layout that rasterises to an image, not a DOM tree. These
 differences bite in practice:
 
 - **Size a padded root as `border-box`.** Satori sizes boxes as
@@ -621,11 +621,21 @@ differences bite in practice:
   bottom or right is then drawn partly or wholly off the image, and a one-line
   title can vanish, leaving a blank card that still has the right format and
   size. Set `boxSizing: "border-box"` on that root.
-- **Inline SVG `<title>` renders as visible text.** Satori supports a subset of
-  SVG and lays out an unsupported element's children as text, so a `<title>`
-  inside an inlined logo prints the word across the mark. Leave it out: the
-  accessible name for a social card is the `alt` the plate already derives, and
-  an element inside a PNG is unreachable to assistive technology anyway.
+- **Through `createNextOg`, an inline SVG `<title>` renders as visible text.**
+  `next/og` lays out the element's children as text, so a `<title>` inside an
+  inlined logo prints the word across the mark. `createNodeOg` draws nothing for
+  it. Leave it out either way: the accessible name for a social card is the `alt`
+  the plate already derives, and an element inside a PNG is unreachable to
+  assistive technology anyway.
+- **An `<img>` stretches unless told otherwise.** With a `width` and a `height`
+  that differ from the image's shape, it is distorted, with no error. Set
+  `objectFit` to `"cover"` or `"contain"`; see
+  [Photos of any shape](recipes.md#photos-of-any-shape).
+- **There is no stylesheet, and nothing warns you.** `var(--brand)` is ignored, so
+  keep [colors in a module](recipes.md#brand-colors). A `fontFamily` that was not
+  loaded falls back to another face, and a `fontWeight` that was not loaded uses
+  the nearest one; see [Several fonts](recipes.md#several-fonts). No render guard
+  catches either.
 - **React accessibility lint rules do not apply.** Rules such as Biome's
   `lint/a11y/noSvgWithoutTitle` or `jsx-a11y/*` are written for DOM SVG and will
   ask for exactly the `<title>` above. Suppress them in the plate file rather

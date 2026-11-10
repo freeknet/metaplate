@@ -1,7 +1,8 @@
 # API reference
 
 Every export, by entry point, with the guide that documents it. The constants
-and small helpers that no guide covers are described below the table.
+and small helpers that no guide covers are described below the table. The
+[plate reference](plate.md) lists the options a plate takes and what it returns.
 
 | Entry point | Exports | Guide |
 | --- | --- | --- |
