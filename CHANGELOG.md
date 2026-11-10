@@ -15,6 +15,15 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Fixed
 
+- **Security:** a cached view's `handlerFrom` and `fetchableFrom` ignored the
+  `{ signed }` route option, so adding `.cached()` to a signed route, from
+  JavaScript where the type checker could not catch it, served unsigned requests.
+  Both now take the plate's route options and answer a missing or invalid
+  signature with the configured 403 or 404 and `Cache-Control: no-store` before
+  the resolver runs or the cache is read, on `metaplate/node` and `metaplate/edge`.
+- A cached response to a `HEAD` request that would get a 200 carried the image
+  body. It now has the same headers as the `GET` response, `ETag` and
+  `Content-Length` included, and no body.
 - `metaplate render --target` failed every card of a plate whose origin is
   `http://localhost`, as local and CI builds often are, and `metaplate preview
   --target` flagged every card of a plate with root-relative URLs. Both now check
