@@ -5,6 +5,8 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { ImageSize } from "../core/social-image.js";
 import { verifyImage, type ImageFormat } from "../image.js";
+import type { SocialTarget } from "../verify/compatibility-profiles.js";
+import { verifySocialImage } from "../verify/social-verification.js";
 import { assertVersionToken } from "../metadata/image-version.js";
 import { taggedSerialize } from "../core/stable-hash.js";
 import { METAPLATE_VERSION } from "../core/version.js";
@@ -410,6 +412,7 @@ async function reuseImage(
   previous: ManifestImage | undefined,
   hash: string | null,
   realRoot: string,
+  checks: RenderTargetChecks | undefined,
 ): Promise<ManifestImage | undefined> {
   if (hash === null || previous?.inputHash !== hash || typeof image.plate.image !== "function") return undefined;
   await assertSafeTarget(image, realRoot, "reuse");
@@ -422,10 +425,51 @@ async function reuseImage(
       return undefined;
     }
   }
-  const url = image.version === undefined
-    ? image.plate.image(image.route, image.copy).url
-    : image.plate.image(image.route, image.copy, { version: image.version }).url;
-  return { ...copyManifestImage(previous), url };
+  const descriptor = image.version === undefined
+    ? image.plate.image(image.route, image.copy)
+    : image.plate.image(image.route, image.copy, { version: image.version });
+  // Targets are not part of the input hash, so a reused file is checked again.
+  assertTargets(existing, descriptor, previous.size, previous.contentType, checks);
+  return { ...copyManifestImage(previous), url: descriptor.url };
+}
+
+/** The platform checks `metaplate render --target` and `--max-file-size` apply to each file. */
+export type RenderTargetChecks = {
+  targets: readonly SocialTarget[];
+  maxFileSize?: number;
+};
+
+/**
+ * Fails a file that breaks a platform's published rules, such as WhatsApp's
+ * file size limit, with the same checks as `metaplate verify --target`. Only
+ * an absolute image URL is checked: a root-relative one is resolved by the
+ * page that publishes it, as Next.js does against `metadataBase`.
+ */
+function assertTargets(
+  bytes: Uint8Array,
+  descriptor: { readonly url?: unknown; readonly alt?: unknown },
+  size: ImageSize,
+  contentType: string,
+  checks: RenderTargetChecks | undefined,
+): void {
+  if (checks === undefined || (checks.targets.length === 0 && checks.maxFileSize === undefined)) return;
+  const { url, alt } = descriptor;
+  const report = verifySocialImage(bytes, {
+    ...(typeof url === "string" && /^[a-z][a-z\d+.-]*:/i.test(url) ? { url } : {}),
+    ...(typeof alt === "string" ? { alt } : {}),
+    width: size.width,
+    height: size.height,
+    type: contentType,
+  }, {
+    targets: [...checks.targets],
+    ...(checks.maxFileSize === undefined ? {} : { maxFileSize: checks.maxFileSize }),
+  });
+  const errors = report.issues.filter((issue) => issue.severity === "error");
+  if (errors.length > 0) {
+    throw new Error(errors
+      .map((issue) => (issue.target ? `${issue.target} compatibility failed: ${issue.message}` : issue.message))
+      .join("; "));
+  }
 }
 
 /** File extensions a static host maps to each image content type. */
@@ -468,7 +512,12 @@ function assertExtension(path: string, contentType: string): void {
  * `assertSafeTarget`, and the bytes read back must hash identically and pass
  * `verifyImage` at the artifact's own size and format.
  */
-async function writeImage(image: PlannedImage, realRoot: string, hash: string | null): Promise<ManifestImage> {
+async function writeImage(
+  image: PlannedImage,
+  realRoot: string,
+  hash: string | null,
+  checks: RenderTargetChecks | undefined,
+): Promise<ManifestImage> {
   const artifact = image.version === undefined
     ? await image.plate.artifact(image.route, image.copy)
     : await image.plate.artifact(image.route, image.copy, { version: image.version });
@@ -483,8 +532,10 @@ async function writeImage(image: PlannedImage, realRoot: string, hash: string | 
   }
   const format = artifact.format ?? null;
   if (format !== null) verifyImage(written, artifact.size, format);
-  const url = artifact.metadata.openGraph.images[0]?.url;
+  const first = artifact.metadata.openGraph.images[0];
+  const url = first?.url;
   if (url === undefined) throw new Error(`${image.path}: the artifact metadata names no image URL`);
+  assertTargets(written, first!, artifact.size, artifact.contentType, checks);
   return {
     path: image.path,
     url,
@@ -509,6 +560,8 @@ export type RenderFilesOptions = {
   previous?: ReadonlyMap<string, ManifestImage>;
   /** Installed peer versions for `inputHash`; default all `null`. */
   peers?: PeerVersions;
+  /** Platform checks each file must pass, as `metaplate verify --target` applies them. */
+  checks?: RenderTargetChecks;
 };
 
 const NO_PEERS: PeerVersions = Object.freeze({ satori: null, "@resvg/resvg-js": null, "@resvg/resvg-wasm": null });
@@ -525,11 +578,11 @@ export async function renderFiles(
     try {
       const hash = await inputHash(image, options.peers ?? NO_PEERS);
       const reused = options.previous
-        ? await reuseImage(image, options.previous.get(image.path), hash, realRoot)
+        ? await reuseImage(image, options.previous.get(image.path), hash, realRoot, options.checks)
         : undefined;
       outcome = reused
         ? { ...reused, valid: true, issues: [], reused: true }
-        : { ...(await writeImage(image, realRoot, hash)), valid: true, issues: [], reused: false };
+        : { ...(await writeImage(image, realRoot, hash, options.checks)), valid: true, issues: [], reused: false };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       outcome = {
