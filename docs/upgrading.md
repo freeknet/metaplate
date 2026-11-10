@@ -85,6 +85,12 @@ Work through every row newer than the version you are on.
 | 0.7.0 | `output.contentType` must be a valid media type. | Correct it, or use `format`. |
 | 0.7.0 | `socialImageCompatibility` throws a `TypeError` for a descriptor with no `width` or `height`. | Pass both. |
 | 0.8.1 | The `satori` peer floor rises to 0.38.2. | Upgrade Satori. Below it, `inset` and fragments misbehave with no error. |
+| 0.8.4 | `cached()` throws a `TypeError` for copy that holds a function, and `--incremental` always renders such a page, because a function's captured values cannot be keyed. | Pass the data the function uses instead of the function. |
+
+Upgrading to 0.8.4 also changes every render-cache key and `--incremental` input
+hash once, because both now keep the copy's key order. A shared cache store misses
+once, and the first `--incremental` build renders every image. Published `?v=`
+tokens do not change.
 
 ### Per-render size
 
@@ -144,6 +150,8 @@ Nothing here is required, but older code often has a shorter form now.
 | A hand-made `?v=` on image URLs | [`version: "copy"`](metadata.md#versioned-image-urls) | 0.8.0 |
 | `spawn` of the `metaplate` binary, or `NODE_OPTIONS=` in an npm script | [`runCli`](render-cli.md#loading-typescript-and-jsx) | 0.8.1 |
 | A `metaplate verify --target` step after `metaplate render`, repeating each size | [`metaplate render --target`](render-cli.md#formats-and-verification) | 0.8.3 |
+| A test that drops or rewrites `url` so `verifySocialImage` skips the HTTPS rule | [`checkUrl: false`](testing.md#check-bytes-against-the-descriptor) | 0.8.4 |
+| A signed route that left out `cached()` because it dropped `{ signed }` | [`cached().handlerFrom(resolve, { signed })`](signed-routes.md) | 0.8.4 |
 
 ## Workarounds you can delete
 
