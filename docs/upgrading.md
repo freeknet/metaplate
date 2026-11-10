@@ -143,6 +143,7 @@ Nothing here is required, but older code often has a shorter form now.
 | A script scraping `og:image` with a regular expression | [`extractPageSocialMetadata`](testing.md#audit-the-whole-export) | 0.8.0 |
 | A hand-made `?v=` on image URLs | [`version: "copy"`](metadata.md#versioned-image-urls) | 0.8.0 |
 | `spawn` of the `metaplate` binary, or `NODE_OPTIONS=` in an npm script | [`runCli`](render-cli.md#loading-typescript-and-jsx) | 0.8.1 |
+| A `metaplate verify --target` step after `metaplate render`, repeating each size | [`metaplate render --target`](render-cli.md#formats-and-verification) | 0.8.3 |
 
 ## Workarounds you can delete
 
