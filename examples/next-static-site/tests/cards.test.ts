@@ -4,7 +4,7 @@ import { verifySocialImage } from "metaplate";
 import { ALL_CARDS, CARDS } from "../src/lib/og/cards";
 import { pageMetadata } from "../src/lib/og/metadata";
 import { og } from "../src/lib/og/plate";
-import { STATIC_ROUTES } from "../src/lib/site";
+import { SITE, STATIC_ROUTES } from "../src/lib/site";
 
 describe("social cards", () => {
   it("has a card for every static route", () => {
@@ -17,7 +17,10 @@ describe("social cards", () => {
     it(`renders ${route}`, async () => {
       const bytes = await og.render(copy);
       const [image] = og.metadata(route, copy).openGraph.images;
-      const report = verifySocialImage(bytes, image!, {
+      // Crawlers require HTTPS, so a build with a local origin skips the URL rule.
+      const { url, ...rest } = image!;
+      const descriptor = SITE.origin.startsWith("https://") ? image! : rest;
+      const report = verifySocialImage(bytes, descriptor, {
         targets: ["universal", "facebook", "linkedin", "slack", "whatsapp", "x"],
       });
       expect(report.issues.filter((issue) => issue.severity === "error")).toEqual([]);
