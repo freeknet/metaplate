@@ -734,7 +734,11 @@ with both reports all of them.
   ends past it by more than half a pixel. The box is the element's, before
   any CSS `transform`, and includes its padding: a text element with padding
   reaching outside is reported even when the glyphs themselves are visible.
-  Text deliberately set off the edge needs `"warn"` or `"off"`.
+  Text deliberately set off the edge needs `"warn"` or `"off"`. The message
+  names the likely cause. When the root itself is larger than the canvas, it
+  points at a padded root without `boxSizing: "border-box"`. Otherwise the
+  text needs more room than its container has, and the fix is shorter text, a
+  smaller font size, or [`lineClamp`](recipes.md#long-titles).
 - **`blank`** reads the raw RGBA pixels after Resvg rasterises them and
   before any `output` encoder runs, stopping at the first pixel that differs
   from the first; fully transparent pixels count as one color whatever their
