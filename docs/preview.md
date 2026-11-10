@@ -25,7 +25,9 @@ routes a build would refuse. Stop it with Ctrl+C.
   type, and byte count.
 - **Target checks**, when `--target` is given: each image against each
   [compatibility profile](compatibility.md), with every issue's message. A
-  `--max-file-size` ceiling applies to every image too.
+  `--max-file-size` ceiling applies to every image too. As in
+  [`metaplate render`](render-cli.md#formats-and-verification), the image URL is
+  checked only when it is absolute HTTPS.
 - **A failure in place.** A component that throws, an encoder that returns
   the wrong format, or bytes at the wrong size fail that card with the error,
   and the rest of the gallery still renders. A module that cannot be loaded,
