@@ -438,6 +438,42 @@ describe("renderFiles", { timeout: 30_000 }, () => {
     expect(existsSync(path.join(out, "fine", "og-image.png"))).toBe(true);
   });
 
+  it("leaves a good file in place when its replacement fails a check, and leaves no staged file", async () => {
+    const out = await temporary("atomic");
+    let bytes = completePng(1200, 630);
+    const plate = fakePlate({ variants: [], artifact: async () => bytes });
+    const plan = () => planImages([{ plate, pages: [{ route: "/a", copy: 1 }] }], out);
+    const file = path.join(out, "a", "og-image.png");
+
+    expect((await renderFiles(plan(), { outDir: out, concurrency: 1 }))[0]!.valid).toBe(true);
+    // A previous build's card, distinct from anything this run renders.
+    const good = new TextEncoder().encode("the previous build's card");
+    await writeFile(file, good);
+
+    // Wrong dimensions, then a target rule, each fail without touching the file.
+    bytes = completePng(1080, 1080);
+    expect((await renderFiles(plan(), { outDir: out, concurrency: 1 }))[0]!.valid).toBe(false);
+    expect(new Uint8Array(await readFile(file))).toEqual(good);
+
+    bytes = completePng(1200, 630);
+    const tooLarge = await renderFiles(plan(), { outDir: out, concurrency: 1, checks: { targets: [], maxFileSize: 10 } });
+    expect(tooLarge[0]!.valid).toBe(false);
+    expect(new Uint8Array(await readFile(file))).toEqual(good);
+
+    expect(await readdir(path.join(out, "a"))).toEqual(["og-image.png"]);
+  });
+
+  it("removes the staged file and keeps the target when the staged bytes fail their check", async () => {
+    const dir = await temporary("staged");
+    const target = path.join(dir, "og.png");
+    await writeFile(target, "previous");
+    await expect(writeFileAtomic(target, new Uint8Array([1, 2, 3]), async () => {
+      throw new Error("read back differently");
+    })).rejects.toThrow("read back differently");
+    expect(await readFile(target, "utf8")).toBe("previous");
+    expect(await readdir(dir)).toEqual(["og.png"]);
+  });
+
   it("refuses to write through a linked directory that leaves the output directory", async () => {
     const root = await temporary("link");
     const out = path.join(root, "out");

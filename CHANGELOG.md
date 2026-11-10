@@ -24,6 +24,13 @@ All notable changes to Metaplate are documented in this file. The project uses
 - A cached response to a `HEAD` request that would get a 200 carried the image
   body. It now has the same headers as the `GET` response, `ETag` and
   `Content-Length` included, and no body.
+- `metaplate render` wrote each image over its target before checking it, so a card
+  that then failed its format, size, or `--target` check had already replaced the
+  previous build's good file. Every check that needs only the bytes now runs
+  first, and the bytes are staged in a temporary file beside the target, read back
+  and checked, and renamed into place only when they pass. A failed image keeps
+  its previous file and leaves no temporary file. Each image is replaced
+  atomically; a run is still not a transaction, as the render guide explains.
 - The render cache and `metaplate render --incremental` sorted copy's object keys,
   so two copies that differ only in key order shared an entry. A component that
   reads that order (`Object.values(copy)`) drew them differently, and the cache
