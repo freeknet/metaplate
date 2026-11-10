@@ -102,6 +102,13 @@ describe("parseVerifyTargets", () => {
     expect(() => parseVerifyTargets(args)).toThrow(VERIFY_USAGE);
   });
 
+  it("names the missing --size instead of printing only the usage line", () => {
+    expect(() => parseVerifyTargets(["verify", "public/og-image.jpg"]))
+      .toThrow(`--size WIDTHxHEIGHT is required before the first file (public/og-image.jpg). ${VERIFY_USAGE}`);
+    expect(() => parseVerifyUrlInvocation(["verify-url", "https://example.com/og.png"]))
+      .toThrow("--size WIDTHxHEIGHT is required before the first URL (https://example.com/og.png).");
+  });
+
   it("rejects a --size or --format that no file follows instead of ignoring it", () => {
     expect(() => parseVerifyTargets(["verify", "--size", "1200x630", "ok.png", "--format", "jpeg"]))
       .toThrow("--format applies to the files after it, but none follow it.");

@@ -14,6 +14,16 @@ All notable changes to Metaplate are documented in this file. The project uses
   image URL is checked only when it is absolute, and an image reused by
   `--incremental` is checked again.
 
+### Fixed
+
+- `metaplate verify` and `verify-url` given a file or URL before any `--size`
+  now say that `--size WIDTHxHEIGHT` is required before it, instead of printing
+  only the usage line (#183).
+- The `overflow` guard advises `boxSizing: "border-box"` only when the plate's root
+  is larger than the canvas. A border-box root holding text too long for it now
+  gets a message saying the text needs more room than its container has, with
+  shortening, a smaller font size, or `lineClamp` as the fixes (#182).
+
 ### Documentation
 
 - New guides, built from how real projects use Metaplate, with each behavior they

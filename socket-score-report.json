@@ -115,6 +115,13 @@
             "metaplate > @astrojs/node > astro > @astrojs/markdown-satteri > satteri > @bruits/satteri-wasm32-wasi > @napi-rs/wasm-runtime > @emnapi/core > tslib",
             "metaplate > @astrojs/node > astro > @astrojs/markdown-satteri > satteri > @bruits/satteri-wasm32-wasi > @napi-rs/wasm-runtime > @emnapi/runtime > tslib",
             "metaplate > @astrojs/node > astro > @astrojs/markdown-satteri > satteri > @bruits/satteri-wasm32-wasi > @napi-rs/wasm-runtime > @tybys/wasm-util > tslib",
+            "metaplate > @astrojs/node > astro > rolldown > @rolldown/binding-wasm32-wasi > @emnapi/core > @emnapi/wasi-threads > tslib",
+            "metaplate > @astrojs/node > astro > rolldown > @rolldown/binding-wasm32-wasi > @emnapi/core > tslib",
+            "metaplate > @astrojs/node > astro > rolldown > @rolldown/binding-wasm32-wasi > @emnapi/runtime > tslib",
+            "metaplate > @astrojs/node > astro > rolldown > @rolldown/binding-wasm32-wasi > @napi-rs/wasm-runtime > @emnapi/core > @emnapi/wasi-threads > tslib",
+            "metaplate > @astrojs/node > astro > rolldown > @rolldown/binding-wasm32-wasi > @napi-rs/wasm-runtime > @emnapi/core > tslib",
+            "metaplate > @astrojs/node > astro > rolldown > @rolldown/binding-wasm32-wasi > @napi-rs/wasm-runtime > @emnapi/runtime > tslib",
+            "metaplate > @astrojs/node > astro > rolldown > @rolldown/binding-wasm32-wasi > @napi-rs/wasm-runtime > @tybys/wasm-util > tslib",
             "metaplate > @astrojs/node > astro > sharp > @img/sharp-freebsd-wasm32 > @img/sharp-wasm32 > @emnapi/runtime > tslib",
             "metaplate > @astrojs/node > astro > sharp > @img/sharp-webcontainers-wasm32 > @img/sharp-wasm32 > @emnapi/runtime > tslib",
             "metaplate > astro > @astrojs/compiler-rs > @astrojs/compiler-binding > @astrojs/compiler-binding-wasm32-wasi > @emnapi/core > @emnapi/wasi-threads > tslib",
@@ -131,6 +138,13 @@
             "metaplate > astro > @astrojs/markdown-satteri > satteri > @bruits/satteri-wasm32-wasi > @napi-rs/wasm-runtime > @emnapi/core > tslib",
             "metaplate > astro > @astrojs/markdown-satteri > satteri > @bruits/satteri-wasm32-wasi > @napi-rs/wasm-runtime > @emnapi/runtime > tslib",
             "metaplate > astro > @astrojs/markdown-satteri > satteri > @bruits/satteri-wasm32-wasi > @napi-rs/wasm-runtime > @tybys/wasm-util > tslib",
+            "metaplate > astro > rolldown > @rolldown/binding-wasm32-wasi > @emnapi/core > @emnapi/wasi-threads > tslib",
+            "metaplate > astro > rolldown > @rolldown/binding-wasm32-wasi > @emnapi/core > tslib",
+            "metaplate > astro > rolldown > @rolldown/binding-wasm32-wasi > @emnapi/runtime > tslib",
+            "metaplate > astro > rolldown > @rolldown/binding-wasm32-wasi > @napi-rs/wasm-runtime > @emnapi/core > @emnapi/wasi-threads > tslib",
+            "metaplate > astro > rolldown > @rolldown/binding-wasm32-wasi > @napi-rs/wasm-runtime > @emnapi/core > tslib",
+            "metaplate > astro > rolldown > @rolldown/binding-wasm32-wasi > @napi-rs/wasm-runtime > @emnapi/runtime > tslib",
+            "metaplate > astro > rolldown > @rolldown/binding-wasm32-wasi > @napi-rs/wasm-runtime > @tybys/wasm-util > tslib",
             "metaplate > astro > sharp > @img/sharp-freebsd-wasm32 > @img/sharp-wasm32 > @emnapi/runtime > tslib",
             "metaplate > astro > sharp > @img/sharp-webcontainers-wasm32 > @img/sharp-wasm32 > @emnapi/runtime > tslib",
             "metaplate > next > @swc/helpers > tslib",
@@ -303,11 +317,12 @@
         "version": "16.4.5",
         "dependencyEvidence": {
           "source": "package-lock.json",
-          "paths": [],
-          "reachability": "unknown",
-          "unresolved": true,
-          "reason": "next@16.4.5 not found in the current dependency inventory"
-        }
+          "paths": [
+            "metaplate > next"
+          ],
+          "reachability": "runtime-peer-optional"
+        },
+        "dependencyPath": "metaplate > next"
       },
       {
         "category": "supplyChainRisk",

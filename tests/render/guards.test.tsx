@@ -344,6 +344,37 @@ describe("overflow guard", () => {
   );
 
   it(
+    "says text does not fit, not border-box, when a border-box root holds a title too long for it",
+    async () => {
+      const component = (copy: Copy) => (
+        <div
+          style={{
+            boxSizing: "border-box",
+            width: "100%",
+            height: "100%",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
+            padding: 56,
+            background: "#111111",
+            color: "#ffffff",
+            fontFamily: "Inter",
+          }}
+        >
+          <div style={{ display: "flex", fontSize: 30 }}>TOP LABEL</div>
+          <div style={{ display: "flex", fontSize: 54, lineHeight: 1.1 }}>{copy.title}</div>
+          <div style={{ display: "flex", fontSize: 30 }}>FOOT LABEL</div>
+        </div>
+      );
+      const plate = createSvgOg({ ...base, component, guards: { overflow: "error" } });
+      const error = await guardError(plate.renderSvg({ title: "A long card title that goes on ".repeat(60) }));
+      expect(error.message).toContain("the text needs more room than its container has");
+      expect(error.message).not.toContain("border-box");
+    },
+    RENDER_TIMEOUT,
+  );
+
+  it(
     "accepts the same layout with border-box, and bleeding elements that hold no text",
     async () => {
       const component = (copy: Copy) => (
