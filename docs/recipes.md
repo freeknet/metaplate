@@ -248,8 +248,7 @@ Choose by who writes the copy:
 
 - **You write it:** leave the clamp out, and let the `overflow` guard fail the build.
   A truncated headline is worse than a build error you can fix in a minute. The
-  guard's message may suggest `boxSizing: "border-box"` even when the root already
-  has it; if so, the text is simply too long.
+  guard's message says when the text needs more room than its container has.
 - **Someone else's data writes it:** keep the clamp, because one long row should not
   block the deploy.
 - **One line only:** use `whiteSpace: "nowrap"`, `overflow: "hidden"`, and

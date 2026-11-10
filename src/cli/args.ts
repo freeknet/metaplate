@@ -219,7 +219,12 @@ function parseGroups(args: string[], command: string, usage: string, flags: Comm
       continue;
     }
     // Unsized commands have no file operands, so an unknown flag is a typo.
-    if (!argument || (sized ? !size : argument.startsWith("--"))) throw new Error(usage);
+    if (!argument || (!sized && argument.startsWith("--"))) throw new Error(usage);
+    if (sized && !size) {
+      if (argument.startsWith("--")) throw new Error(usage);
+      const operand = command === "verify" ? "file" : "URL";
+      throw new Error(`--size WIDTHxHEIGHT is required before the first ${operand} (${argument}). ${usage}`);
+    }
     entries.push({ value: argument, ...(size ? { size } : {}), ...(format ? { format } : {}) });
     openGroup = undefined;
   }
