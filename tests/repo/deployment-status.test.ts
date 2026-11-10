@@ -3,7 +3,7 @@ import { validateDeploymentManifest } from "../../scripts/release/verify-deploym
 
 const base = {
   schemaVersion: 1,
-  release: "0.8.2",
+  release: "0.8.3",
   status: "in-progress",
   policy: {
     certifiedRequires: [

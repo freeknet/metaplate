@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "release": "0.8.2",
+  "release": "0.8.3",
   "status": "complete",
   "policy": {
     "certifiedRequires": [
