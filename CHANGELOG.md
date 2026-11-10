@@ -5,6 +5,8 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-11-09
+
 ### Added
 
 - `verifySocialImage` accepts `checkUrl` and `checkAlt`, as `socialImageCompatibility`
@@ -1237,7 +1239,8 @@ reflects that `render` may return any consumer-encoded format ([#54]).
 - Typed package exports for framework-neutral, rendering, Node.js, Next.js,
   font, and PNG entry points.
 
-[Unreleased]: https://github.com/freeknet/metaplate/compare/v0.8.3...HEAD
+[Unreleased]: https://github.com/freeknet/metaplate/compare/v0.8.4...HEAD
+[0.8.4]: https://github.com/freeknet/metaplate/compare/v0.8.3...v0.8.4
 [0.8.3]: https://github.com/freeknet/metaplate/compare/v0.8.2...v0.8.3
 [0.8.2]: https://github.com/freeknet/metaplate/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/lnorton89/metaplate/compare/v0.8.0...v0.8.1

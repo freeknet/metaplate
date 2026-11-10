@@ -7,7 +7,7 @@
 [![CI](https://github.com/freeknet/metaplate/actions/workflows/ci.yml/badge.svg)](https://github.com/freeknet/metaplate/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/freeknet/metaplate/actions/workflows/codeql.yml/badge.svg)](https://github.com/freeknet/metaplate/actions/workflows/codeql.yml)
 [![npm](https://img.shields.io/npm/v/metaplate)](https://www.npmjs.com/package/metaplate)
-[![Socket Badge](https://badge.socket.dev/npm/package/metaplate/0.8.2)](https://socket.dev/npm/package/metaplate/overview/0.8.2)
+[![Socket Badge](https://badge.socket.dev/npm/package/metaplate/0.8.3)](https://socket.dev/npm/package/metaplate/overview/0.8.3)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Composable, framework-neutral Open Graph image tooling for TypeScript.
