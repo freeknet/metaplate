@@ -5,6 +5,14 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ## [Unreleased]
 
+### Fixed
+
+- `metaplate preview` given a `.tsx` or `.ts` module this process has no loader
+  for no longer tells the page to "fix the module and save it", which no save can
+  do. The page now says to restart the preview under a loader, such as `tsx`
+  through `runCli`, and keeps the save advice for errors the module itself throws
+  (#196). The preview guide shows the `runCli` recipe for JSX plates.
+
 ## [0.8.3] - 2026-11-09
 
 ### Added

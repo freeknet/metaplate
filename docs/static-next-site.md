@@ -248,7 +248,9 @@ export const og = createNodeOg<CardCopy>({
 This plate is PNG because it is flat color. A card with a photograph in it should
 be JPEG; see [Text beside a photograph](recipes.md#text-beside-a-photograph). While
 you design it, [`metaplate preview`](preview.md) shows every card with layout boxes
-and crop overlays, and reloads on save.
+and crop overlays, and reloads on save. The plate is JSX, so start the preview under
+`tsx` too, with a script like the render one in the next step; see
+[Plates written in JSX](preview.md#plates-written-in-jsx).
 
 ## 4. Render before the build
 
