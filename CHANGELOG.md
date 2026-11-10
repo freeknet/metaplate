@@ -13,6 +13,15 @@ All notable changes to Metaplate are documented in this file. The project uses
   through `runCli`, and keeps the save advice for errors the module itself throws
   (#196). The preview guide shows the `runCli` recipe for JSX plates.
 
+### Documentation
+
+- The export audit in the testing guide no longer fails every build whose origin
+  is not HTTPS, such as a local or CI build at `http://localhost` (#195). It checks
+  image URLs only when the origin is HTTPS, and otherwise checks the files and tags.
+  It also fails a page that names another page's card, which catches a page that
+  inherits metadata it should override. The example's unit test applies the same
+  URL rule.
+
 ## [0.8.3] - 2026-11-09
 
 ### Added
