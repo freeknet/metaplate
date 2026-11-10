@@ -709,11 +709,18 @@ export async function writeFileAtomic(file: string, text: string): Promise<void>
 const TYPESCRIPT = /\.(?:ts|mts|cts)$/i;
 const JSX = /\.(?:tsx|jsx)$/i;
 
+/**
+ * A module this process has no loader for, such as JSX with no JSX-capable
+ * loader registered. Editing the module cannot fix it; restarting under a
+ * loader can, so `metaplate preview` gives that advice instead of "save".
+ */
+export class ModuleLoaderError extends Error {}
+
 /** Rewrites the loader's extension and syntax errors into what to do next. */
 function loadError(file: string, error: unknown): unknown {
   const code = isObject(error) ? error.code : undefined;
   if (code === "ERR_UNKNOWN_FILE_EXTENSION" && JSX.test(file)) {
-    return new Error(
+    return new ModuleLoaderError(
       `Cannot load ${file}: Node does not transform JSX. Compile it to .js first, ` +
         "author the plate with plain { type, props } objects in a .ts or .mjs module, " +
         "or run the command through runCli from metaplate/cli under tsx, which works on every platform " +
@@ -723,7 +730,7 @@ function loadError(file: string, error: unknown): unknown {
     );
   }
   if (code === "ERR_UNKNOWN_FILE_EXTENSION" && TYPESCRIPT.test(file)) {
-    return new Error(
+    return new ModuleLoaderError(
       `Cannot load ${file}: Node is not stripping TypeScript types in this process. ` +
         "Type stripping is on by default from Node 22.18 and 23.6, needs " +
         "NODE_OPTIONS=--experimental-strip-types on Node 22.6 to 22.17, does not exist " +
