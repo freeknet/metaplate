@@ -87,6 +87,8 @@ render options:
   --out DIR          Directory the site is published from (default public)
   --manifest FILE    Manifest path (default DIR/metaplate-manifest.json)
   --concurrency N    Render at most N images at once (default ${DEFAULT_RENDER_CONCURRENCY})
+  --target NAME      Fail any image that breaks this profile's rules (repeatable)
+  --max-file-size N  Fail any image larger than N bytes
 
 preview options (plus --target and --max-file-size, checked for every image):
   --host HOST        Address to listen on (default 127.0.0.1; anything else warns)

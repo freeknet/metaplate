@@ -24,7 +24,7 @@ import {
   type PlannedImage,
   type RenderFileArtifact,
 } from "../render/files.js";
-import { verifySocialImage } from "../verify/social-verification.js";
+import { verifyPlateImage } from "../verify/social-verification.js";
 
 /**
  * Not an entry point: the engine behind `metaplate preview`. It loads a
@@ -251,14 +251,15 @@ function findingsFor(
 ): PreviewFinding[] {
   const targets = options.socialTargets ?? [];
   if (targets.length === 0 && options.maxFileSize === undefined) return [];
-  const report = verifySocialImage(artifact.bytes, {
+  // The same checks, and the same URL policy, as `metaplate render --target`.
+  const report = verifyPlateImage(artifact.bytes, {
     url: artifact.metadata.openGraph.images[0]!.url,
-    ...(alt === undefined ? {} : { alt }),
+    alt,
     width: artifact.size.width,
     height: artifact.size.height,
     type: artifact.contentType,
   }, {
-    targets: [...targets],
+    targets,
     ...(options.maxFileSize === undefined ? {} : { maxFileSize: options.maxFileSize }),
   });
   const shared = report.issues.filter((found) => found.target === undefined);

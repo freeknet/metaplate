@@ -1,16 +1,27 @@
 import { assertImageSize, type SocialImageVerificationDescriptor } from "../core/social-image.js";
 import {
+  isCrawlerReadyUrl,
   socialImageCompatibility,
   type SocialCompatibilityIssue,
   type SocialCompatibilityOptions,
   type SocialCompatibilityReport,
 } from "./compatibility.js";
+import type { SocialTarget } from "./compatibility-profiles.js";
 import { imageContentType, imageDimensions, type ImageDimensions, type ImageFormat } from "../image.js";
 import { integerOption } from "../core/internal.js";
 
 export type SocialImageVerificationOptions = Omit<SocialCompatibilityOptions, "fileSize" | "checkUrl" | "checkAlt"> & {
   /** Optional application-specific byte ceiling, measured from encoded bytes. */
   maxFileSize?: number;
+  /**
+   * Whether to apply each target's URL rule. Defaults to `true` when the
+   * descriptor has a `url` (or `crawlerReady` is set) and `false` otherwise.
+   * Pass `false` to keep a descriptor's real URL while skipping the rule, as
+   * for a build whose origin is `http://localhost` and will never be crawled.
+   */
+  checkUrl?: boolean;
+  /** Whether to apply the alt-text rules. Defaults to `true` when the descriptor has an `alt`. */
+  checkAlt?: boolean;
 };
 
 export type SocialImageVerificationIssue = Readonly<{
@@ -60,6 +71,33 @@ export function verifySocialImage(
 }
 
 /**
+ * Not part of a public entry point: the platform checks `metaplate render`
+ * and `metaplate preview` apply to a plate's rendered image. The URL rule
+ * runs only on a crawler-ready URL. A root-relative URL is resolved by the
+ * page that publishes it, as Next.js does with `metadataBase`, and an http
+ * one comes from a local or CI origin that is never crawled, so either would
+ * fail every card for a reason the plate cannot fix.
+ */
+export function verifyPlateImage(
+  bytes: Uint8Array,
+  image: Readonly<{ url?: unknown; alt?: unknown; width: number; height: number; type: string }>,
+  options: Readonly<{ targets: readonly SocialTarget[]; maxFileSize?: number }>,
+): SocialImageVerificationReport {
+  const { url, alt } = image;
+  return verifySocialImage(bytes, {
+    ...(typeof url === "string" ? { url } : {}),
+    ...(typeof alt === "string" ? { alt } : {}),
+    width: image.width,
+    height: image.height,
+    type: image.type,
+  }, {
+    targets: [...options.targets],
+    checkUrl: isCrawlerReadyUrl(url),
+    ...(options.maxFileSize === undefined ? {} : { maxFileSize: options.maxFileSize }),
+  });
+}
+
+/**
  * `verifySocialImage` for bytes already measured with `imageDimensions`, so
  * a caller checking one image against many descriptors parses it once.
  */
@@ -87,8 +125,8 @@ export function verifySocialImageFacts(
   };
   const compatibility = socialImageCompatibility(compatibilityDescriptor, {
     ...(options.targets ? { targets: options.targets } : {}),
-    checkUrl: descriptor.url !== undefined || options.crawlerReady === true,
-    checkAlt: descriptor.alt !== undefined,
+    checkUrl: options.checkUrl ?? (descriptor.url !== undefined || options.crawlerReady === true),
+    checkAlt: options.checkAlt ?? descriptor.alt !== undefined,
     fileSize: byteLength,
     ...(options.crawlerReady !== undefined ? { crawlerReady: options.crawlerReady } : {}),
   });

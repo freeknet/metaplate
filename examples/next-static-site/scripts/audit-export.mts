@@ -43,8 +43,9 @@ for (const file of pages) {
     continue;
   }
 
+  // Values come back as written, so resolve a relative URL against the page.
   // `?v=` is a cache-busting token on the URL; the file on disk does not carry it.
-  const { pathname } = new URL(image.url);
+  const { pathname } = new URL(image.url, documentUrl);
   if (pathname !== EXPECTED.get(route)) {
     failures.push(`${page}: names ${pathname}, not its own card ${EXPECTED.get(route) ?? "(none registered)"}`);
     continue;
@@ -54,18 +55,18 @@ for (const file of pages) {
     failures.push(`${page}: ${image.url} is not in the export`);
     continue;
   }
+  const width = Number(image.width);
+  const height = Number(image.height);
+  if (!Number.isInteger(width) || !Number.isInteger(height)) {
+    failures.push(`${page}: og:image:width and og:image:height must both be set`);
+    continue;
+  }
 
-  // Tag values are strings as written, and the descriptor compares numbers.
+  // A missing alt is passed as "" so the targets' alt-text rule fails it.
   const report = verifySocialImage(
     bytes,
-    {
-      ...(CHECK_URLS ? { url: image.url } : {}),
-      ...(image.alt ? { alt: image.alt } : {}),
-      ...(image.type ? { type: image.type } : {}),
-      width: Number(image.width),
-      height: Number(image.height),
-    },
-    { targets: TARGETS },
+    { url: image.url, alt: image.alt ?? "", ...(image.type ? { type: image.type } : {}), width, height },
+    { targets: TARGETS, checkUrl: CHECK_URLS },
   );
   for (const issue of report.issues) {
     if (issue.severity === "error") failures.push(`${page}: ${issue.target ?? ""} ${issue.message}`);

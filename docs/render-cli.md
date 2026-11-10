@@ -206,10 +206,12 @@ These are the checks [`metaplate verify --target`](verification.md#verify-genera
 makes, such as WhatsApp's 600 KB limit or LinkedIn's minimum size, so the render
 step needs no second command with the sizes repeated. A file that fails one counts
 as a failed image: it is reported, the command exits `1`, and no manifest is
-written. The image URL is checked only when it is absolute (when the plate sets
-`origin`), because a root-relative URL is resolved by the page that publishes it,
-as Next.js does with `metadataBase`. An image reused by `--incremental` is checked
-again, because the targets are not part of its input hash.
+written. The image URL is checked only when it is absolute HTTPS. A root-relative
+URL is resolved by the page that publishes it, as Next.js does with `metadataBase`,
+and an `http://localhost` origin belongs to a local or CI build that is never
+crawled, so either would fail every card for no fault of the card. An image reused
+by `--incremental` is checked again, because the targets are not part of its input
+hash.
 
 ## Command line
 
