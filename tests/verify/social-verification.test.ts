@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { socialImageCompatibility } from "../../src/verify/compatibility.js";
 import { imageDimensions } from "../../src/image.js";
-import { verifySocialImage } from "../../src/verify/social-verification.js";
+import { verifyPlateImage, verifySocialImage } from "../../src/verify/social-verification.js";
 import { completePng } from "../helpers/image-fixtures.js";
 
 const pngDescriptor = {
@@ -19,6 +19,38 @@ describe("verifySocialImage", () => {
     });
     expect(report.compatible).toBe(true);
     expect(report.actual).toMatchObject({ format: "png", width: 1200, height: 630 });
+  });
+
+  it("skips the URL or alt rule on request while keeping the descriptor's values", () => {
+    const local = { ...pngDescriptor, url: "http://localhost:4173/og.png" };
+    const targets = ["universal", "linkedin"] as const;
+    const urlCodes = (report: ReturnType<typeof verifySocialImage>) =>
+      report.issues.filter((found) => found.code === "url").length;
+
+    expect(urlCodes(verifySocialImage(completePng(1200, 630), local, { targets }))).toBe(2);
+    expect(verifySocialImage(completePng(1200, 630), local, { targets, checkUrl: false }).compatible).toBe(true);
+    // checkUrl: true enforces the rule for a descriptor with no URL at all.
+    const noUrl = { width: 1200, height: 630, alt: "Project card", type: "image/png" };
+    expect(urlCodes(verifySocialImage(completePng(1200, 630), noUrl, { targets, checkUrl: true }))).toBe(2);
+
+    const emptyAlt = { ...pngDescriptor, alt: "" };
+    expect(verifySocialImage(completePng(1200, 630), emptyAlt, { targets }).compatible).toBe(false);
+    expect(verifySocialImage(completePng(1200, 630), emptyAlt, { targets, checkAlt: false }).compatible).toBe(true);
+  });
+
+  it("checks a plate image's URL only when it is crawler-ready", () => {
+    const image = { alt: "Card", width: 1200, height: 630, type: "image/png" };
+    const options = { targets: ["universal", "linkedin"] as const };
+    for (const url of ["/og.png", "http://localhost:3000/og.png", undefined]) {
+      expect(verifyPlateImage(completePng(1200, 630), { ...image, url }, options).compatible, String(url)).toBe(true);
+    }
+    expect(verifyPlateImage(completePng(1200, 630), { ...image, url: "https://example.com/og.png" }, options).compatible)
+      .toBe(true);
+    // A crawler-ready URL is checked, so the other rules still apply around it.
+    const tooSmall = verifyPlateImage(completePng(600, 315), { ...image, width: 600, height: 315, url: "https://example.com/og.png" }, options);
+    expect(tooSmall.issues.some((found) => found.target === "linkedin" && found.code === "dimensions")).toBe(true);
+    expect(verifyPlateImage(completePng(1200, 630), { ...image, url: "/og.png" }, { ...options, maxFileSize: 10 }).compatible)
+      .toBe(false);
   });
 
   it("allows descriptors without optional dimensions or media type", () => {

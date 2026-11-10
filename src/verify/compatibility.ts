@@ -53,7 +53,9 @@ function issue(
   return Object.freeze({ target, severity, code, message });
 }
 
-function crawlerReadyUrl(value: string): boolean {
+/** True for an absolute HTTPS URL without credentials: one a crawler can be given. */
+export function isCrawlerReadyUrl(value: unknown): value is string {
+  if (typeof value !== "string") return false;
   try {
     const url = new URL(value);
     return url.protocol === "https:" && !url.username && !url.password;
@@ -109,7 +111,7 @@ export function socialImageCompatibility(
     if (options.checkUrl !== false) {
       if (
         (options.crawlerReady || profile.crawlerReady) &&
-        (!image.url || !crawlerReadyUrl(image.url))
+        !isCrawlerReadyUrl(image.url)
       ) {
         issues.push(
           issue(

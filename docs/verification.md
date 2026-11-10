@@ -129,8 +129,9 @@ detected format; `url` and `alt` are checked only when present.
 A present `url` must be crawler-ready for most targets: absolute and HTTPS. A
 plate's URLs are root-relative unless it sets `origin`, so the example above reports
 `compatible: false` for a plate without one, even though Next would publish the
-right URL through `metadataBase`. Set `origin` on the plate, make the descriptor's
-URL absolute for the check, or leave `url` out; see
+right URL through `metadataBase`. Set `origin` on the plate, or pass
+`checkUrl: false` to skip the URL rule while keeping the descriptor (`checkAlt: false`
+does the same for alt text); see
 [Check bytes against the descriptor](testing.md#check-bytes-against-the-descriptor),
 and the rest of [Testing your cards](testing.md) for where this check fits.
 

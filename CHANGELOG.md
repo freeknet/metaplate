@@ -5,8 +5,28 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ## [Unreleased]
 
+### Added
+
+- `verifySocialImage` accepts `checkUrl` and `checkAlt`, as `socialImageCompatibility`
+  already did. `checkUrl: false` keeps a descriptor's real URL while skipping the
+  crawler-ready URL rule, for a build whose origin is `http://localhost` or whose
+  URLs are root-relative until Next's `metadataBase` resolves them. Without the
+  options, a rule runs when the descriptor has the field, as before.
+
 ### Fixed
 
+- `metaplate render --target` failed every card of a plate whose origin is
+  `http://localhost`, as local and CI builds often are, and `metaplate preview
+  --target` flagged every card of a plate with root-relative URLs. Both now check
+  the image URL only when it is absolute HTTPS, through one shared rule.
+- The export audit in the testing guide no longer crashes on a root-relative
+  `og:image` or on a page with no `og:image:width`, which it now reports, and no
+  longer passes a page with no `og:image:alt`. It uses `checkUrl` instead of
+  dropping the URL.
+- The listings recipe's swap moves the live cards aside before renaming the new
+  ones into place, and puts them back if that rename fails, instead of deleting them
+  first.
+- `metaplate --help` lists `--target` and `--max-file-size` under render options.
 - `metaplate preview` given a `.tsx` or `.ts` module this process has no loader
   for no longer tells the page to "fix the module and save it", which no save can
   do. The page now says to restart the preview under a loader, such as `tsx`
