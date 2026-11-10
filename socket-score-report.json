@@ -1,14 +1,14 @@
 {
   "schemaVersion": 2,
   "package": "metaplate",
-  "version": "0.8.2",
-  "source": "https://socket.dev/npm/package/metaplate@0.8.2",
-  "normalizedAt": "2026-11-10T02:38:11.569Z",
+  "version": "0.8.3",
+  "source": "https://socket.dev/npm/package/metaplate@0.8.3",
+  "normalizedAt": "2026-11-10T04:10:36.523Z",
   "captureKind": "socket-cli-import",
   "shallow": {
     "score": {
-      "overall": 79,
-      "supplyChain": 79,
+      "overall": 80,
+      "supplyChain": 80,
       "maintenance": 93,
       "quality": 99,
       "vulnerability": 100,
@@ -17,47 +17,47 @@
     "alerts": [
       {
         "category": "supplyChainRisk",
-        "example": "npm/metaplate@0.8.2",
+        "example": "npm/metaplate@0.8.3",
         "name": "recentlyPublished",
         "severity": "medium",
         "package": "metaplate",
-        "version": "0.8.2",
+        "version": "0.8.3",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [],
           "reachability": "unknown",
           "unresolved": true,
-          "reason": "metaplate@0.8.2 not found in the current dependency inventory"
+          "reason": "metaplate@0.8.3 not found in the current dependency inventory"
         }
       },
       {
         "category": "quality",
-        "example": "npm/metaplate@0.8.2",
+        "example": "npm/metaplate@0.8.3",
         "name": "unpopularPackage",
         "severity": "medium",
         "package": "metaplate",
-        "version": "0.8.2",
+        "version": "0.8.3",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [],
           "reachability": "unknown",
           "unresolved": true,
-          "reason": "metaplate@0.8.2 not found in the current dependency inventory"
+          "reason": "metaplate@0.8.3 not found in the current dependency inventory"
         }
       },
       {
         "category": "supplyChainRisk",
-        "example": "npm/metaplate@0.8.2",
+        "example": "npm/metaplate@0.8.3",
         "name": "urlStrings",
         "severity": "low",
         "package": "metaplate",
-        "version": "0.8.2",
+        "version": "0.8.3",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [],
           "reachability": "unknown",
           "unresolved": true,
-          "reason": "metaplate@0.8.2 not found in the current dependency inventory"
+          "reason": "metaplate@0.8.3 not found in the current dependency inventory"
         }
       }
     ]
@@ -71,7 +71,7 @@
       "vulnerability": 98,
       "license": 70
     },
-    "dependencyCount": 89,
+    "dependencyCount": 90,
     "capabilities": [
       "env",
       "eval",
@@ -285,17 +285,17 @@
       },
       {
         "category": "quality",
-        "example": "npm/metaplate@0.8.2",
+        "example": "npm/metaplate@0.8.3",
         "name": "unpopularPackage",
         "severity": "medium",
         "package": "metaplate",
-        "version": "0.8.2",
+        "version": "0.8.3",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [],
           "reachability": "unknown",
           "unresolved": true,
-          "reason": "metaplate@0.8.2 not found in the current dependency inventory"
+          "reason": "metaplate@0.8.3 not found in the current dependency inventory"
         }
       },
       {
@@ -475,17 +475,17 @@
       },
       {
         "category": "maintenance",
-        "example": "npm/metaplate@0.8.2",
+        "example": "npm/metaplate@0.8.3",
         "name": "unmaintained",
         "severity": "low",
         "package": "metaplate",
-        "version": "0.8.2",
+        "version": "0.8.3",
         "dependencyEvidence": {
           "source": "package-lock.json",
           "paths": [],
           "reachability": "unknown",
           "unresolved": true,
-          "reason": "metaplate@0.8.2 not found in the current dependency inventory"
+          "reason": "metaplate@0.8.3 not found in the current dependency inventory"
         }
       },
       {
@@ -508,7 +508,7 @@
   },
   "provenance": {
     "importedFrom": "Socket CLI export",
-    "inputSha256": "8f3899016498c4701a8588fec35e5df992795117b715b5545a2df1a80b7217d8",
+    "inputSha256": "e5646ef0e5feedb041db081a653b4778565c7a93b33b0e09c931ccc928902fea",
     "dependencyEvidence": "package-lock.json via dependency-model.mjs"
   }
 }

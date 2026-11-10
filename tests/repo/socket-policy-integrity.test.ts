@@ -106,7 +106,7 @@ describe("Socket evidence integrity", () => {
 
   it("rejects score artifact with source for wrong package", async () => {
     const tampered = await withScore(scoreReport, (score) => {
-      (score as JsonObject).source = "https://socket.dev/npm/package/other-package@0.8.2";
+      (score as JsonObject).source = "https://socket.dev/npm/package/other-package@0.8.3";
       return score;
     });
     expect(validateSocketReport(tampered.report).some((error) => error.includes("source") || error.includes("package"))).toBe(true);
@@ -114,7 +114,7 @@ describe("Socket evidence integrity", () => {
 
   it("rejects score artifact with URL suffix garbage", async () => {
     const tampered = await withScore(scoreReport, (score) => {
-      (score as JsonObject).source = "https://socket.dev/npm/package/metaplate@0.8.2/garbage";
+      (score as JsonObject).source = "https://socket.dev/npm/package/metaplate@0.8.3/garbage";
       return score;
     });
     expect(validateSocketReport(tampered.report).some((error) => error.includes("source"))).toBe(true);
@@ -130,7 +130,7 @@ describe("Socket evidence integrity", () => {
 
   it("rejects score artifact with URL with credentials", async () => {
     const tampered = await withScore(scoreReport, (score) => {
-      (score as JsonObject).source = "https://user:pass@socket.dev/npm/package/metaplate@0.8.2";
+      (score as JsonObject).source = "https://user:pass@socket.dev/npm/package/metaplate@0.8.3";
       return score;
     });
     expect(validateSocketReport(tampered.report).some((error) => error.includes("source"))).toBe(true);
@@ -142,7 +142,7 @@ describe("Socket evidence integrity", () => {
   });
 
   it("rejects disposition report with wrong source hostname", async () => {
-    const tampered = { ...dispositionReport, source: "https://evil.dev/npm/package/metaplate@0.8.2" };
+    const tampered = { ...dispositionReport, source: "https://evil.dev/npm/package/metaplate@0.8.3" };
     expect(validateSocketReport(tampered).some((error) => error.includes("source"))).toBe(true);
   });
 
