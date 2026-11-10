@@ -65,6 +65,10 @@ export async function runRender(args: string[]): Promise<void> {
     outDir: invocation.outDir,
     concurrency: invocation.concurrency,
     peers: await peerVersions(invocation.module),
+    checks: {
+      targets: invocation.socialTargets,
+      ...(invocation.maxFileSize === undefined ? {} : { maxFileSize: invocation.maxFileSize }),
+    },
     ...(previous ? { previous } : {}),
     ...(invocation.json ? {} : { onOutcome: reportOutcome }),
   });

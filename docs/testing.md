@@ -7,7 +7,7 @@ cannot, so most projects want more than one.
 | Check | When it runs | What it catches | Network |
 | --- | --- | --- | --- |
 | [Render guards](#fail-the-render) | Every render | Text off the card, missing glyphs, a blank image | No |
-| [`metaplate render` / `verify`](#verify-the-files) | Build | Wrong size or format, a truncated file | No |
+| [`metaplate render` / `verify`](#verify-the-files) | Build | Wrong size or format, a truncated file, and with `--target`, platform limits | No |
 | [Unit tests](#test-the-plate) | Test run | A route with no card, a title that stops fitting, platform limits | No |
 | [Export audit](#audit-the-whole-export) | After the build | A page pointing at a missing or mismatched file | No |
 | [Browser tests](#in-a-browser-test) | E2E run | The same, through the server you test against, plus response headers | Local |
@@ -37,8 +37,14 @@ Guards run on every render, so all the later checks inherit them. They need
 
 ## Verify the files
 
-`metaplate render` verifies every file it writes. To check files from anywhere else,
-or to apply platform rules:
+`metaplate render` verifies every file it writes, and with `--target` it also applies
+a platform's rules, failing a card over WhatsApp's 600 KB limit in the render step:
+
+```sh
+npx metaplate render og.render.mjs --out public --target whatsapp --target linkedin
+```
+
+To check files that something else wrote:
 
 ```sh
 npx metaplate verify --require-content --target whatsapp --target linkedin --size 1200x630 "out/**/og-image.png"

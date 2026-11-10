@@ -122,13 +122,14 @@ describe("parseRenderInvocation", () => {
       concurrency: DEFAULT_RENDER_CONCURRENCY,
       json: false,
       incremental: false,
+      socialTargets: [],
     });
   });
 
   it("parses every flag in any order", () => {
     expect(parseRenderInvocation([
       "render", "--json", "--concurrency", "2", "og.ts", "--out", "dist", "--manifest", "build/manifest.json",
-      "--incremental",
+      "--incremental", "--target", "whatsapp", "--max-file-size", "600000", "--target", "linkedin", "--target", "whatsapp",
     ])).toEqual({
       module: "og.ts",
       outDir: "dist",
@@ -136,6 +137,8 @@ describe("parseRenderInvocation", () => {
       concurrency: 2,
       json: true,
       incremental: true,
+      socialTargets: ["whatsapp", "linkedin"],
+      maxFileSize: 600000,
     });
   });
 
@@ -145,6 +148,9 @@ describe("parseRenderInvocation", () => {
     [["render", "--size", "1200x630", "a.mjs"]],
     [["render", "--out"]],
     [["render", "--out", "--json", "a.mjs"]],
+    [["render", "--target", "myspace", "a.mjs"]],
+    [["render", "--target"]],
+    [["render", "--max-file-size", "-1", "a.mjs"]],
   ])("rejects %j with the render usage", (args) => {
     expect(() => parseRenderInvocation(args)).toThrow(RENDER_USAGE);
   });
@@ -588,6 +594,27 @@ export default {
       valid: false,
       issues: [{ severity: "error", message: expect.stringContaining("Unrecognized image") }],
     });
+  });
+
+  it("fails a card that breaks a --target or --max-file-size rule, and writes no manifest", async () => {
+    const cwd = await project({
+      "og.render.mjs": fakeModule(`export default { plate: plate().variant("square"), pages: [{ route: "/a", copy: {} }] };`),
+    });
+    const passing = runCli(bundlePath, ["render", "--target", "whatsapp", "--target", "discord", "og.render.mjs"], cwd);
+    expect(passing.stderr).toBe("");
+    expect(passing.status).toBe(0);
+
+    const tooLarge = runCli(bundlePath, ["render", "--max-file-size", "10", "og.render.mjs"], cwd);
+    expect(tooLarge.status).toBe(1);
+    expect(tooLarge.stderr).toContain("✗ a/og-image-square.png render failed:");
+    expect(tooLarge.stderr).toContain("10");
+    expect(tooLarge.stderr).toContain("1 of 1 images failed; no manifest was written");
+    expect(existsSync(path.join(cwd, "public", "metaplate-manifest.json"))).toBe(false);
+
+    // A 1080x1080 card is under LinkedIn's 1200x627 minimum.
+    const linkedin = runCli(bundlePath, ["render", "--json", "--target", "linkedin", "og.render.mjs"], cwd);
+    expect(linkedin.status).toBe(1);
+    expect(JSON.parse(linkedin.stdout).images[0].issues[0].message).toContain("linkedin compatibility failed:");
   });
 
   it("refuses a path outside --out before rendering anything", async () => {
