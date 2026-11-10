@@ -341,7 +341,12 @@ function ownText(content: unknown): string {
  */
 export function overflowDetector(report: GuardReport, target: GuardTarget) {
   const { width: canvasWidth, height: canvasHeight } = target.size;
+  // Satori reports the root first. A root that is itself larger than the
+  // canvas is the content-box mistake; otherwise the text simply does not fit.
+  let rootOverflows: boolean | undefined;
   return (node: DetectedNode): void => {
+    rootOverflows ??=
+      node.width > canvasWidth + OVERFLOW_TOLERANCE || node.height > canvasHeight + OVERFLOW_TOLERANCE;
     const text = ownText(node.textContent);
     if (text.trim() === "") return;
     const { left, top, width, height } = node;
@@ -362,7 +367,9 @@ export function overflowDetector(report: GuardReport, target: GuardTarget) {
       message:
         `Text ${quote(text)} in a <${node.type}> is laid out at ${round(left)},${round(top)} ` +
         `${round(width)}x${round(height)}, outside ${describeTarget(target)}; ` +
-        "a root with width/height 100% and padding needs boxSizing: \"border-box\"",
+        (rootOverflows
+          ? "the root is larger than the canvas, so a root with width/height 100% and padding needs boxSizing: \"border-box\""
+          : "the text needs more room than its container has: shorten it, reduce its font size, or clamp it with lineClamp"),
     });
   };
 }

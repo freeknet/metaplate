@@ -5,6 +5,13 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ## [Unreleased]
 
+### Fixed
+
+- The `overflow` guard advises `boxSizing: "border-box"` only when the plate's root
+  is larger than the canvas. A border-box root holding text too long for it now
+  gets a message saying the text needs more room than its container has, with
+  shortening, a smaller font size, or `lineClamp` as the fixes (#182).
+
 ### Documentation
 
 - New guides, built from how real projects use Metaplate, with each behavior they
