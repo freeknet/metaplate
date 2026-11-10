@@ -185,9 +185,13 @@ no extension (such as the default `og-image`) or another format's fails before
 it is written, because the host would serve it as the wrong type and crawlers
 and `verify-url` would reject it.
 
-Every written file is read back from disk and checked. Its SHA-256 must match
-the rendered bytes, and `verifyImage` must confirm the format and the exact
-dimensions that size advertises. This always runs, with no flag to turn it
+Every image is checked before it replaces anything. The rendered bytes must
+pass `verifyImage` (the format and the exact dimensions the size advertises)
+and any `--target` rules first; then they are written to a temporary file
+beside the target, read back, and checked again (the SHA-256 must match and
+`verifyImage` must pass), and only then renamed over the target. An image that
+fails any check leaves the previous file exactly as it was, with no temporary
+file behind. This always runs, with no flag to turn it
 off: it walks the image's chunk structure without decoding pixels, which
 costs little next to rendering, and a static build has no later point at
 which a truncated or mis-sized file would be caught before a crawler sees it.
@@ -264,8 +268,14 @@ written, because the files it lists are about to change. A run that fails
 before that point (an argument error, a module that cannot load, a refused
 path) touches nothing, so the earlier manifest still describes the earlier
 files. A successful run writes the manifest to a temporary file beside it and
-renames it into place, so no reader ever sees a partial manifest. Files
-written before a failure stay in `--out`.
+renames it into place, so no reader ever sees a partial manifest.
+
+Each image is replaced atomically, but a run is not a transaction. In a run
+where some images fail, those keep their previous files, and the ones that
+passed are already replaced, so `--out` holds a mix of old and new cards. The
+missing manifest is the signal not to publish it. To publish all or nothing,
+render into a scratch directory and swap it in on success, as
+[One card per record](recipes.md#one-card-per-record) shows.
 
 Format, size, and structure checks cannot tell a blank card from a drawn one.
 Give the module's plate [render guards](rendering.md#render-guards) set to
