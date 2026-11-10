@@ -12,7 +12,7 @@ import {
   requestFrom,
   type CacheablePlate,
 } from "../../src/render/cache.js";
-import { taggedSerialize } from "../../src/core/stable-hash.js";
+import { copyIdentity, taggedSerialize } from "../../src/core/stable-hash.js";
 import { completePng } from "../helpers/image-fixtures.js";
 
 const root = path.join(import.meta.dirname, "../..");
@@ -23,6 +23,23 @@ const hex = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("he
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+describe("copyIdentity", () => {
+  it("keeps insertion order at every depth, which a component can read", () => {
+    expect(copyIdentity({ a: 1, b: 2 })).not.toBe(copyIdentity({ b: 2, a: 1 }));
+    expect(copyIdentity({ x: { a: 1, b: 2 } })).not.toBe(copyIdentity({ x: { b: 2, a: 1 } }));
+    expect(copyIdentity({ list: [{ a: 1, b: 2 }] })).not.toBe(copyIdentity({ list: [{ b: 2, a: 1 }] }));
+    expect(copyIdentity({ a: 1, b: { c: [1] } })).toBe(copyIdentity({ a: 1, b: { c: [1] } }));
+  });
+
+  it("refuses functions, naming the path, and still refuses cycles and class instances", () => {
+    expect(() => copyIdentity({ list: [{ render: () => "x" }] })).toThrow("Cannot key the function at copy.list[0].render");
+    const cycle: Record<string, unknown> = {};
+    cycle.self = cycle;
+    expect(() => copyIdentity(cycle)).toThrow("Cannot serialize the cycle at copy.self");
+    expect(() => copyIdentity({ when: new (class Moment {})() })).toThrow("Cannot serialize Moment at copy.when");
+  });
 });
 
 describe("taggedSerialize", () => {
@@ -303,6 +320,58 @@ describe("createRenderCache", () => {
     expect(calls).toEqual(["A"]);
   });
 
+  it("answers HEAD with the GET response's fields and no body", async () => {
+    const { plate } = fakePlate();
+    const cache = createRenderCache(plate);
+    const get = await cache.response({ title: "A" });
+    const head = new Request("https://example.com/og.png", { method: "HEAD" });
+    for (const response of [
+      await cache.response({ title: "A" }, head),
+      await cache.handler({ title: "A" })(head),
+      await cache.fetchableFrom((request: Request) => ({ title: new URL(request.url).hostname === "example.com" ? "A" : "B" })).fetch(head),
+    ]) {
+      expect(response.status).toBe(200);
+      expect(response.body).toBeNull();
+      expect(response.headers.get("etag")).toBe(get.headers.get("etag"));
+      expect(response.headers.get("content-length")).toBe(String("png:A".length));
+      expect(response.headers.get("content-type")).toBe("image/png");
+    }
+  });
+
+  it("checks a signed route's signature before resolving copy or reading the cache", async () => {
+    const { plate, calls } = fakePlate();
+    const cache = createRenderCache(plate);
+    const secret = "route-secret-0123456789abcdefghijklmn";
+    const retired = "retired-secret-0123456789abcdefghijkl";
+    const resolve = vi.fn((request: Request) => ({ title: new URL(request.url).pathname }));
+    const { signImagePath } = await import("../../src/index.js");
+    const signedUrl = await signImagePath("https://example.com/posts/a/og-image.png", secret);
+
+    const get = cache.handlerFrom(resolve, { signed: { secret } });
+    const unsigned = await get(new Request("https://example.com/posts/a/og-image.png"));
+    expect(unsigned.status).toBe(403);
+    expect(unsigned.headers.get("cache-control")).toBe("no-store");
+    const tampered = await cache.fetchableFrom(resolve, { signed: { secret, status: 404 } })
+      .fetch(new Request(signedUrl.replace("posts/a", "posts/b")));
+    expect(tampered.status).toBe(404);
+    expect(resolve).not.toHaveBeenCalled();
+    expect(calls).toEqual([]);
+
+    // A valid signature renders once, then serves the cached image; a
+    // retiring secret still verifies, and a custom URL extractor is honored.
+    expect((await get(new Request(signedUrl))).status).toBe(200);
+    expect((await get(new Request(signedUrl))).status).toBe(200);
+    const rotated = cache.handlerFrom(resolve, { signed: { secrets: [retired, secret] } });
+    expect((await rotated(new Request(signedUrl))).status).toBe(200);
+    const proxied = cache.handlerFrom(
+      (context: { path: string }) => ({ title: context.path }),
+      { signed: { secret, url: (context) => `https://example.com${context.path}` } },
+    );
+    expect((await proxied({ path: new URL(signedUrl).pathname })).status).toBe(200);
+    // Every valid request resolved the same copy, so one render served them all.
+    expect(calls).toHaveLength(1);
+  });
+
   it("refuses two plates with one fingerprint in one store, and allows one plate to attach twice", async () => {
     const store = memoryRenderCache();
     const first = fakePlate().plate;
@@ -410,6 +479,36 @@ describe("plate fingerprint and cached()", { timeout: 30_000 }, () => {
     await themed("#000").cached({ store: shared }).render({ title: "x" });
     await expect(themed("#fff").cached({ store: shared }).render({ title: "x" })).rejects.toThrow("distinct revision");
   });
+
+  it("never serves one copy's image for another that differs only in key order", async () => {
+    // The component reads insertion order, so these two copies render differently.
+    const og = createNodeOg<Record<string, string>>({
+      ...definition,
+      alt: () => "Order card",
+      component: (copy) => ({
+        type: "div",
+        props: {
+          style: { width: "100%", height: "100%", display: "flex", background: Object.values(copy).join("") === "AB" ? "#c00" : "#00c" },
+          children: "",
+        },
+      }),
+    });
+    const first = { a: "A", b: "B" };
+    const second = { b: "B", a: "A" };
+    const direct = [await og.render(first), await og.render(second)];
+    expect(hex(direct[0]!)).not.toBe(hex(direct[1]!));
+
+    const cached = og.cached();
+    expect(hex(await cached.render(first))).toBe(hex(direct[0]!));
+    expect(hex(await cached.render(second))).toBe(hex(direct[1]!));
+    expect(await cached.key(first)).not.toBe(await cached.key(second));
+  });
+
+  it("refuses to key copy holding a function, whose captured values the key cannot see", async () => {
+    const make = (label: string) => ({ title: "x", label: () => label });
+    const cached = createRenderCache(fakePlate().plate as unknown as CacheablePlate<ReturnType<typeof make>>);
+    await expect(cached.render(make("one"))).rejects.toThrow("Cannot key the function at copy.label");
+  });
 });
 
 describe("metaplate/edge cached()", { timeout: 30_000 }, () => {
@@ -436,6 +535,13 @@ describe("metaplate/edge cached()", { timeout: 30_000 }, () => {
       headers: { "If-None-Match": first.headers.get("etag")! },
     }));
     expect(again.status).toBe(304);
+    expect(renders).toBe(1);
+    // Signed routes are checked on the edge cached view too.
+    const signed = cached.fetchableFrom(
+      (request: Request) => ({ title: new URL(request.url).pathname }),
+      { signed: { secret: "route-secret-0123456789abcdefghijklmn" } },
+    );
+    expect((await signed.fetch(new Request("https://example.com/edge"))).status).toBe(403);
     expect(renders).toBe(1);
     // The same definition fingerprints differently per renderer.
     expect(await og.fingerprint()).not.toBe(await createNodeOg(definition).fingerprint());

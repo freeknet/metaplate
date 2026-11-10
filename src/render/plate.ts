@@ -382,7 +382,7 @@ function requestUrl(arguments_: readonly unknown[]): string {
  * Builds the pre-render check for one route. Secrets are validated here, when
  * the route is defined, and imported as keys once, on the first request.
  */
-function signatureGate<Arguments extends unknown[]>(options: SignedRouteOptions<Arguments> | undefined) {
+export function signatureGate<Arguments extends unknown[]>(options: SignedRouteOptions<Arguments> | undefined) {
   if (options === undefined) return undefined;
   const signer = createImageSigner(signingSecrets(options));
   const status = options.status ?? 403;

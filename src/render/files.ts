@@ -8,7 +8,7 @@ import { verifyImage, type ImageFormat } from "../image.js";
 import type { SocialTarget } from "../verify/compatibility-profiles.js";
 import { verifyPlateImage } from "../verify/social-verification.js";
 import { assertVersionToken } from "../metadata/image-version.js";
-import { taggedSerialize } from "../core/stable-hash.js";
+import { copyIdentity, taggedSerialize } from "../core/stable-hash.js";
 import { METAPLATE_VERSION } from "../core/version.js";
 
 /**
@@ -377,7 +377,7 @@ export async function peerVersions(moduleFile: string): Promise<PeerVersions> {
  * Hashes everything known to determine an image's bytes: the CLI's Metaplate
  * version, the peer versions, the route, size, and output path, the plate's
  * own fingerprint (its version, `revision`, size, fonts, and component
- * source), and the stable-serialized copy. `null` when the plate has no
+ * source), and the copy as `copyIdentity` serializes it. `null` when the plate has no
  * fingerprint or the copy cannot be serialized.
  */
 export async function inputHash(image: PlannedImage, peers: PeerVersions): Promise<string | null> {
@@ -385,15 +385,16 @@ export async function inputHash(image: PlannedImage, peers: PeerVersions): Promi
   let source: string;
   try {
     source = taggedSerialize({
-      input: "metaplate-render-input/1",
+      input: "metaplate-render-input/2",
       metaplate: METAPLATE_VERSION,
       peers,
       path: image.path,
       route: image.route,
       variant: image.variant,
       plate: await image.plate.fingerprint(),
-      copy: image.copy,
-    }, "copy");
+      // The copy keeps its key order and rejects functions; see `copyIdentity`.
+      copy: copyIdentity(image.copy),
+    });
   } catch (error) {
     if (error instanceof TypeError) return null;
     throw error;
@@ -501,9 +502,13 @@ function assertExtension(path: string, contentType: string): void {
 }
 
 /**
- * Writes one image and proves the file on disk: the target must pass
- * `assertSafeTarget`, and the bytes read back must hash identically and pass
- * `verifyImage` at the artifact's own size and format.
+ * Writes one image and proves the file on disk. Every check that needs only
+ * the bytes runs first, so a card that fails one never touches the previous
+ * file. The bytes are then staged beside the target, read back, hashed, and
+ * checked with `verifyImage` again, and renamed over the target only when
+ * they pass. The target must pass `assertSafeTarget`. Each image is replaced
+ * atomically; a run of many images is not a transaction, which is why the
+ * manifest is written only when every image succeeds.
  */
 async function writeImage(
   image: PlannedImage,
@@ -515,20 +520,22 @@ async function writeImage(
     ? await image.plate.artifact(image.route, image.copy)
     : await image.plate.artifact(image.route, image.copy, { version: image.version });
   assertExtension(image.path, artifact.contentType);
-  await assertSafeTarget(image, realRoot, "write");
-  await writeFile(image.target, artifact.bytes);
-
-  const written = await readFile(image.target);
-  const digest = sha256(written);
-  if (digest !== sha256(artifact.bytes)) {
-    throw new Error(`${image.path} on disk does not match the rendered bytes`);
-  }
   const format = artifact.format ?? null;
-  if (format !== null) verifyImage(written, artifact.size, format);
+  if (format !== null) verifyImage(artifact.bytes, artifact.size, format);
   const first = artifact.metadata.openGraph.images[0];
   const url = first?.url;
   if (url === undefined) throw new Error(`${image.path}: the artifact metadata names no image URL`);
-  assertTargets(written, first!, artifact.size, artifact.contentType, checks);
+  assertTargets(artifact.bytes, first!, artifact.size, artifact.contentType, checks);
+
+  await assertSafeTarget(image, realRoot, "write");
+  const digest = sha256(artifact.bytes);
+  let byteLength = 0;
+  await writeFileAtomic(image.target, artifact.bytes, async (staged) => {
+    const written = await readFile(staged);
+    if (sha256(written) !== digest) throw new Error(`${image.path} on disk does not match the rendered bytes`);
+    if (format !== null) verifyImage(written, artifact.size, format);
+    byteLength = written.byteLength;
+  });
   return {
     path: image.path,
     url,
@@ -537,7 +544,7 @@ async function writeImage(
     size: { width: artifact.size.width, height: artifact.size.height },
     format,
     contentType: artifact.contentType,
-    bytes: written.byteLength,
+    bytes: byteLength,
     sha256: digest,
     verified: format !== null,
     inputHash: hash,
@@ -686,12 +693,18 @@ export async function readPreviousManifest(
  * directory, then renamed over the target, so a reader never sees a partial
  * file and a crash leaves either no file or a complete one.
  */
-export async function writeFileAtomic(file: string, text: string): Promise<void> {
+export async function writeFileAtomic(
+  file: string,
+  data: string | Uint8Array,
+  verify?: (temporary: string) => Promise<void>,
+): Promise<void> {
   const target = path.resolve(file);
   await mkdir(path.dirname(target), { recursive: true });
   const temporary = path.join(path.dirname(target), `.${path.basename(target)}.${randomUUID()}.tmp`);
   try {
-    await writeFile(temporary, text, { flag: "wx" });
+    await writeFile(temporary, data, { flag: "wx" });
+    // A failed check leaves the previous file exactly as it was.
+    await verify?.(temporary);
     await rename(temporary, target);
   } catch (error) {
     await rm(temporary, { force: true });

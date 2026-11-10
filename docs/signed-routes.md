@@ -92,9 +92,10 @@ await signImagePath("https://example.com/posts/hello/og-image.png", process.env.
 ## Verifying in the route
 
 `handlerFrom` and `fetchableFrom` on `metaplate/node`, `metaplate/edge`, and
-`metaplate/next` plates take a second argument. With `signed`, the route
-verifies the request path first and answers a missing or invalid signature
-without calling the resolver or the renderer:
+`metaplate/next` plates, and on a plate's [`cached()`](rendering.md#caching-renders)
+view, take a second argument. With `signed`, the route verifies the request path
+first and answers a missing or invalid signature without calling the resolver, the
+renderer, or the cache:
 
 ```ts
 // src/routes/posts/[slug]/[signature]/og-image.png/+server.ts
