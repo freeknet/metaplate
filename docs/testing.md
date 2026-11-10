@@ -80,11 +80,10 @@ describe("social cards", () => {
     it(`renders ${route}`, async () => {
       const bytes = await og.render(copy);
       const [image] = og.metadata(route, copy).openGraph.images;
-      // Crawlers require HTTPS, so a build with a local origin skips the URL rule.
-      const { url, ...rest } = image!;
-      const descriptor = SITE.origin.startsWith("https://") ? image! : rest;
-      const report = verifySocialImage(bytes, descriptor, {
+      const report = verifySocialImage(bytes, image!, {
         targets: ["universal", "facebook", "linkedin", "slack", "whatsapp", "x"],
+        // Crawlers require HTTPS, so a build with a local origin skips the URL rule.
+        checkUrl: SITE.origin.startsWith("https://"),
       });
       expect(report.issues.filter((issue) => issue.severity === "error")).toEqual([]);
       expect(report.actual).toMatchObject({ width: 1200, height: 630, format: "png" });
@@ -124,30 +123,30 @@ verifySocialImage(bytes, image!, { targets: ["universal"] });
 // compatible: false. "Crawler-ready social images require an absolute HTTPS URL."
 ```
 
-The card is fine; the descriptor is not finished. Use one of these:
+The card is fine; the descriptor is not finished. Either set `origin` on the plate, as
+the example does, so URLs are absolute and the check runs on what you really publish.
+Or pass `checkUrl: false`, which keeps the descriptor as it is and skips only the URL
+rule:
 
-- **Set `origin` on the plate**, as the example does. URLs are then absolute
-  everywhere, and the check runs on what you really publish.
-- **Keep relative URLs**, because Next's `metadataBase` resolves them, and make the
-  descriptor absolute for the test:
-
-  ```ts
-  verifySocialImage(bytes, { ...image!, url: `https://example.com${image!.url}` }, { targets });
-  ```
-
-- **Check bytes only**, leaving `url` out of the descriptor. Without one, the URL rule
-  is skipped:
-
-  ```ts
-  verifySocialImage(bytes, { width: 1200, height: 630, type: "image/png" }, { targets });
-  ```
+```ts
+verifySocialImage(bytes, image!, { targets, checkUrl: false });
+```
 
 The same rule applies to an absolute URL that is not HTTPS. Many sites take their
 origin from the environment, as in
 `process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"`, so local and CI builds
-publish `http://localhost` URLs that every crawler-ready target rejects. Pass `url`
-only when the origin is HTTPS, as the [export audit](#audit-the-whole-export) does,
-so production builds check the URLs and other builds check the bytes and tags.
+publish `http://localhost` URLs that every crawler-ready target rejects. Set
+`checkUrl` from the origin, as the [export audit](#audit-the-whole-export) does, so
+production builds check the URLs and other builds check the bytes and tags:
+
+```ts
+verifySocialImage(bytes, image!, { targets, checkUrl: SITE.origin.startsWith("https://") });
+```
+
+`checkAlt: false` does the same for the alt-text rules. Without either option, a rule
+runs when the descriptor has the field, so leaving `url` out skips the URL rule too.
+`metaplate render --target` and `metaplate preview --target` check a URL only when it
+is absolute HTTPS, for the same reason.
 
 `report.compatible` is false only when an issue has `severity: "error"`. Warnings,
 such as LinkedIn's on an image that is not 1.91:1, are also in `report.issues`, so
@@ -207,8 +206,9 @@ for (const file of pages) {
     continue;
   }
 
+  // Values come back as written, so resolve a relative URL against the page.
   // `?v=` is a cache-busting token on the URL; the file on disk does not carry it.
-  const { pathname } = new URL(image.url);
+  const { pathname } = new URL(image.url, documentUrl);
   if (pathname !== EXPECTED.get(route)) {
     failures.push(`${page}: names ${pathname}, not its own card ${EXPECTED.get(route) ?? "(none registered)"}`);
     continue;
@@ -218,18 +218,18 @@ for (const file of pages) {
     failures.push(`${page}: ${image.url} is not in the export`);
     continue;
   }
+  const width = Number(image.width);
+  const height = Number(image.height);
+  if (!Number.isInteger(width) || !Number.isInteger(height)) {
+    failures.push(`${page}: og:image:width and og:image:height must both be set`);
+    continue;
+  }
 
-  // Tag values are strings as written, and the descriptor compares numbers.
+  // A missing alt is passed as "" so the targets' alt-text rule fails it.
   const report = verifySocialImage(
     bytes,
-    {
-      ...(CHECK_URLS ? { url: image.url } : {}),
-      ...(image.alt ? { alt: image.alt } : {}),
-      ...(image.type ? { type: image.type } : {}),
-      width: Number(image.width),
-      height: Number(image.height),
-    },
-    { targets: TARGETS },
+    { url: image.url, alt: image.alt ?? "", ...(image.type ? { type: image.type } : {}), width, height },
+    { targets: TARGETS, checkUrl: CHECK_URLS },
   );
   for (const issue of report.issues) {
     if (issue.severity === "error") failures.push(`${page}: ${issue.target ?? ""} ${issue.message}`);

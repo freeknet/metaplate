@@ -17,11 +17,10 @@ describe("social cards", () => {
     it(`renders ${route}`, async () => {
       const bytes = await og.render(copy);
       const [image] = og.metadata(route, copy).openGraph.images;
-      // Crawlers require HTTPS, so a build with a local origin skips the URL rule.
-      const { url, ...rest } = image!;
-      const descriptor = SITE.origin.startsWith("https://") ? image! : rest;
-      const report = verifySocialImage(bytes, descriptor, {
+      const report = verifySocialImage(bytes, image!, {
         targets: ["universal", "facebook", "linkedin", "slack", "whatsapp", "x"],
+        // Crawlers require HTTPS, so a build with a local origin skips the URL rule.
+        checkUrl: SITE.origin.startsWith("https://"),
       });
       expect(report.issues.filter((issue) => issue.severity === "error")).toEqual([]);
       expect(report.actual).toMatchObject({ width: 1200, height: 630, format: "png" });

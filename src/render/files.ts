@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import type { ImageSize } from "../core/social-image.js";
 import { verifyImage, type ImageFormat } from "../image.js";
 import type { SocialTarget } from "../verify/compatibility-profiles.js";
-import { verifySocialImage } from "../verify/social-verification.js";
+import { verifyPlateImage } from "../verify/social-verification.js";
 import { assertVersionToken } from "../metadata/image-version.js";
 import { taggedSerialize } from "../core/stable-hash.js";
 import { METAPLATE_VERSION } from "../core/version.js";
@@ -441,9 +441,8 @@ export type RenderTargetChecks = {
 
 /**
  * Fails a file that breaks a platform's published rules, such as WhatsApp's
- * file size limit, with the same checks as `metaplate verify --target`. Only
- * an absolute image URL is checked: a root-relative one is resolved by the
- * page that publishes it, as Next.js does against `metadataBase`.
+ * file size limit, with the same checks as `metaplate preview --target`; see
+ * `verifyPlateImage` for which URLs are checked.
  */
 function assertTargets(
   bytes: Uint8Array,
@@ -453,17 +452,11 @@ function assertTargets(
   checks: RenderTargetChecks | undefined,
 ): void {
   if (checks === undefined || (checks.targets.length === 0 && checks.maxFileSize === undefined)) return;
-  const { url, alt } = descriptor;
-  const report = verifySocialImage(bytes, {
-    ...(typeof url === "string" && /^[a-z][a-z\d+.-]*:/i.test(url) ? { url } : {}),
-    ...(typeof alt === "string" ? { alt } : {}),
-    width: size.width,
-    height: size.height,
-    type: contentType,
-  }, {
-    targets: [...checks.targets],
-    ...(checks.maxFileSize === undefined ? {} : { maxFileSize: checks.maxFileSize }),
-  });
+  const report = verifyPlateImage(
+    bytes,
+    { url: descriptor.url, alt: descriptor.alt, width: size.width, height: size.height, type: contentType },
+    checks,
+  );
   const errors = report.issues.filter((issue) => issue.severity === "error");
   if (errors.length > 0) {
     throw new Error(errors
