@@ -12,7 +12,7 @@ import {
   requestFrom,
   type CacheablePlate,
 } from "../../src/render/cache.js";
-import { taggedSerialize } from "../../src/core/stable-hash.js";
+import { copyIdentity, taggedSerialize } from "../../src/core/stable-hash.js";
 import { completePng } from "../helpers/image-fixtures.js";
 
 const root = path.join(import.meta.dirname, "../..");
@@ -23,6 +23,23 @@ const hex = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("he
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+describe("copyIdentity", () => {
+  it("keeps insertion order at every depth, which a component can read", () => {
+    expect(copyIdentity({ a: 1, b: 2 })).not.toBe(copyIdentity({ b: 2, a: 1 }));
+    expect(copyIdentity({ x: { a: 1, b: 2 } })).not.toBe(copyIdentity({ x: { b: 2, a: 1 } }));
+    expect(copyIdentity({ list: [{ a: 1, b: 2 }] })).not.toBe(copyIdentity({ list: [{ b: 2, a: 1 }] }));
+    expect(copyIdentity({ a: 1, b: { c: [1] } })).toBe(copyIdentity({ a: 1, b: { c: [1] } }));
+  });
+
+  it("refuses functions, naming the path, and still refuses cycles and class instances", () => {
+    expect(() => copyIdentity({ list: [{ render: () => "x" }] })).toThrow("Cannot key the function at copy.list[0].render");
+    const cycle: Record<string, unknown> = {};
+    cycle.self = cycle;
+    expect(() => copyIdentity(cycle)).toThrow("Cannot serialize the cycle at copy.self");
+    expect(() => copyIdentity({ when: new (class Moment {})() })).toThrow("Cannot serialize Moment at copy.when");
+  });
 });
 
 describe("taggedSerialize", () => {
@@ -461,6 +478,36 @@ describe("plate fingerprint and cached()", { timeout: 30_000 }, () => {
     const shared = memoryRenderCache();
     await themed("#000").cached({ store: shared }).render({ title: "x" });
     await expect(themed("#fff").cached({ store: shared }).render({ title: "x" })).rejects.toThrow("distinct revision");
+  });
+
+  it("never serves one copy's image for another that differs only in key order", async () => {
+    // The component reads insertion order, so these two copies render differently.
+    const og = createNodeOg<Record<string, string>>({
+      ...definition,
+      alt: () => "Order card",
+      component: (copy) => ({
+        type: "div",
+        props: {
+          style: { width: "100%", height: "100%", display: "flex", background: Object.values(copy).join("") === "AB" ? "#c00" : "#00c" },
+          children: "",
+        },
+      }),
+    });
+    const first = { a: "A", b: "B" };
+    const second = { b: "B", a: "A" };
+    const direct = [await og.render(first), await og.render(second)];
+    expect(hex(direct[0]!)).not.toBe(hex(direct[1]!));
+
+    const cached = og.cached();
+    expect(hex(await cached.render(first))).toBe(hex(direct[0]!));
+    expect(hex(await cached.render(second))).toBe(hex(direct[1]!));
+    expect(await cached.key(first)).not.toBe(await cached.key(second));
+  });
+
+  it("refuses to key copy holding a function, whose captured values the key cannot see", async () => {
+    const make = (label: string) => ({ title: "x", label: () => label });
+    const cached = createRenderCache(fakePlate().plate as unknown as CacheablePlate<ReturnType<typeof make>>);
+    await expect(cached.render(make("one"))).rejects.toThrow("Cannot key the function at copy.label");
   });
 });
 

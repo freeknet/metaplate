@@ -215,14 +215,18 @@ missing or invalid signature is answered before the resolver runs or the cache
 is read, and a valid one is served from the cache.
 
 - **Keys.** Each entry is keyed by the SHA-256 of the plate size's
-  `fingerprint()` and the copy, serialized with object keys sorted. The
+  `fingerprint()` and the copy, with object keys in insertion order, because a
+  component can read that order (`Object.values(copy)`), so two copies that differ
+  only in key order are two entries. The
   fingerprint covers the Metaplate version, the renderer, `revision`, size,
   output format, guard levels, font bytes, the source text of `component` and the
   definition's other functions, and the `satori`, `emoji`, `languageFonts`,
   and `resvg` options. Different copy can never share an entry, and a changed design
   misses rather than serving the old card. Copy must be plain data (objects,
   arrays, strings, numbers, booleans, `Date`, `URL`, byte arrays); anything
-  else rejects the request with a `TypeError` naming the field.
+  else rejects the request with a `TypeError` naming the field. That includes a
+  function: its source text cannot see what it closes over, so two closures with
+  one source would share an entry. Pass the data the function uses instead.
 - **What the key cannot see.** A function's source text excludes what it
   imports or closes over, and images fetched during the render are not
   hashed. Set the plate's `revision` and change it when such a dependency

@@ -50,18 +50,22 @@ function unserializable(path: string, description: string): TypeError {
 
 function serializeObject(value: object, path: string, ancestors: Set<object>): string {
   if (ancestors.has(value)) throw unserializable(path, "a circular reference");
-  const toJSON = (value as { toJSON?: unknown }).toJSON;
-  if (typeof toJSON === "function") {
-    return serialize((toJSON as () => unknown).call(value), path, ancestors);
-  }
-  if (!Array.isArray(value) && !isPlainObject(value)) {
-    const name = (value as { constructor?: { name?: unknown } }).constructor?.name;
-    throw unserializable(path, `a ${typeof name === "string" && name !== "" ? name : "non-plain object"}`);
-  }
+  // The object counts as an ancestor while its toJSON result is serialized,
+  // so a toJSON that returns the object, or leads back to it, is a cycle.
   ancestors.add(value);
   try {
+    const toJSON = (value as { toJSON?: unknown }).toJSON;
+    if (typeof toJSON === "function") {
+      return serialize((toJSON as () => unknown).call(value), path, ancestors);
+    }
+    if (!Array.isArray(value) && !isPlainObject(value)) {
+      const name = (value as { constructor?: { name?: unknown } }).constructor?.name;
+      throw unserializable(path, `a ${typeof name === "string" && name !== "" ? name : "non-plain object"}`);
+    }
     if (Array.isArray(value)) {
-      const items = value.map((item: unknown, index) => serialize(item, `${path}[${index}]`, ancestors));
+      // Array.from visits holes as undefined, which serializes as null, as
+      // JSON.stringify writes them; map would skip them and collapse [,] to [].
+      const items = Array.from(value, (item: unknown, index) => serialize(item, `${path}[${index}]`, ancestors));
       return `[${items.join(",")}]`;
     }
     const record = value as Record<string, unknown>;

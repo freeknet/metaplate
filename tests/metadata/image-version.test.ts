@@ -66,6 +66,32 @@ describe("stableSerialize", () => {
     copy.self = copy;
     expect(() => stableSerialize(copy)).toThrow("copy.self is a circular reference");
   });
+
+  it("refuses a cycle through toJSON, direct or indirect, naming the path", () => {
+    const direct = { toJSON() { return this; } };
+    expect(() => stableSerialize({ card: direct })).toThrow(new TypeError(
+      "Cannot derive an image version: copy.card is a circular reference; copy must be plain JSON data " +
+        "(objects, arrays, strings, finite numbers, booleans, and null)",
+    ));
+    const indirect: { toJSON(): unknown } = { toJSON: () => ({ back: [indirect] }) };
+    expect(() => stableSerialize({ card: indirect })).toThrow("copy.card.back[0] is a circular reference");
+    expect(() => socialImageVersion(direct)).toThrow(TypeError);
+    // A non-cyclic toJSON and repeated references still serialize.
+    const shared = { toJSON: () => "same" };
+    expect(stableSerialize({ a: shared, b: shared, when: new Date(0) })).toBe('{"a":"same","b":"same","when":"1970-01-01T00:00:00.000Z"}');
+  });
+
+  it("writes array holes as null, as JSON does, instead of collapsing them", () => {
+    expect(stableSerialize([])).toBe("[]");
+    expect(stableSerialize(Array(1))).toBe("[null]");
+    expect(stableSerialize([1, , 3])).toBe("[1,null,3]"); // eslint-disable-line no-sparse-arrays
+    expect(stableSerialize(Array(3))).toBe(JSON.stringify(Array(3)));
+    // Holes, null, and undefined are equal in JSON, so they version alike.
+    expect(stableSerialize([null])).toBe("[null]");
+    expect(stableSerialize([undefined])).toBe("[null]");
+    expect(socialImageVersion(Array(1))).not.toBe(socialImageVersion([]));
+    expect(socialImageVersion(Array(1))).toBe(socialImageVersion([null]));
+  });
 });
 
 describe("socialImageVersion", () => {
