@@ -14,6 +14,7 @@ import {
 import { fontsourceFontLoader } from "../../src/fonts.js";
 import { createNodeOg } from "../../src/node.js";
 import { cropRegion, escapeHtml, galleryHtml } from "../../src/preview/page.js";
+import { ModuleLoaderError } from "../../src/render/files.js";
 import {
   createReloadScheduler,
   GALLERY_CSP,
@@ -285,6 +286,23 @@ describe("startPreviewServer", () => {
     const html = await (await fetch(server.url)).text();
     expect(html).not.toContain("module-error");
     expect(html.match(/<article class="card"/g)).toHaveLength(2);
+  });
+
+  it("says to restart under a loader, not to save, when the module has no loader", async () => {
+    const missingLoader = await serve(() => {
+      throw new ModuleLoaderError("Cannot load og.render.tsx: Node does not transform JSX.");
+    });
+    const html = await (await fetch(missingLoader.url)).text();
+    expect(html).toContain("Saving the module cannot fix this");
+    expect(html).toContain("tsx");
+    expect(html).not.toContain("Fix the module and save it");
+
+    const broken = await serve(() => {
+      throw new SyntaxError("Unexpected end of input");
+    });
+    const brokenHtml = await (await fetch(broken.url)).text();
+    expect(brokenHtml).toContain("Fix the module and save it");
+    expect(brokenHtml).not.toContain("Saving the module cannot fix this");
   });
 
   it("refuses a path render would refuse, before rendering", async () => {

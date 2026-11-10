@@ -87,6 +87,30 @@ file name rather than URL, so a `require`d file does not reload; keep plate
 code in ES modules while previewing. TypeScript modules load on the same
 terms as [`metaplate render`](render-cli.md#loading-typescript-and-jsx).
 
+### Plates written in JSX
+
+Node does not transform JSX, so a `.tsx` render module needs a loader in the
+preview's own process. Run the command in-process under
+[`tsx`](https://www.npmjs.com/package/tsx), as for
+[`metaplate render`](render-cli.md#loading-typescript-and-jsx). This works on
+Windows, macOS, and Linux, and saves still reload the gallery, including saves to
+files the module imports:
+
+```ts
+// scripts/preview-cards.mts
+import { runCli } from "metaplate/cli";
+
+process.exit(await runCli(["preview", "src/lib/og/cards.render.tsx"]));
+```
+
+```json
+{ "scripts": { "cards:preview": "tsx scripts/preview-cards.mts" } }
+```
+
+Started without a loader, the preview reports that it cannot load the module, in
+the terminal and on the page. The page says to restart under a loader rather
+than to save, because no edit to the module can fix a missing loader.
+
 ## Command line
 
 ```text
