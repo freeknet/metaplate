@@ -325,6 +325,11 @@ Next copies `public/` into `out/`, so each card lands beside its page. If any ca
 fails, every failure is reported, the command exits `1`, and `prebuild` stops the
 build.
 
+To fail a card that breaks a platform's rules in the same step, such as one over
+WhatsApp's 600 KB limit, add `"--target", "whatsapp"` (repeat it for each platform)
+to the `runCli` arguments. See
+[Formats and verification](render-cli.md#formats-and-verification).
+
 ## 5. Point each page at its card
 
 Next [shallow-merges metadata](nextjs.md#nextjs-adapter): a page that sets
