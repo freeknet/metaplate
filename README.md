@@ -175,8 +175,9 @@ by default and unavailable through `metaplate/next`.
 `metaplate render` renders a whole site's cards for static hosting. It loads a
 module whose default export is `{ plate, pages: [{ route, copy }] }`, writes
 every page at every size to the path its metadata URL names, verifies each
-file, and records them in a checksummed manifest. `--incremental` re-renders
-only the pages whose copy, plate, or installed renderer changed.
+file, and records them in a checksummed manifest. `--target` also fails a card
+that breaks a platform's rules, such as WhatsApp's 600 KB limit. `--incremental`
+re-renders only the pages whose copy, plate, or installed renderer changed.
 
 ```sh
 npx metaplate render og.render.mjs --out public
