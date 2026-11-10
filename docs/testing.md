@@ -67,7 +67,7 @@ import { verifySocialImage } from "metaplate";
 import { ALL_CARDS, CARDS } from "../src/lib/og/cards";
 import { pageMetadata } from "../src/lib/og/metadata";
 import { og } from "../src/lib/og/plate";
-import { STATIC_ROUTES } from "../src/lib/site";
+import { SITE, STATIC_ROUTES } from "../src/lib/site";
 
 describe("social cards", () => {
   it("has a card for every static route", () => {
@@ -80,7 +80,10 @@ describe("social cards", () => {
     it(`renders ${route}`, async () => {
       const bytes = await og.render(copy);
       const [image] = og.metadata(route, copy).openGraph.images;
-      const report = verifySocialImage(bytes, image!, {
+      // Crawlers require HTTPS, so a build with a local origin skips the URL rule.
+      const { url, ...rest } = image!;
+      const descriptor = SITE.origin.startsWith("https://") ? image! : rest;
+      const report = verifySocialImage(bytes, descriptor, {
         targets: ["universal", "facebook", "linkedin", "slack", "whatsapp", "x"],
       });
       expect(report.issues.filter((issue) => issue.severity === "error")).toEqual([]);
@@ -139,6 +142,13 @@ The card is fine; the descriptor is not finished. Use one of these:
   verifySocialImage(bytes, { width: 1200, height: 630, type: "image/png" }, { targets });
   ```
 
+The same rule applies to an absolute URL that is not HTTPS. Many sites take their
+origin from the environment, as in
+`process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"`, so local and CI builds
+publish `http://localhost` URLs that every crawler-ready target rejects. Pass `url`
+only when the origin is HTTPS, as the [export audit](#audit-the-whole-export) does,
+so production builds check the URLs and other builds check the bytes and tags.
+
 `report.compatible` is false only when an issue has `severity: "error"`. Warnings,
 such as LinkedIn's on an image that is not 1.91:1, are also in `report.issues`, so
 filter them as your project needs. `report.actual` holds the
@@ -147,8 +157,9 @@ measured `width`, `height`, `format`, `contentType`, and `byteLength`.
 ## Audit the whole export
 
 The checks above test the cards. They do not test whether each page's HTML names
-the right card, which is the thing that breaks when a route is renamed. This script
-walks a static export and checks the two against each other, with no server:
+the right card, which is the thing that breaks when a route is renamed, or when a
+page sets no `openGraph` and inherits another page's. This script walks a static
+export and checks the two against each other, with no server:
 
 ```ts
 // scripts/audit-export.mts
@@ -156,16 +167,26 @@ import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { verifySocialImage } from "metaplate";
 import { extractPageSocialMetadata } from "metaplate/node";
+import { ALL_CARDS } from "../src/lib/og/cards";
+import { og } from "../src/lib/og/plate";
 import { SITE } from "../src/lib/site";
 
 /*
- * Checks every exported page offline: reads the `og:image` the HTML names, finds
- * that file in `out/`, and verifies its bytes against the tags. A page whose card
- * is missing or wrong fails the build. Network checks come after the deploy, with
- * `metaplate verify-page`.
+ * Checks every exported page offline: reads the `og:image` the HTML names, checks
+ * it is that page's own card, finds the file in `out/`, and verifies its bytes
+ * against the tags. A page whose card is missing or wrong fails the build. Network
+ * checks come after the deploy, with `metaplate verify-page`.
  */
 const OUT = path.resolve("out");
 const TARGETS = ["universal", "facebook", "linkedin", "slack", "whatsapp", "x"] as const;
+
+// Crawlers require HTTPS image URLs. A local or CI build whose origin is
+// `http://localhost` would fail that rule on every page, so it checks the files
+// and tags alone, and a production build checks the URLs too.
+const CHECK_URLS = SITE.origin.startsWith("https://");
+
+// Each route's own card, so a page that inherits another page's metadata fails.
+const EXPECTED = new Map(ALL_CARDS.map(({ route }) => [route, `/${og.sitePath(route)}`]));
 
 const entries = await readdir(OUT, { recursive: true, withFileTypes: true });
 const pages = entries
@@ -176,8 +197,9 @@ const pages = entries
 const failures: string[] = [];
 
 for (const file of pages) {
-  const page = path.relative(OUT, file);
-  const documentUrl = new URL(page.replaceAll("\\", "/"), `${SITE.origin}/`).href;
+  const page = path.relative(OUT, file).replaceAll("\\", "/");
+  const route = `/${page.replace(/(^|\/)index\.html$/, "$1").replace(/\.html$/, "")}`;
+  const documentUrl = new URL(page, `${SITE.origin}/`).href;
   const { openGraph } = extractPageSocialMetadata(await readFile(file, "utf8"), documentUrl);
   const [image] = openGraph.images;
   if (!image?.url) {
@@ -186,8 +208,12 @@ for (const file of pages) {
   }
 
   // `?v=` is a cache-busting token on the URL; the file on disk does not carry it.
-  const card = path.join(OUT, new URL(image.url).pathname);
-  const bytes = await readFile(card).catch(() => undefined);
+  const { pathname } = new URL(image.url);
+  if (pathname !== EXPECTED.get(route)) {
+    failures.push(`${page}: names ${pathname}, not its own card ${EXPECTED.get(route) ?? "(none registered)"}`);
+    continue;
+  }
+  const bytes = await readFile(path.join(OUT, pathname)).catch(() => undefined);
   if (!bytes) {
     failures.push(`${page}: ${image.url} is not in the export`);
     continue;
@@ -197,7 +223,7 @@ for (const file of pages) {
   const report = verifySocialImage(
     bytes,
     {
-      url: image.url,
+      ...(CHECK_URLS ? { url: image.url } : {}),
       ...(image.alt ? { alt: image.alt } : {}),
       ...(image.type ? { type: image.type } : {}),
       width: Number(image.width),
@@ -219,10 +245,22 @@ console.log(`Social card audit: ${pages.length} pages verified`);
 
 `extractPageSocialMetadata` is the parser `verify-page` uses, so it reads tags the
 way the deployed check will, instead of relying on the order of attributes as a
-regular expression would. It returns values as written, so convert the numbers. Run
-the script from `postbuild`, and adjust the page filter if your site has other pages
-with no card. Under a `basePath`, remove the prefix from `pathname` before joining it
-to `out/`.
+regular expression would. It returns values as written, so convert the numbers.
+
+Three things the script decides for you:
+
+- **Each page names its own card.** It derives the page's route from the file
+  (`pricing/index.html` is `/pricing/`) and compares the image path with
+  `og.sitePath(route)` for that route in `ALL_CARDS`. Without this, a page that
+  inherits another page's metadata passes, because that card exists and is valid.
+- **URLs are checked only on an HTTPS origin.** A build with an `http://localhost`
+  origin checks the files and tags alone. See
+  [Check bytes against the descriptor](#check-bytes-against-the-descriptor).
+- **Some pages have no card.** It skips `_next` and the 404 pages. Extend that filter
+  for any other page with no card, or it fails as "none registered".
+
+Run the script from `postbuild`. Under a `basePath`, remove the prefix from `pathname`
+before comparing it and joining it to `out/`.
 
 ## In a browser test
 

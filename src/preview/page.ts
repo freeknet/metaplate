@@ -111,6 +111,8 @@ export type GalleryState = Readonly<{
   loadedAt: Date;
   /** Set when the module failed to load or broke the render contract. */
   error: string | undefined;
+  /** The error is a missing loader: saving cannot fix it, restarting under one can. */
+  restartRequired?: boolean;
   images: readonly PreviewImage[];
   targets: readonly string[];
   /** False where Node has no `module.registerHooks`: imported files are not reloaded. */
@@ -187,7 +189,11 @@ export function galleryHtml(state: GalleryState): string {
   ].map(escapeHtml).join(" · ");
   const error = state.error === undefined ? "" :
     `<section class="module-error" role="alert"><h2>The render module could not be rendered</h2><pre>${escapeHtml(state.error)}</pre>` +
-    "<p>Fix the module and save it: this page reloads on its own.</p></section>";
+    (state.restartRequired
+      ? "<p>Saving the module cannot fix this: this preview process has no loader for it. Stop the preview and " +
+        "start it again under one, for example by running <code>runCli([\"preview\", …])</code> from " +
+        "<code>metaplate/cli</code> in a <code>.mts</code> script run with <code>tsx</code>.</p></section>"
+      : "<p>Fix the module and save it: this page reloads on its own.</p></section>");
   const tracking = state.tracksImports ? "" :
     "<p class=\"note\">This Node version has no <code>module.registerHooks</code>, so only the module file itself " +
     "is reloaded; restart the preview after editing a file it imports.</p>";

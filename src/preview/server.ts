@@ -17,6 +17,7 @@ import {
   type PreviewRendered,
 } from "./page.js";
 import {
+  ModuleLoaderError,
   mapConcurrent,
   planImages,
   resolveRenderJobs,
@@ -233,6 +234,8 @@ type Snapshot = {
   version: string;
   loadedAt: Date;
   error: string | undefined;
+  /** The error is a missing loader, which only a restart can fix. */
+  restartRequired: boolean;
   images: PlannedImage[];
   renders: Map<number, Promise<{ result: PreviewImage["result"]; bytes?: Uint8Array }>>;
 };
@@ -359,6 +362,7 @@ export async function startPreviewServer(options: PreviewServerOptions): Promise
       version: `${boot}:${generation}`,
       loadedAt: new Date(),
       error: undefined,
+      restartRequired: false,
       images: [],
       renders: new Map(),
     };
@@ -370,6 +374,7 @@ export async function startPreviewServer(options: PreviewServerOptions): Promise
       log(`↻ ${options.module}: ${next.images.length} image${next.images.length === 1 ? "" : "s"} (generation ${generation})`);
     } catch (error) {
       next.error = message(error);
+      next.restartRequired = error instanceof ModuleLoaderError;
       log(`✗ ${options.module}: ${next.error}`);
     }
     snapshot = next;
@@ -399,6 +404,7 @@ export async function startPreviewServer(options: PreviewServerOptions): Promise
       generation: current.generation,
       loadedAt: current.loadedAt,
       error: current.error,
+      restartRequired: current.restartRequired,
       images: current.images.map((image, index): PreviewImage => ({
         index,
         path: image.path,
