@@ -5,6 +5,12 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ## [Unreleased]
 
+### Fixed
+
+- `metaplate verify` and `verify-url` given a file or URL before any `--size`
+  now say that `--size WIDTHxHEIGHT` is required before it, instead of printing
+  only the usage line (#183).
+
 ### Documentation
 
 - New guides, built from how real projects use Metaplate, with each behavior they
