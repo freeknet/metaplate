@@ -424,9 +424,32 @@ So a TypeScript module authors its plate with plain `{ type, props }`
 objects, as [`examples/api/render-module.ts`](https://github.com/freeknet/metaplate/blob/main/examples/api/render-module.ts) does
 (see also
 [Authoring without a JSX toolchain](rendering.md#authoring-without-a-jsx-toolchain)).
-For a plate written in JSX, either compile the module first (with `tsc`, your
-bundler, or your framework's build) and pass the compiled `.js`, or register a
-JSX-capable loader for the CLI's process through `NODE_OPTIONS`, for example
-`NODE_OPTIONS="--import tsx" npx metaplate render og.render.tsx` with the
-[`tsx`](https://www.npmjs.com/package/tsx) package installed. Node never type
-checks a module either way, so keep `tsc --noEmit` in the build.
+For a plate written in JSX, run the command in-process under
+[`tsx`](https://www.npmjs.com/package/tsx). The command's `import()` then goes
+through the loader `tsx` registered, and this works the same on Windows, macOS, and
+Linux:
+
+```ts
+// scripts/render-cards.mts
+import { runCli } from "metaplate/cli";
+
+process.exit(await runCli(["render", "--out", "public", "src/lib/og/cards.render.tsx"]));
+```
+
+```json
+{ "scripts": { "cards": "tsx scripts/render-cards.mts" } }
+```
+
+Keep the `.mts` extension: in a package without `"type": "module"`, `tsx` compiles a
+`.ts` script to CommonJS and rejects its top-level `await`. `tsconfig.json` needs
+`"jsx": "react-jsx"` and an `include` that covers the plate, or the render fails with
+`React is not defined`. [Static Next.js sites](static-next-site.md) shows the whole
+setup.
+
+Two other routes work. Compile the module first (with `tsc`, your bundler, or your
+framework's build) and pass the compiled `.js`. Or register the loader for the CLI's
+process, as in `NODE_OPTIONS="--import tsx" npx metaplate render og.render.tsx`,
+which is POSIX shell syntax: an npm script on Windows runs through `cmd.exe`, where
+it fails with `'NODE_OPTIONS' is not recognized`, unless you add a package such as
+`cross-env`. Node never type checks a module on any of these routes, so keep
+`tsc --noEmit` in the build.
