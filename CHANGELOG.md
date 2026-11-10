@@ -24,6 +24,23 @@ All notable changes to Metaplate are documented in this file. The project uses
 - A cached response to a `HEAD` request that would get a 200 carried the image
   body. It now has the same headers as the `GET` response, `ETag` and
   `Content-Length` included, and no body.
+- The render cache and `metaplate render --incremental` sorted copy's object keys,
+  so two copies that differ only in key order shared an entry. A component that
+  reads that order (`Object.values(copy)`) drew them differently, and the cache
+  served the first copy's image for the second, or `--incremental` reused the
+  stale file. Both now keep insertion order at every depth. A function in copy,
+  whose captured values its source text cannot show, now makes `cached()` throw a
+  `TypeError` naming it and makes `--incremental` always render that page.
+  Upgrading changes every cache key and input hash once, so a shared cache store
+  misses and the first `--incremental` build renders everything. Copy-derived
+  URL versions (`version: "copy"`) still sort keys, so published `?v=` tokens are
+  unchanged; the metadata guide says what to do when order changes the output.
+- `socialImageVersion` collapsed array holes (`Array(1)` versioned like `[]`, and
+  some sparse arrays serialized as invalid JSON). Holes now serialize as `null`,
+  as `JSON.stringify` writes them. Only copy containing a sparse array gets a new
+  token. A `toJSON` that returns its own object, directly or through another
+  object, overflowed the stack; it now throws the same path-specific `TypeError`
+  as other circular references.
 - `metaplate render --target` failed every card of a plate whose origin is
   `http://localhost`, as local and CI builds often are, and `metaplate preview
   --target` flagged every card of a plate with root-relative URLs. Both now check

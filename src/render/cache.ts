@@ -1,4 +1,4 @@
-import { taggedSerialize } from "../core/stable-hash.js";
+import { copyIdentity, taggedSerialize } from "../core/stable-hash.js";
 import { signatureGate, type PlateRouteOptions } from "./plate.js";
 
 /**
@@ -254,7 +254,8 @@ function respond(entry: RenderCacheEntry, headers: Headers, request: Conditional
 /**
  * Wraps a plate view so each distinct copy renders once. The key is the
  * SHA-256 of the plate's fingerprint (Metaplate version, `revision`, size,
- * fonts, component source, and options) and the stable-serialized copy, so
+ * fonts, component source, and options) and the copy, in key order (see
+ * `copyIdentity`), so
  * different copy can never share an entry. Concurrent misses for one key
  * share a single render.
  */
@@ -288,10 +289,8 @@ export function createRenderCache<Copy>(plate: CacheablePlate<Copy>, options: Re
   async function key(copy: Copy): Promise<string> {
     const fingerprint = await plate.fingerprint();
     claim(store, fingerprint, identity);
-    const source = taggedSerialize(
-      { cache: "metaplate-render-cache/1", plate: fingerprint, copy },
-      "copy",
-    );
+    // The copy keeps its key order and rejects functions; see `copyIdentity`.
+    const source = taggedSerialize({ cache: "metaplate-render-cache/2", plate: fingerprint, copy: copyIdentity(copy) });
     return plate.sha256(encoder.encode(source));
   }
 

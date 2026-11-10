@@ -352,8 +352,9 @@ manifest entry records an `inputHash`: the SHA-256 of
   returns, the source text of `component` and of the other functions in the
   definition (such as an `output` encoder), and its `satori`, `emoji`, and
   `resvg` options;
-- the page's copy, serialized with object keys sorted, so key order is not a
-  change.
+- the page's copy, with object keys in insertion order at every depth, because a
+  component can read that order (`Object.values(copy)`), so a reordered copy
+  renders again rather than reusing the file.
 
 With `--incremental`, an image is reused, not rendered, only when its
 `inputHash` equals the one in the previous manifest **and** the file on disk
@@ -384,7 +385,8 @@ const og = createNodeOg({
 ```
 
 Copy that is not plain data (a class instance other than `Date`, `URL`, or a
-byte array, a symbol, or a cycle) gets `inputHash: null` and always renders.
+byte array, a symbol, a cycle, or a function, whose captured values its source
+text cannot show) gets `inputHash: null` and always renders.
 A clean build, without `--incremental` or after deleting `--out`, is the
 reference whenever in doubt; CI release builds should use one.
 

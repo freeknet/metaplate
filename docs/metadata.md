@@ -514,12 +514,21 @@ a plain function call; Web Crypto's
 returns a Promise and would make every metadata call asynchronous.
 
 The serialization sorts object keys, so property order never changes the
-token; it omits `undefined` members and honors `toJSON` (a `Date` hashes as its
-ISO string), as `JSON.stringify` does. Values JSON would drop or distort throw
-instead, naming the property (`copy.render is a function`): functions,
-symbols, bigints, `NaN` and infinities, circular references, and non-plain
-objects such as `Map`, `Set`, or class instances. Everything in the copy
-counts, `alt` text included.
+token; it omits `undefined` members, writes array holes and `undefined` items as
+`null`, and honors `toJSON` (a `Date` hashes as its ISO string), as
+`JSON.stringify` does. Values JSON would drop or distort throw instead, naming
+the property (`copy.render is a function`): functions, symbols, bigints, `NaN`
+and infinities, circular references (including a `toJSON` that leads back to
+its own object), and non-plain objects such as `Map`, `Set`, or class
+instances. Everything in the copy counts, `alt` text included.
+
+So copies that are equal as JSON get one token. A component that draws them
+differently, by reading key order with `Object.values` or telling an array hole
+from `null`, needs that difference in the URL some other way: raise the plate's
+`revision` when the design starts depending on it, or pass an explicit
+`version` for the page. The [render cache](rendering.md#caching-renders) and
+[`--incremental`](render-cli.md#incremental-builds) keep key order, so they never
+serve such a copy the other's image; only the URL token treats them as equal.
 
 **Rules.**
 

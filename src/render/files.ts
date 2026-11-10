@@ -8,7 +8,7 @@ import { verifyImage, type ImageFormat } from "../image.js";
 import type { SocialTarget } from "../verify/compatibility-profiles.js";
 import { verifyPlateImage } from "../verify/social-verification.js";
 import { assertVersionToken } from "../metadata/image-version.js";
-import { taggedSerialize } from "../core/stable-hash.js";
+import { copyIdentity, taggedSerialize } from "../core/stable-hash.js";
 import { METAPLATE_VERSION } from "../core/version.js";
 
 /**
@@ -377,7 +377,7 @@ export async function peerVersions(moduleFile: string): Promise<PeerVersions> {
  * Hashes everything known to determine an image's bytes: the CLI's Metaplate
  * version, the peer versions, the route, size, and output path, the plate's
  * own fingerprint (its version, `revision`, size, fonts, and component
- * source), and the stable-serialized copy. `null` when the plate has no
+ * source), and the copy as `copyIdentity` serializes it. `null` when the plate has no
  * fingerprint or the copy cannot be serialized.
  */
 export async function inputHash(image: PlannedImage, peers: PeerVersions): Promise<string | null> {
@@ -385,15 +385,16 @@ export async function inputHash(image: PlannedImage, peers: PeerVersions): Promi
   let source: string;
   try {
     source = taggedSerialize({
-      input: "metaplate-render-input/1",
+      input: "metaplate-render-input/2",
       metaplate: METAPLATE_VERSION,
       peers,
       path: image.path,
       route: image.route,
       variant: image.variant,
       plate: await image.plate.fingerprint(),
-      copy: image.copy,
-    }, "copy");
+      // The copy keeps its key order and rejects functions; see `copyIdentity`.
+      copy: copyIdentity(image.copy),
+    });
   } catch (error) {
     if (error instanceof TypeError) return null;
     throw error;

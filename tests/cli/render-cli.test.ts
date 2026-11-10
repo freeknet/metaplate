@@ -802,9 +802,10 @@ describe("incremental inputs", () => {
     const plate = fakePlate({ fingerprint: "v1" });
     const base = await inputHash(plan(plate, { title: "A", tags: ["x"] }), NO_PEERS);
     expect(base).toMatch(/^[0-9a-f]{64}$/);
-    // Key order is not data.
-    expect(await inputHash(plan(plate, { tags: ["x"], title: "A" }), NO_PEERS)).toBe(base);
+    expect(await inputHash(plan(plate, { title: "A", tags: ["x"] }), NO_PEERS)).toBe(base);
     const changed = await Promise.all([
+      // Key order counts: a component can read it.
+      inputHash(plan(plate, { tags: ["x"], title: "A" }), NO_PEERS),
       inputHash(plan(plate, { title: "B", tags: ["x"] }), NO_PEERS),
       inputHash(plan(plate, { title: "A", tags: ["x"] }, "/b"), NO_PEERS),
       inputHash(plan(fakePlate({ fingerprint: "v2" }), { title: "A", tags: ["x"] }), NO_PEERS),
@@ -821,6 +822,16 @@ describe("incremental inputs", () => {
     const plate = fakePlate({ fingerprint: "v1" });
     expect(await inputHash(plan(plate, cycle), NO_PEERS)).toBeNull();
     expect(await inputHash(plan(plate, { when: new (class Moment {})() }), NO_PEERS)).toBeNull();
+    // A function's captured values are invisible to its source, so it always renders.
+    expect(await inputHash(plan(plate, { title: "A", label: () => "x" }), NO_PEERS)).toBeNull();
+  });
+
+  it("hashes copy in key order, so a reorder a component can see never reuses the old file", async () => {
+    const plate = fakePlate({ fingerprint: "v1" });
+    const first = await inputHash(plan(plate, { a: "A", b: "B" }), NO_PEERS);
+    expect(first).toMatch(/^[0-9a-f]{64}$/);
+    expect(await inputHash(plan(plate, { b: "B", a: "A" }), NO_PEERS)).not.toBe(first);
+    expect(await inputHash(plan(plate, { a: "A", b: "B" }), NO_PEERS)).toBe(first);
   });
 
   it("reads installed peer versions from the module's location, and null where none are installed", async () => {
