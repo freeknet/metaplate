@@ -162,8 +162,8 @@ Each guide below is a summary; the linked page has the full reference.
 or anything else from the same raw pixels. `handler` and `handlerFrom` plug
 into Fetch-based routes in Next.js, Astro, React Router, and SvelteKit, and
 `render` feeds Express or a build script. `plate.cached()` renders each
-distinct copy once, keyed by the plate's design and the copy, and answers
-`If-None-Match` with `304 Not Modified`. Plates are Satori layouts, not DOM,
+distinct copy once, keyed by the plate's design and the copy, answers
+`If-None-Match` with `304 Not Modified`, and keeps a signed route signed. Plates are Satori layouts, not DOM,
 so read the plate constraints before designing one. Opt-in render `guards`
 fail or report a card with text no font covers, text laid out off the canvas,
 or (Node and edge) a single-color image, instead of shipping it; they are off
@@ -308,7 +308,10 @@ directories, and globs, and `--require-content` decodes PNG and JPEG and fails
 an image whose every pixel is the same color. `--baseline DIR` compares each
 card with a saved copy and fails one that changed, with a side-by-side diff
 image, so a Satori or font upgrade cannot change cards unnoticed. `runCli`
-from `metaplate/cli` runs any command from a script without a shell.
+from `metaplate/cli` runs any command from a script without a shell. In code,
+`verifySocialImage` checks bytes against their published descriptor, and its
+`checkUrl: false` skips the HTTPS rule for a local or CI build that is never
+crawled.
 [Verification guide](docs/verification.md) and
 [page audit guide](docs/verify-page.md)
 
