@@ -7,6 +7,7 @@ export default defineConfig({
     render: "src/render.ts",
     node: "src/node.ts",
     edge: "src/edge.ts",
+    takumi: "src/takumi.ts",
     fonts: "src/fonts.ts",
     "font-data": "src/font-data.ts",
     emoji: "src/emoji.ts",
@@ -33,5 +34,8 @@ export default defineConfig({
     "react/jsx-runtime",
     "satori",
     "satori/standalone",
+    "takumi-js",
+    "takumi-js/helpers/emoji",
+    "takumi-js/helpers/jsx",
   ],
 });
