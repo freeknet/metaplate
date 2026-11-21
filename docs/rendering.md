@@ -660,8 +660,9 @@ differences bite in practice:
     when it is a `background`.
 - **A missing font face falls back without a warning.** A `fontFamily` that was
   not loaded falls back to another face, and a `fontWeight` that was not loaded
-  uses the nearest one; see [Several fonts](recipes.md#several-fonts). No render
-  guard catches either.
+  is drawn with another of the family's faces; see
+  [Several fonts](recipes.md#several-fonts). The
+  [`fontFallback` guard](#render-guards) reports both.
 - **React accessibility lint rules do not apply.** Rules such as Biome's
   `lint/a11y/noSvgWithoutTitle` or `jsx-a11y/*` are written for DOM SVG and will
   ask for exactly the `<title>` above. Suppress them in the plate file rather
@@ -714,6 +715,7 @@ Each guard takes `"error"`, `"warn"`, or `"off"`:
 | `safeArea` | Text inside the canvas but outside the area every wide crop keeps | `createSvgOg`, `createNodeOg`, `createEdgeOg` |
 | `textOverlap` | Two text elements whose laid-out boxes intersect | `createSvgOg`, `createNodeOg`, `createEdgeOg` |
 | `avoid` | Text that comes too close to an element the plate keys, such as a photo | `createSvgOg`, `createNodeOg`, `createEdgeOg` |
+| `fontFallback` | Text whose `fontFamily`, `fontWeight`, or `fontStyle` no loaded font provides | `createSvgOg`, `createNodeOg`, `createEdgeOg` |
 | `blank` | A rasterised image in which every pixel is the same color | `createNodeOg`, `createEdgeOg` |
 
 `"error"` rejects the render (and so `render`, `renderPixels`, `artifact`,
@@ -722,8 +724,9 @@ with a `RenderGuardError`. Its `issues` lists every error-level problem the
 render step found, each with `guard`, `message`, the `variant` and `size`
 being rendered, and the guard's own details: `languageCode` and `segment`
 for missing glyphs, `element`, `text`, and `box` for overflow and the layout
-guards (plus `safeArea`, the `other` text, or the `avoided` element), `color`
-for a blank image. Its `name` is `"RenderGuardError"`; `instanceof` works when the
+guards (plus `safeArea`, the `other` text, or the `avoided` element),
+`element`, `text`, `fontFamily`, `fontWeight`, `fontStyle`, `missing`, and
+`loaded` for a font fallback, `color` for a blank image. Its `name` is `"RenderGuardError"`; `instanceof` works when the
 class is imported from the same entry as the plate factory, because each
 entry is bundled separately.
 
@@ -765,6 +768,22 @@ with both reports all of them.
   points at a padded root without `boxSizing: "border-box"`. Otherwise the
   text needs more room than its container has, and the fix is shorter text, a
   smaller font size, or [`lineClamp`](recipes.md#long-titles).
+- **`fontFallback`** walks the element tree the component returned, carrying
+  inline `fontFamily`, `fontWeight`, and `fontStyle` down to each text the way
+  CSS inherits them, and calls nested function components with their props as
+  Satori does. Satori matches a family name case-insensitively and without
+  quotes, takes the first family in the stack that is loaded, and skips generic
+  names such as `sans-serif`. With no family named, or only generic ones, it
+  uses the plate's first font. The guard reports, once per distinct request in
+  a render, a stack in which no family is loaded (`missing: "family"`; Satori
+  draws the text with the first loaded font) and a weight and style the
+  resolved family has no face for (`missing: "face"`; Satori draws it with
+  another face, which may even be the italic one when only the weight
+  matches). `loaded` lists the faces Satori chooses from. Faces a
+  [`languageFonts`](fonts.md) loader or `satori.loadAdditionalAsset` returns
+  during the render count as loaded. It does not see values set by `<style>`
+  rules or Tailwind `tw`, or a `var()` family; a relative weight such as
+  `bolder` is not checked.
 - **`blank`** reads the raw RGBA pixels after Resvg rasterises them and
   before any `output` encoder runs, stopping at the first pixel that differs
   from the first; fully transparent pixels count as one color whatever their

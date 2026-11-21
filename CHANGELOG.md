@@ -5,6 +5,18 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ## [Unreleased]
 
+### Added
+
+- A `fontFallback` render guard for `createSvgOg`, `createNodeOg`, and
+  `createEdgeOg`. Satori draws text whose `fontFamily` stack has no loaded family
+  with the first loaded font, and a weight or style the family lacks with another
+  of its faces (an italic one, when only the weight matches), all without an error.
+  The guard reports each distinct request no loaded face satisfies, as
+  `missing: "family"` or `missing: "face"` with the `loaded` faces listed. It reads
+  inline styles inherited down the tree and calls nested function components;
+  faces a `languageFonts` loader returns count as loaded. Values set by `<style>`
+  rules or `tw` are not seen. Off by default, like every guard.
+
 ### Fixed
 
 - The rendering guide and the brand-colors recipe said plates have no stylesheet
