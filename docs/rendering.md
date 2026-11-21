@@ -642,11 +642,26 @@ differences bite in practice:
   that differ from the image's shape, it is distorted, with no error. Set
   `objectFit` to `"cover"` or `"contain"`; see
   [Photos of any shape](recipes.md#photos-of-any-shape).
-- **There is no stylesheet, and nothing warns you.** `var(--brand)` is ignored, so
-  keep [colors in a module](recipes.md#brand-colors). A `fontFamily` that was not
-  loaded falls back to another face, and a `fontWeight` that was not loaded uses
-  the nearest one; see [Several fonts](recipes.md#several-fonts). No render guard
-  catches either.
+- **The site's CSS never reaches the card.** A plate sees only its own element
+  tree, so a `var(--brand)` defined in the site's stylesheet is undefined there;
+  keep shared values [in a module](recipes.md#brand-colors). CSS the plate itself
+  declares does apply:
+  - Custom properties declared in the tree, such as
+    `style={{ "--brand": "#e8a33d", background: "var(--brand)" }}`, resolve in
+    every adapter, and `var(--brand, #e8a33d)` uses its fallback when the
+    property is undefined.
+  - A `<style>` element in the tree applies its rules (selectors, `@media` on
+    the image size, nesting) with `createSvgOg`, `createNodeOg`, and
+    `createEdgeOg` on Satori 0.51.0 or later; the audited 0.63.2 supports it.
+    `createNextOg` ignores `<style>`, because `next/og` bundles its own older
+    Satori (0.29.0 in Next.js 16.4).
+  - An undefined `var()` without a fallback draws nothing and raises no error
+    in Metaplate's own renderers, but fails the whole render in `createNextOg`
+    when it is a `background`.
+- **A missing font face falls back without a warning.** A `fontFamily` that was
+  not loaded falls back to another face, and a `fontWeight` that was not loaded
+  uses the nearest one; see [Several fonts](recipes.md#several-fonts). No render
+  guard catches either.
 - **React accessibility lint rules do not apply.** Rules such as Biome's
   `lint/a11y/noSvgWithoutTitle` or `jsx-a11y/*` are written for DOM SVG and will
   ask for exactly the `<title>` above. Suppress them in the plate file rather
