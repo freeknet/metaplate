@@ -57,7 +57,7 @@ describe("fontFallback guard", () => {
       fontFamily: "JetBrains Mono, monospace",
       loaded: ["Inter 700 normal"],
     });
-    expect(issue?.message).toContain("Satori draws it with Inter");
+    expect(issue?.message).toContain("so it is drawn with Inter");
   }, RENDER_TIMEOUT);
 
   it("reports an inherited weight or style the family has no face for, once per request", async () => {
