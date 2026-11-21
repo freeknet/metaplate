@@ -64,6 +64,7 @@ visibly different card at the same URL can stay stale for a long time. With
 | `@resvg/resvg-js` | `>=2.6.2 <3` | Installed for you. |
 | `react` | `>=18.2.0 <20` | Installed for you. |
 | `next` | `>=16.3.2 <17` | Only for `metaplate/next`. |
+| `takumi-js` | `>=2.22.1 <3` | Only for `metaplate/takumi` (experimental). Install it yourself. |
 
 A project below the Next range has to upgrade Next first. If npm reports a peer
 conflict, fix the version rather than forcing past it, because these ranges are what
@@ -86,6 +87,10 @@ Work through every row newer than the version you are on.
 | 0.7.0 | `socialImageCompatibility` throws a `TypeError` for a descriptor with no `width` or `height`. | Pass both. |
 | 0.8.1 | The `satori` peer floor rises to 0.38.2. | Upgrade Satori. Below it, `inset` and fragments misbehave with no error. |
 | 0.8.4 | `cached()` throws a `TypeError` for copy that holds a function, and `--incremental` always renders such a page, because a function's captured values cannot be keyed. | Pass the data the function uses instead of the function. |
+
+The next release adds `"fontFallback"` to `RenderGuardName` and a `fontFallback` member
+to `RenderGuardIssue`. Code that switches over `issue.guard` with an exhaustiveness
+check needs a case for it; nothing else changes, and the guard is off by default.
 
 Upgrading to 0.8.4 also changes every render-cache key and `--incremental` input
 hash once, because both now keep the copy's key order. A shared cache store misses
@@ -152,6 +157,9 @@ Nothing here is required, but older code often has a shorter form now.
 | A `metaplate verify --target` step after `metaplate render`, repeating each size | [`metaplate render --target`](render-cli.md#formats-and-verification) | 0.8.3 |
 | A test that drops or rewrites `url` so `verifySocialImage` skips the HTTPS rule | [`checkUrl: false`](testing.md#check-bytes-against-the-descriptor) | 0.8.4 |
 | A signed route that left out `cached()` because it dropped `{ signed }` | [`cached().handlerFrom(resolve, { signed })`](signed-routes.md) | 0.8.4 |
+| A look at each card after changing fonts | The [`fontFallback` guard](rendering.md#render-guards), which reports a family, weight, or style no loaded font provides | Unreleased |
+| Hand-written `fetch` for per-page images on an edge runtime | [`fetchImageLoader`](rendering.md#edge-runtimes) from `metaplate/image`, with `remoteImageLoader`'s allowlist, redirect checks, and byte cap | Unreleased |
+| Build-time cards because `metaplate/edge` cannot start on Cloudflare Workers | [`metaplate/takumi`](takumi.md) (experimental), which renders there | Unreleased |
 
 ## Workarounds you can delete
 

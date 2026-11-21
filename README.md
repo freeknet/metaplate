@@ -165,8 +165,10 @@ into Fetch-based routes in Next.js, Astro, React Router, and SvelteKit, and
 distinct copy once, keyed by the plate's design and the copy, answers
 `If-None-Match` with `304 Not Modified`, and keeps a signed route signed. Plates are Satori layouts, not DOM,
 so read the plate constraints before designing one. Opt-in render `guards`
-fail or report a card with text no font covers, text laid out off the canvas,
-or (Node and edge) a single-color image, instead of shipping it; they are off
+fail or report a card with text no font covers, text in a font family, weight,
+or style that was never loaded, text laid out off the canvas or outside the
+crop-safe area, overlapping text, or (Node and edge) a single-color image,
+instead of shipping it; they are off
 by default and unavailable through `metaplate/next`.
 [Rendering guide](docs/rendering.md)
 
@@ -335,8 +337,8 @@ every route is in [`deployment-evidence.json`](https://github.com/freeknet/metap
   (including video and audio, and X player and app cards), cache-busting
   image URL versions (`socialImageVersion`), `<meta>` tag serialization, Schema.org JSON-LD, Adaptive Cards, social compatibility
   profiles, and byte-level social image verification.
-- `metaplate/render` — Satori-based SVG generation, with the
-  `missingGlyphs` and `overflow` render guards (`RenderGuardError`). Satori is
+- `metaplate/render` — Satori-based SVG generation, with every render guard
+  that reads the layout (`RenderGuardError`). Satori is
   installed automatically.
 - `metaplate/node` — SVG, PNG, raw pixels, and any format a supplied encoder
   produces, plus Fetch API responses, with every render guard including
@@ -368,8 +370,10 @@ every route is in [`deployment-evidence.json`](https://github.com/freeknet/metap
   installed-package reader, `packageEmojiLoader`, is in `metaplate/fonts`.
 - `metaplate/png` — PNG header inspection and dimension verification. No peers.
 - `metaplate/image` — dimension and structural verification for SVG, PNG,
-  JPEG, WebP, and GIF, and `imageAsset`/`imageAssetLoader` for embedding
-  checked image bytes in a plate. No peers or Node built-ins.
+  JPEG, WebP, and GIF, `imageAsset`/`imageAssetLoader` for embedding
+  checked image bytes in a plate, and `fetchImageLoader` for remote images
+  fetched only from allowlisted origins on any runtime with `fetch`,
+  Cloudflare Workers included. No peers or Node built-ins.
 - `metaplate/assets` — Node readers for plate images: project files
   (`readImageAsset`, `fileImageLoader`) and remote images fetched only
   from allowlisted origins (`remoteImageLoader`). No renderer peers.
