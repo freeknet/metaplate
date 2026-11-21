@@ -280,12 +280,13 @@ const fonts = fontsourceFontLoader([
 is the family's display name, read from the package. Install each one:
 `npm install @fontsource/inter @fontsource/jetbrains-mono`.
 
-No render guard catches a font mismatch, because the text is still drawn:
+Satori raises no error for a font mismatch, because the text is still drawn; turn on
+the [`fontFallback` guard](rendering.md#render-guards) to catch the first two:
 
 | You write | What happens |
 | --- | --- |
-| A `fontFamily` that was not loaded, such as `"jetbrains-mono"` | Silently falls back to another loaded face. |
-| A `fontWeight` that was not loaded | Silently uses the nearest loaded weight. |
+| A `fontFamily` that was not loaded, such as `"jetbrains-mono"` | Silently falls back to another loaded face. The `fontFallback` guard catches this. |
+| A `fontWeight` that was not loaded | Silently uses another of the family's faces. The `fontFallback` guard catches this. |
 | Text no loaded font covers | Missing-glyph boxes. The `missingGlyphs` guard does catch this. |
 
 So look at a card after changing fonts; [`metaplate preview`](preview.md) is the

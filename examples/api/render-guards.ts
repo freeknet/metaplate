@@ -29,14 +29,15 @@ const card = (copy: Copy) => ({
 const fonts = fontsourceFontLoader([{ font: "inter", weight: 700 }]);
 
 /**
- * A build that must never publish a broken card: text without a font, text
- * laid out off the canvas, and a single-color image all fail the render.
+ * A build that must never publish a broken card: text without a font, text in
+ * a font face that was never loaded, text laid out off the canvas, and a
+ * single-color image all fail the render.
  */
 export const strict = createNodeOg({
   alt: (copy: Copy) => copy.title,
   fonts,
   component: card,
-  guards: { missingGlyphs: "error", overflow: "error", blank: "error" },
+  guards: { missingGlyphs: "error", fontFallback: "error", overflow: "error", blank: "error" },
 });
 
 export async function build(copy: Copy): Promise<Uint8Array | undefined> {

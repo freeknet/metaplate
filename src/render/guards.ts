@@ -46,6 +46,15 @@ export type RenderGuards = {
    */
   avoid?: AvoidGuard;
   /**
+   * Text whose `fontFamily`, `fontWeight`, or `fontStyle` no loaded font
+   * provides. Satori draws it anyway, with the first loaded font when no
+   * family in the stack is loaded, or with another face of the family when
+   * that weight and style are missing, and raises no error. Read from the
+   * plate's inline styles, inherited down the tree; values set by `<style>`
+   * rules or `tw` are not seen.
+   */
+  fontFallback?: RenderGuardLevel;
+  /**
    * Receives each problem found by a guard set to `"warn"`. Without it,
    * warnings go to `console.warn`, so a `"warn"` guard is never silent.
    */
@@ -71,7 +80,14 @@ export type RasterRenderGuards = RenderGuards & {
   blank?: RenderGuardLevel;
 };
 
-export type RenderGuardName = "missingGlyphs" | "overflow" | "safeArea" | "textOverlap" | "avoid" | "blank";
+export type RenderGuardName =
+  | "missingGlyphs"
+  | "overflow"
+  | "safeArea"
+  | "textOverlap"
+  | "avoid"
+  | "fontFallback"
+  | "blank";
 
 type IssueBase = Readonly<{
   /** The variant being rendered; `undefined` for the plate's default size. */
@@ -125,6 +141,20 @@ export type RenderGuardIssue =
       avoided: Readonly<{ element: string; key: string; box: RenderGuardBox }>;
     }>)
   | (IssueBase & Readonly<{
+      guard: "fontFallback";
+      element: string;
+      /** The first text drawn with this font request. */
+      text: string;
+      /** The `fontFamily` stack as written; `undefined` when none applies. */
+      fontFamily: string | undefined;
+      fontWeight: number;
+      fontStyle: "normal" | "italic";
+      /** `"family"`: no family in the stack is loaded. `"face"`: the family is, but not this weight and style. */
+      missing: "family" | "face";
+      /** The loaded faces Satori chooses from, such as `Inter 700 normal`. */
+      loaded: readonly string[];
+    }>)
+  | (IssueBase & Readonly<{
       guard: "blank";
       /** The single color of every pixel, as RGBA bytes. */
       color: readonly [number, number, number, number];
@@ -154,10 +184,25 @@ type GuardLevels = Readonly<{
 };
 
 const LEVELS = new Set<unknown>(["error", "warn", "off"]);
-const GUARD_NAMES: readonly RenderGuardName[] = ["missingGlyphs", "overflow", "safeArea", "textOverlap", "avoid", "blank"];
+const GUARD_NAMES: readonly RenderGuardName[] = [
+  "missingGlyphs",
+  "overflow",
+  "safeArea",
+  "textOverlap",
+  "avoid",
+  "fontFallback",
+  "blank",
+];
 
 /** The guards that work on Satori's layout, which every renderer can run. */
-export const LAYOUT_GUARD_NAMES: readonly RenderGuardName[] = ["missingGlyphs", "overflow", "safeArea", "textOverlap", "avoid"];
+export const LAYOUT_GUARD_NAMES: readonly RenderGuardName[] = [
+  "missingGlyphs",
+  "overflow",
+  "safeArea",
+  "textOverlap",
+  "avoid",
+  "fontFallback",
+];
 
 const isPixels = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0;
 
@@ -249,14 +294,14 @@ function defaultWarning(warning: RenderGuardIssue): void {
   console.warn(`metaplate: ${warning.message}`);
 }
 
-function describeTarget(target: GuardTarget): string {
+export function describeTarget(target: GuardTarget): string {
   const { width, height } = target.size;
   return target.variant === undefined
     ? `the ${width}x${height} plate`
     : `variant "${target.variant}" (${width}x${height})`;
 }
 
-function quote(text: string, limit = 60): string {
+export function quote(text: string, limit = 60): string {
   const single = text.replace(/\s+/g, " ").trim();
   return JSON.stringify(single.length > limit ? `${single.slice(0, limit - 1)}…` : single);
 }
