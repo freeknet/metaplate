@@ -186,7 +186,7 @@ export function checkFontFallback(
         loaded: Object.freeze(faces.map(describeFace)),
         message:
           `Text ${quote(text)} in a <${type}> asks for fontFamily ${JSON.stringify(request.family)} in ` +
-          `${describeTarget(target)}, but no loaded font is in that stack, so Satori draws it with ${first.name}; ` +
+          `${describeTarget(target)}, but no loaded font is in that stack, so it is drawn with ${first.name}; ` +
           `load the family in fonts or name a loaded one (loaded: ${names.join(", ")})`,
       });
       continue;
@@ -203,7 +203,7 @@ export function checkFontFallback(
       message:
         `Text ${quote(text)} in a <${type}> asks for ${name} ${request.weight} ${request.style} in ` +
         `${describeTarget(target)}, but the loaded ${name} faces are ${family.map(describeFace).map((face) => face.slice(name.length + 1)).join(", ")}, ` +
-        "so Satori draws it with another face; load that weight and style in fonts or use a loaded one",
+        "so it is drawn with another face; load that weight and style in fonts or use a loaded one",
     });
   }
 }
