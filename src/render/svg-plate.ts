@@ -12,6 +12,7 @@ import {
   overflowDetector,
   type GuardTarget,
 } from "./guards.js";
+import { checkFontFallback, FaceRegistry } from "./font-guard.js";
 import type { SatoriLayoutNode, SatoriOptions, SvgOgDefinition } from "./svg.js";
 
 export const SVG_CONTENT_TYPE = "image/svg+xml" as const;
@@ -79,10 +80,11 @@ async function renderSvg<Copy, Variant extends string>(
   const report = new GuardReport(definition.guards);
   const target: GuardTarget = { variant: context.variant, size: context.size };
   const layout = layoutGuards(definition.guards, report, target);
+  const faces = guardLevel(definition.guards, "fontFallback") === "off" ? undefined : new FaceRegistry(fonts);
   const svg = await satori(
     element as Parameters<typeof satori>[0],
     {
-      ...(satoriOptions(definition, report, target, layout?.detect) as unknown as Parameters<typeof satori>[1]),
+      ...(satoriOptions(definition, report, target, layout?.detect, faces) as unknown as Parameters<typeof satori>[1]),
       ...(options?.debug === undefined ? {} : { debug: options.debug }),
       width: context.size.width,
       height: context.size.height,
@@ -92,6 +94,7 @@ async function renderSvg<Copy, Variant extends string>(
   // Warnings are reported, and error-level issues thrown, only once Satori
   // has finished, so one RenderGuardError lists every issue in the layout.
   layout?.finish();
+  if (faces) checkFontFallback(element, faces.all, report, target);
   report.settle();
   return svg;
 }
@@ -130,19 +133,30 @@ function scriptAssets(
  * The Satori options for one render: the plate's own, with the emoji loader,
  * language fonts, and any enabled guards composed around the caller's `loadAdditionalAsset`
  * and `onNodeDetected`. With no emoji loader and every guard off, the plate's
- * options pass through untouched, so Satori's behavior is unchanged.
+ * options pass through untouched, so Satori's behavior is unchanged. `faces`,
+ * when the `fontFallback` guard is on, records every font the composed loader
+ * answers with, so a family that only a language font supplies counts as loaded.
  */
 function satoriOptions<Copy, Variant extends string>(
   definition: SvgOgDefinition<Copy, Variant>,
   report: GuardReport,
   target: GuardTarget,
   detectLayout: ((node: SatoriLayoutNode) => void) | undefined,
+  faces: FaceRegistry | undefined,
 ): SatoriOptions | undefined {
   const { emoji, languageFonts, satori, guards } = definition;
   let loadAdditionalAsset = satori?.loadAdditionalAsset;
   if (emoji || languageFonts) loadAdditionalAsset = scriptAssets(emoji, languageFonts, loadAdditionalAsset);
   if (guardLevel(guards, "missingGlyphs") !== "off") {
     loadAdditionalAsset = guardAssetLoader(loadAdditionalAsset, report, target, satori?.graphemeImages);
+  }
+  if (faces) {
+    const answer = loadAdditionalAsset;
+    loadAdditionalAsset = async (languageCode, segment) => {
+      const asset = answer ? await answer(languageCode, segment) : [];
+      faces.record(asset);
+      return asset;
+    };
   }
 
   let onNodeDetected = satori?.onNodeDetected;
