@@ -4,6 +4,7 @@ import { createPlateHandlers, createPlateViews } from "./plate.js";
 import { loadResvg, loadSatori } from "../core/peers.js";
 import {
   createRasterPlate,
+  satoriFrames,
   type OutputEncoder,
   type ResvgRenderOptions,
 } from "./raster.js";
@@ -97,13 +98,12 @@ export function createNodeOg<Copy, Variant extends string = string>(
   definition: NodeOgDefinition<Copy, Variant>,
 ) {
   const raster = createRasterPlate(definition, {
-    satori: loadSatori,
-    async rasterize(source, read) {
+    frames: satoriFrames(definition, loadSatori, async (source, read) => {
       // Both peers resolve before rendering so an install missing both is told
       // to add both, rather than reporting them one run at a time.
       const [, Resvg] = await loadPeerPair(loadSatori, loadResvg, "metaplate/node");
       return read(new Resvg(await source(), definition.resvg).render());
-    },
+    }),
     sha256,
     renderer: "node",
   });

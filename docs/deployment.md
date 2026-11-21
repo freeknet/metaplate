@@ -42,7 +42,7 @@ URLs your pages emitted.
 | Astro on-demand endpoint | `handlerFrom()` as the endpoint `GET` | `@astrojs/node` standalone server | `src/pages/[slug]/og-image.png.ts` | Locally certified from the packed artifact through the built `entry.mjs`; hosted Astro adapters are separate |
 | SvelteKit `+server` route | `handlerFrom()` as the `GET` `RequestHandler` | `adapter-node` on Node.js | `src/routes/[slug]/og-image.png/+server.ts` | Locally certified framework contract; hosted deployment of the Node server remains a recipe |
 | Netlify Edge Functions and other Deno-based edges | `metaplate/edge` (`fetchable()` / `fetchableFrom()`), not `metaplate/node` | `@resvg/resvg-wasm` with caller-supplied `index_bg.wasm` and `satori/layout.wasm`, on a runtime that compiles Wasm at run time | Provider route | Tested in Node against the Wasm renderer; hosted-certified on Netlify Edge Functions (2026-11-01) |
-| Cloudflare Workers / Vercel Edge | None: not `metaplate/edge`, not `metaplate/node` | Isolates that forbid compiling Wasm from bytes | Static files, or the provider's Node runtime | Not supported. Workers fail every render under `wrangler dev` (workerd) because Satori's bundled HarfBuzz reads `self.location.href` and compiles its Wasm at run time (2026-11-01, local reproduction). Vercel Edge forbids the same compilation and is expected to fail likewise; its 2026-11-01 deploy was refused for size (2.13 MB gzip against Hobby's 1 MB) before any render |
+| Cloudflare Workers / Vercel Edge | None certified: not `metaplate/edge`, not `metaplate/node`; the experimental `metaplate/takumi` runs on Workers ([Takumi](takumi.md)) | Isolates that forbid compiling Wasm from bytes | Static files, or the provider's Node runtime | Not supported. Workers fail every render under `wrangler dev` (workerd) because Satori's bundled HarfBuzz reads `self.location.href` and compiles its Wasm at run time (2026-11-01, local reproduction). Vercel Edge forbids the same compilation and is expected to fail likewise; its 2026-11-01 deploy was refused for size (2.13 MB gzip against Hobby's 1 MB) before any render |
 
 ## Static generation
 
@@ -482,6 +482,12 @@ and the `cloudflare-workers` route in `deployment-evidence.json` records it.
 Vercel's Edge runtime also refuses to compile Wasm from a buffer, so it is
 expected to fail the same way (see [Vercel](#hosted-vercel-evidence)); that was
 not observed, because the deployment was refused for size first.
+
+The experimental [`metaplate/takumi`](takumi.md) renders on Workers instead,
+through Takumi's precompiled Wasm. It is not hosted-certified. A spike Worker
+rendering the same card served every request on the Workers Free plan
+(2026-11-20), but at about 13 ms of CPU per warm render, above that plan's
+10 ms limit, so cache its cards there (see [Cloudflare Workers](takumi.md#cloudflare-workers)).
 
 On those runtimes, or where JPEG or WebP output is required:
 

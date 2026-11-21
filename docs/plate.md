@@ -12,6 +12,7 @@ are `createSvgOg` (`metaplate/render`), `createNodeOg` (`metaplate/node`),
 | `createNodeOg` | Bytes, `Response` | PNG, plus anything an `output` encoder produces | Yes, including `blank` | Node, Bun, Deno |
 | `createNextOg` | `next/og` `ImageResponse` | PNG | No | Next route handlers and metadata files |
 | `createEdgeOg` | Bytes, `Response` | PNG | Yes, including `blank` | [Deno-based edges](edge.md) |
+| `createTakumiOg` | Bytes, `Response` | PNG | Yes, including `blank`; not `avoid` | [Takumi, including Cloudflare Workers](takumi.md) (experimental) |
 | `createSvgOg` | SVG text | SVG | Yes, except `blank` | Anywhere Satori runs |
 
 Only `createNodeOg` and `createEdgeOg` plates work with

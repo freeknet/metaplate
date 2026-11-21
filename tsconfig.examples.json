@@ -14,6 +14,7 @@
       "metaplate/fonts": ["./src/fonts.ts"],
       "metaplate/emoji": ["./src/emoji.ts"],
       "metaplate/edge": ["./src/edge.ts"],
+      "metaplate/takumi": ["./src/takumi.ts"],
       "metaplate/font-data": ["./src/font-data.ts"],
       "metaplate/png": ["./src/png.ts"],
       "metaplate/image": ["./src/image.ts"],

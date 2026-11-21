@@ -20,6 +20,7 @@ and small helpers that no guide covers are described below the table. The
 | | `fetchRemoteImage`, `verifyRemoteImage`, `RemoteImageError`, `REMOTE_FETCH_DEFAULTS`, `REMOTE_USER_AGENT` | [Verification](verification.md#verify-a-deployed-url) |
 | | `verifyRemotePage`, `extractPageSocialMetadata`, `REMOTE_PAGE_DEFAULTS`, `CRAWLER_HTML_LIMITS`, `SOCIAL_CRAWLERS`, `findSocialCrawler`, `parseRobotsTxt`, `evaluateRobots`, `isRobotsProductToken`, `REMOTE_ROBOTS_DEFAULTS` | [Page audits](verify-page.md) |
 | `metaplate/edge` | `createEdgeOg`, `initEdgeRenderer`, `RenderGuardError`, `memoryRenderCache`, `MEMORY_RENDER_CACHE_DEFAULTS` | [Edge runtimes](edge.md) |
+| `metaplate/takumi` | `createTakumiOg`, `RenderGuardError`, `memoryRenderCache`, `MEMORY_RENDER_CACHE_DEFAULTS` (experimental) | [Takumi renderer](takumi.md) |
 | `metaplate/next` | `createNextOg`, `nextPageMetadata`, `nextPageViewport`, `nextTwitterMetadata`, `NEXT_OPEN_GRAPH_TYPES` | [Next.js](nextjs.md) |
 | `metaplate/fonts` | `fileFontLoader`, `packageFontLoader`, `fontsourceFontLoader`, `fontLoader`, their `load*` forms, `findPackageDirectory`, `fontsourceLanguageFontLoader`, `languageFontLoader`, `packageEmojiLoader` | [Fonts](fonts.md), [Emoji](emoji.md) |
 | `metaplate/font-data` | `fontLoader`, `loadFonts`, `languageFontLoader` | [Fonts](fonts.md#edge-runtimes-and-other-byte-sources) |

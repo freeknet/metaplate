@@ -1,14 +1,15 @@
 import { loadPeerPair } from "../core/optional-peer.js";
-import { createPlateHandlers, createPlateViews } from "./plate.js";
+import { createPlateViews } from "./plate.js";
 import { loadResvgWasm, loadSatoriStandalone } from "../core/peers.js";
 import {
   createRasterPlate,
+  fetchShapedView,
+  satoriFrames,
   type ResvgRenderOptions,
 } from "./raster.js";
 import type { RasterRenderGuards } from "./guards.js";
-import type { RenderCacheOptions } from "./cache.js";
 import type { SvgOgDefinition } from "./svg.js";
-import { toHex } from "../core/stable-hash.js";
+import { webSha256 } from "../core/stable-hash.js";
 import type { SatoriRender } from "./svg-plate.js";
 
 export type { RenderedPixels } from "./raster.js";
@@ -290,8 +291,7 @@ export function createEdgeOg<Copy, Variant extends string = string>(
   const raster = createRasterPlate(
     { ...definition, resvg: resvgOptions },
     {
-      satori: loadSatori,
-      async rasterize(source, read) {
+      frames: satoriFrames(definition, loadSatori, async (source, read) => {
         // Both peers resolve before either Wasm module is required, so a
         // missing package is reported as an install command first.
         const [, resvg] = await loadPeerPair(loadSatoriStandalone, loadResvgWasm, "metaplate/edge");
@@ -319,38 +319,14 @@ export function createEdgeOg<Copy, Variant extends string = string>(
         } finally {
           renderer.free();
         }
-      },
-      sha256: async (bytes) =>
-        toHex(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes as Uint8Array<ArrayBuffer>))),
+      }),
+      sha256: webSha256,
       renderer: "edge",
     },
   );
 
-  return createPlateViews(raster.variants, (name) => {
-    const view = raster.view(name);
-    // Edge runtimes are Fetch-shaped, so the Fetchable forms are the primary
-    // API; the copy-bound `handler` stays a `metaplate/node` convenience.
-    const { handlerFrom, fetchable, fetchableFrom } = createPlateHandlers(view.response);
-    return {
-      ...view,
-      contentType: "image/png" as const,
-      handlerFrom,
-      fetchable,
-      fetchableFrom,
-      /** This size with a render cache in front: Fetch-shaped, like the plate. */
-      cached: (options?: RenderCacheOptions) => {
-        const cache = view.cached(options);
-        return Object.freeze({
-          store: cache.store,
-          key: cache.key,
-          entry: cache.entry,
-          render: cache.render,
-          response: cache.response,
-          handlerFrom: cache.handlerFrom,
-          fetchable: cache.fetchable,
-          fetchableFrom: cache.fetchableFrom,
-        });
-      },
-    };
-  });
+  return createPlateViews(raster.variants, (name) => ({
+    ...fetchShapedView(raster.view(name)),
+    contentType: "image/png" as const,
+  }));
 }

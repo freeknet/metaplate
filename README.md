@@ -224,6 +224,10 @@ Deno Deploy, and not on Cloudflare Workers or Vercel Edge, which forbid the
 run-time WebAssembly compilation Satori needs.
 [Edge guide](docs/edge.md)
 
+The experimental `metaplate/takumi` renders the same plates with Takumi instead
+of Satori and Resvg. Takumi's precompiled Wasm runs on Cloudflare Workers.
+[Takumi guide](docs/takumi.md)
+
 ### Next.js
 
 `metaplate/next` renders through Next's own `next/og` pipeline and keeps the
@@ -345,6 +349,9 @@ every route is in [`deployment-evidence.json`](https://github.com/freeknet/metap
   compilation; not Cloudflare Workers. No Node built-ins. Needs
   `@resvg/resvg-wasm` and the caller-supplied
   `@resvg/resvg-wasm/index_bg.wasm` and `satori/layout.wasm` modules.
+- `metaplate/takumi` (experimental) — PNG, raw pixels, and Fetch API responses
+  drawn by Takumi, including on Cloudflare Workers, with every render guard
+  except `avoid`. Needs `takumi-js`.
 - `metaplate/next` — native Next.js `ImageResponse` adapter,
   `nextTwitterMetadata` for X player and app cards in Next metadata, and
   `nextPageMetadata`/`nextPageViewport` for page-level tags. Needs `next`.

@@ -12,6 +12,11 @@ export function toHex(bytes: Uint8Array): string {
   return hex;
 }
 
+/** Lowercase hex SHA-256 of `bytes` through Web Crypto, for runtimes without `node:crypto`. */
+export async function webSha256(bytes: Uint8Array): Promise<string> {
+  return toHex(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes as Uint8Array<ArrayBuffer>)));
+}
+
 function isPlainObject(value: object): boolean {
   const prototype = Object.getPrototypeOf(value) as unknown;
   return prototype === Object.prototype || prototype === null;
