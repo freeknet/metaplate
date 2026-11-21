@@ -361,7 +361,8 @@ export function createRasterPlate<Copy, Variant extends string = string>(
             `received ${image.width}x${image.height}`,
         );
       }
-      if (checksBlank && image.pixels) {
+      if (checksBlank) {
+        if (!image.pixels) throw new Error("The renderer returned no pixels for the blank guard");
         // Checked on the raw pixels, before any encoder runs, so a blank
         // frame fails (or warns) whatever format the plate emits.
         const report = new GuardReport(definition.guards);
