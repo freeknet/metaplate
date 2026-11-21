@@ -296,9 +296,11 @@ in the [fonts guide](fonts.md).
 
 ## Brand colors
 
-Satori has no stylesheet, so `var(--brand)` does nothing. It raises no error: text
-keeps its inherited color, and a background is simply not drawn. Keep the values in
-a module that both the site and the plate can read:
+The card cannot read the site's stylesheet, so a `var(--brand)` defined there is
+undefined in the plate. In `createSvgOg`, `createNodeOg`, and `createEdgeOg` it
+raises no error: text keeps its inherited color, and a background is simply not
+drawn. In `createNextOg` an undefined `var()` in a `background` fails the render.
+Keep the values in a module that both the site and the plate can read:
 
 ```ts
 // src/lib/brand.ts
@@ -306,7 +308,10 @@ export const BRAND = { ground: "#10201c", text: "#f2efe6", accent: "#e8a33d" } a
 ```
 
 If the site's CSS holds the source of truth, add a small test that reads the
-stylesheet and compares, so the card cannot drift from the site.
+stylesheet and compares, so the card cannot drift from the site. A plate can still
+use custom properties and `<style>` rules of its own, fed from that module; see
+[Plate constraints](rendering.md#plate-constraints) for which adapters support
+what.
 
 ## One card per record
 

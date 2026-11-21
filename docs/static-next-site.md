@@ -75,7 +75,7 @@ plate for the classic JSX runtime and every render fails with `React is not
 defined`.
 
 Site-wide values go in a module that both the pages and the plate can read.
-Colors belong here too, because Satori does not read CSS custom properties:
+Colors belong here too, because the card cannot read the site's stylesheet:
 
 ```ts
 // src/lib/site.ts
@@ -85,7 +85,7 @@ export const SITE = {
   locale: "en_US",
 } as const;
 
-/** Colors live in a module because Satori does not read CSS custom properties. */
+/** Colors live in a module because the card cannot read the site's stylesheet. */
 export const BRAND = {
   ground: "#10201c",
   text: "#f2efe6",
