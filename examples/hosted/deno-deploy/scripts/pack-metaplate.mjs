@@ -15,9 +15,11 @@ const root = resolve(here, "../../..");
 const run = (command, cwd, env = process.env) =>
   execSync(command, { cwd, env, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
 
-// Deno Deploy's builder has 3 GB of RAM, but Node sized its heap near 490 MB
-// there and tsup's declaration build ran out of memory; give it 2 GB.
-run("npm run build", root, { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --max-old-space-size=2048`.trim() });
+// Only the JavaScript is built: the app runs it and never reads declarations,
+// and tsup's declaration build is what exhausted Deno Deploy's 3 GB builder
+// (a 2 GB heap was enough for 13 entries; the 14th, metaplate/takumi, got the
+// build Killed). The JavaScript is byte-identical to `npm run build`'s.
+run("npx tsup --no-dts", root);
 const packed = npmPackResult(run(`npm pack --json --pack-destination "${here}"`, root));
 const tarball = join(here, "metaplate.tgz");
 renameSync(join(here, packed.filename), tarball);
