@@ -208,6 +208,19 @@ describe("guards", () => {
     expect(warnings).toEqual([]);
   }, RENDER_TIMEOUT);
 
+  it("counts a family only languageFonts supplies as loaded with fontFallback alone", async () => {
+    const load = async (code: string, segment: string) =>
+      code.split("|").includes("ja-JP")
+        ? [{ name: "Squares JP", weight: 700 as const, style: "normal" as const, data: squareGlyphFont("Squares JP", segment).buffer as ArrayBuffer }]
+        : [];
+    const og = plate({
+      languageFonts: load,
+      component: (copy) => card(copy.title, { fontFamily: "Squares JP" }),
+      guards: { fontFallback: "error" },
+    });
+    await expect(og.render({ title: "日本" })).resolves.toBeInstanceOf(Uint8Array);
+  }, RENDER_TIMEOUT);
+
   it("reports a font family the plate never loaded", async () => {
     const { warnings, onWarning } = collected();
     const og = plate({

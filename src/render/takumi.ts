@@ -329,8 +329,11 @@ function takumiFrames<Copy, Variant extends string>(
 ): FrameSource<Copy, Variant> {
   const social = createPlateSocial(definition, OG_CONTENT_TYPE);
   const { guards, emoji, languageFonts } = definition;
-  const measures = MEASURED_GUARDS.some((name) => guardLevel(guards, name) !== "off");
   const checksFonts = guardLevel(guards, "fontFallback") !== "off";
+  // fontFallback learns the families languageFonts supplies only when Takumi
+  // asks for fallback fonts during layout, so it needs the measure pass too.
+  const measures =
+    MEASURED_GUARDS.some((name) => guardLevel(guards, name) !== "off") || (checksFonts && languageFonts !== undefined);
 
   async function prepare(copy: Copy, context: PlateContext<Variant>) {
     const takumi = await loadTakumi();
