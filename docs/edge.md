@@ -33,7 +33,9 @@ also forbids compiling Wasm from bytes and is expected to fail the same way
 (not observed: its deployment was refused for size first). On those platforms,
 use `metaplate/node` on the provider's Node runtime or generate images at
 build time. The [Workers reproduction](https://github.com/freeknet/metaplate/tree/main/examples/hosted/cloudflare)
-runs locally with `wrangler dev`.
+runs locally with `wrangler dev`. For Workers, the experimental
+[`metaplate/takumi`](takumi.md) renders the same plates with Takumi's
+precompiled Wasm instead.
 
 Every edge plate needs two WebAssembly modules: Resvg's,
 `@resvg/resvg-wasm/index_bg.wasm`, and Satori's Yoga layout engine,

@@ -1,0 +1,17 @@
+# metaplate Takumi spike (2026-11-20): one card rendered by takumi-js's Wasm
+# build in workerd, to measure real CPU time per request. Not a site worker.
+name = "metaplate-takumi-spike"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[observability]
+enabled = true
+
+# takumi-js's "workerd" import condition imports a precompiled .wasm, which
+# Wrangler bundles as a WebAssembly.Module. The WOFF2 font is bundled as an
+# ArrayBuffer (the Wasm build cannot read WOFF).
+[[rules]]
+type = "Data"
+globs = ["**/*.woff2"]
+fallthrough = true

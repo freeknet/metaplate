@@ -6,21 +6,23 @@ import {
   guardLevel,
   LAYOUT_GUARD_NAMES,
   type RasterRenderGuards,
+  type RenderGuardName,
 } from "./guards.js";
 import { detectFormat, imageContentType, type ImageFormat, type OutputFormat } from "../image.js";
 import { isMediaType } from "../metadata/og-media.js";
-import { createPlateSocial, type PlateUrlOptions } from "./plate.js";
+import { createPlateHandlers, createPlateSocial, type PlateUrlOptions } from "./plate.js";
 import { createRenderCache, type RenderCacheOptions } from "./cache.js";
 import type { SvgOgDefinition } from "./svg.js";
 import { taggedSerialize } from "../core/stable-hash.js";
-import { createSvgPlate, type SatoriRender } from "./svg-plate.js";
+import { createSvgPlate, type SatoriRender, type SvgRenderOptions } from "./svg-plate.js";
 import { METAPLATE_VERSION } from "../core/version.js";
 
 /**
- * Not an entry point: the renderer-independent half of `metaplate/node` and
- * `metaplate/edge`. Everything here is Web-platform only (no Node built-ins,
- * no `Buffer`), so the edge bundle can include it unchanged; the renderer
- * binding and the ETag digest are supplied by each entry.
+ * Not an entry point: the renderer-independent half of `metaplate/node`,
+ * `metaplate/edge`, and `metaplate/takumi`. Everything here is Web-platform
+ * only (no Node built-ins, no `Buffer`), so the edge and Workers bundles can
+ * include it unchanged; the frames and the ETag digest are supplied by each
+ * entry.
  */
 
 /** Raster formats whose bytes Metaplate can recognise after encoding. */
@@ -111,21 +113,66 @@ export type RasterImage = {
   asPng(): Uint8Array;
 };
 
+/** Which encodings of a frame a render needs; a backend produces only those. */
+export type FrameRequest = { png: boolean; pixels: boolean };
+
+/** One rendered frame, carrying the encodings its `FrameRequest` asked for. */
+export type Frame = {
+  width: number;
+  height: number;
+  pixels?: Uint8Array;
+  png?: Uint8Array;
+};
+
+/** How one size of a plate lays out and rasterises. */
+export type FrameView<Copy> = {
+  renderSvg: (copy: Copy, options?: SvgRenderOptions) => Promise<string>;
+  frame: (copy: Copy, request: FrameRequest) => Promise<Frame>;
+};
+
+/** A plate's sizes as a backend renders them: the default (`undefined`) or one variant. */
+export type FrameSource<Copy, Variant extends string> = {
+  view: (name: Variant | undefined) => FrameView<Copy>;
+};
+
 /** The renderer-specific half an entry supplies. */
-export type RasterBackend = {
-  /** Loads the Satori function this backend lays plates out with. */
-  satori: () => Promise<SatoriRender>;
-  /**
-   * Rasterises the SVG `source` produces and hands the frame to `read`. Peers
-   * resolve before `source` is called, and `read` runs before any renderer
-   * memory is released, so a backend that frees its frame stays safe.
-   */
-  rasterize: <T>(source: () => Promise<string>, read: (image: RasterImage) => T) => Promise<T>;
+export type RasterBackend<Copy, Variant extends string> = {
+  /** Lays out and rasterises each size of the plate. */
+  frames: FrameSource<Copy, Variant>;
   /** Lowercase hex SHA-256 of `bytes`: the ETag, fingerprint, and cache-key digest. */
   sha256: (bytes: Uint8Array) => string | Promise<string>;
   /** Names the renderer in the plate fingerprint, since each rasterizes differently. */
-  renderer: "node" | "edge";
+  renderer: "node" | "edge" | "takumi";
 };
+
+/**
+ * Frames for the Satori backends: Satori lays each size out as SVG, and
+ * `rasterize` turns that SVG into one frame, read before any renderer memory
+ * is released, so a backend that frees its frame stays safe. Peers resolve
+ * before `source` is called.
+ */
+export function satoriFrames<Copy, Variant extends string>(
+  definition: SvgOgDefinition<Copy, Variant>,
+  loadSatori: () => Promise<SatoriRender>,
+  rasterize: <T>(source: () => Promise<string>, read: (image: RasterImage) => T) => Promise<T>,
+): FrameSource<Copy, Variant> {
+  const svg = createSvgPlate(definition, loadSatori);
+  return {
+    view(name) {
+      const svgView = name === undefined ? svg : svg.variant(name);
+      return {
+        renderSvg: svgView.renderSvg,
+        frame: (copy, request) =>
+          rasterize(() => svgView.renderSvg(copy), (image) => ({
+            width: image.width,
+            height: image.height,
+            ...(request.pixels ? { pixels: image.pixels } : {}),
+            ...(request.png ? { png: image.asPng() } : {}),
+          })),
+      };
+    },
+  };
+}
 
 export type RasterPlateDefinition<Copy, Variant extends string = string> = SvgOgDefinition<Copy, Variant> & {
   resvg?: Pick<ResvgRenderOptions, "fitTo" | "crop">;
@@ -231,23 +278,20 @@ async function encodeOutput(output: OutputEncoder, image: RenderedPixels): Promi
  */
 export function createRasterPlate<Copy, Variant extends string = string>(
   definition: RasterPlateDefinition<Copy, Variant>,
-  backend: RasterBackend,
+  backend: RasterBackend<Copy, Variant>,
+  allowedGuards: readonly RenderGuardName[] = [...LAYOUT_GUARD_NAMES, "blank"],
 ) {
-  assertRenderGuards(definition.guards, [...LAYOUT_GUARD_NAMES, "blank"], "this renderer");
-  const svg = createSvgPlate(definition, backend.satori);
+  assertRenderGuards(definition.guards, allowedGuards, "this renderer");
   const checksBlank = guardLevel(definition.guards, "blank") !== "off";
-  // Every size the plate renders must survive Resvg unchanged, not only the
-  // default: a `fitTo` width matching 1200 would rescale a 1080 square.
-  for (const name of [undefined, ...svg.variants]) {
-    assertDimensionPreservingResvgOptions(
-      definition.resvg,
-      name === undefined ? svg.size : svg.variant(name).size,
-    );
-  }
   assertResponseHeaderConfiguration(definition.headers, Boolean(definition.etag));
   const contentType = outputContentType(definition.output);
   assertMediaType(contentType);
-  const social = createPlateSocial(definition, contentType, svg.size);
+  const social = createPlateSocial(definition, contentType);
+  // Every size the plate renders must survive Resvg unchanged, not only the
+  // default: a `fitTo` width matching 1200 would rescale a 1080 square.
+  for (const name of [undefined, ...social.variants]) {
+    assertDimensionPreservingResvgOptions(definition.resvg, social.view(name).context.size);
+  }
 
   async function strongEtag(bytes: Uint8Array): Promise<string> {
     return `"${await backend.sha256(bytes)}"`;
@@ -303,30 +347,29 @@ export function createRasterPlate<Copy, Variant extends string = string>(
   }
 
   function view(name: Variant | undefined) {
-    const svgView = name === undefined ? svg : svg.variant(name);
+    const frames = backend.frames.view(name);
     const socialView = social.view(name);
     const { size } = socialView.context;
 
-    function rasterize<T>(copy: Copy, read: (image: RasterImage) => T): Promise<T> {
-      return backend.rasterize(
-        () => svgView.renderSvg(copy),
-        (image) => {
-          if (image.width !== size.width || image.height !== size.height) {
-            throw new Error(
-              `Renderer dimension mismatch: expected ${size.width}x${size.height}, ` +
-                `received ${image.width}x${image.height}`,
-            );
-          }
-          if (checksBlank) {
-            // Checked on the raw pixels, before any encoder runs, so a blank
-            // frame fails (or warns) whatever format the plate emits.
-            const report = new GuardReport(definition.guards);
-            checkBlank(image.pixels, report, socialView.context);
-            report.settle();
-          }
-          return read(image);
-        },
-      );
+    async function frame(copy: Copy, request: FrameRequest): Promise<Frame> {
+      // The blank guard reads the raw pixels, so it asks for them whatever
+      // the caller needs.
+      const image = await frames.frame(copy, { ...request, pixels: request.pixels || checksBlank });
+      if (image.width !== size.width || image.height !== size.height) {
+        throw new Error(
+          `Renderer dimension mismatch: expected ${size.width}x${size.height}, ` +
+            `received ${image.width}x${image.height}`,
+        );
+      }
+      if (checksBlank) {
+        if (!image.pixels) throw new Error("The renderer returned no pixels for the blank guard");
+        // Checked on the raw pixels, before any encoder runs, so a blank
+        // frame fails (or warns) whatever format the plate emits.
+        const report = new GuardReport(definition.guards);
+        checkBlank(image.pixels, report, socialView.context);
+        report.settle();
+      }
+      return image;
     }
 
     /**
@@ -334,16 +377,13 @@ export function createRasterPlate<Copy, Variant extends string = string>(
      * encodes far smaller as JPEG or WebP, and returning the pixmap keeps an
      * image encoder out of this package.
      */
-    function renderPixels(copy: Copy): Promise<RenderedPixels> {
-      return rasterize(copy, (image) => ({
-        pixels: image.pixels,
-        width: image.width,
-        height: image.height,
-      }));
+    async function renderPixels(copy: Copy): Promise<RenderedPixels> {
+      const image = await frame(copy, { png: false, pixels: true });
+      return { pixels: image.pixels!, width: image.width, height: image.height };
     }
 
     async function render(copy: Copy): Promise<Uint8Array> {
-      if (!definition.output) return rasterize(copy, (image) => image.asPng());
+      if (!definition.output) return (await frame(copy, { png: true, pixels: false })).png!;
       return encodeOutput(definition.output, await renderPixels(copy));
     }
 
@@ -423,7 +463,7 @@ export function createRasterPlate<Copy, Variant extends string = string>(
       signedMetadata: socialView.signedMetadata,
       /** The image path relative to the deployment root, without `basePath` or `origin`. */
       sitePath: socialView.sitePath,
-      renderSvg: svgView.renderSvg,
+      renderSvg: frames.renderSvg,
       contentType,
       render,
       renderPixels,
@@ -435,4 +475,38 @@ export function createRasterPlate<Copy, Variant extends string = string>(
   }
 
   return Object.freeze({ variants: social.variants, view });
+}
+
+/** One size of a raster plate, as `createRasterPlate` builds it. */
+export type RasterView<Copy, Variant extends string = string> = ReturnType<
+  ReturnType<typeof createRasterPlate<Copy, Variant>>["view"]
+>;
+
+/**
+ * A raster view in the Fetch-shaped form edge runtimes use: the Fetchable
+ * handlers are the primary API, and the copy-bound `handler` stays a
+ * `metaplate/node` convenience. Its `cached` view has the same shape.
+ */
+export function fetchShapedView<Copy, Variant extends string>(view: RasterView<Copy, Variant>) {
+  const { handlerFrom, fetchable, fetchableFrom } = createPlateHandlers(view.response);
+  return {
+    ...view,
+    handlerFrom,
+    fetchable,
+    fetchableFrom,
+    /** This size with a render cache in front: Fetch-shaped, like the plate. */
+    cached: (options?: RenderCacheOptions) => {
+      const cache = view.cached(options);
+      return Object.freeze({
+        store: cache.store,
+        key: cache.key,
+        entry: cache.entry,
+        render: cache.render,
+        response: cache.response,
+        handlerFrom: cache.handlerFrom,
+        fetchable: cache.fetchable,
+        fetchableFrom: cache.fetchableFrom,
+      });
+    },
+  };
 }
