@@ -5,6 +5,16 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ## [Unreleased]
 
+### Fixed
+
+- The rendering guide and the brand-colors recipe said plates have no stylesheet
+  and ignore `var(--brand)`. Only the site's own CSS is out of reach. Custom
+  properties declared in the plate resolve in every adapter, and `<style>`
+  elements apply in `createSvgOg`, `createNodeOg`, and `createEdgeOg` on Satori
+  0.51.0 or later. `createNextOg` ignores `<style>` (its `next/og` bundles Satori
+  0.29.0), and an undefined `var()` in a `background` fails its render. Tests now
+  pin each behavior.
+
 ## [0.8.4] - 2026-11-09
 
 ### Added

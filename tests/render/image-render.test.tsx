@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { remoteImageLoader } from "../../src/assets.js";
 import { fontLoader } from "../../src/font-data.js";
 import { imageAsset, type ImageAsset } from "../../src/image.js";
+import { decodeImagePixels } from "../../src/image/compare.js";
 import { createNextOg } from "../../src/next.js";
 import { createNodeOg } from "../../src/node.js";
 import { verifyPng } from "../../src/png.js";
@@ -189,5 +190,47 @@ describe("embedded images in real renders", () => {
     expect(redShare(first.pixels)).toBeGreaterThan(0.95);
     expect(second.pixels).toEqual(first.pixels);
     expect(server.requests).toHaveLength(1);
+  }, RENDER_TIMEOUT);
+});
+
+// docs/rendering.md#plate-constraints describes which CSS a plate can declare
+// itself. If a Satori or Next.js upgrade changes any of these, update that
+// section and docs/recipes.md#brand-colors with it.
+describe("CSS declared inside the plate", () => {
+  const brandVariable = { "--brand": "#ff0000", background: "var(--brand)" };
+  const fill = { width: "100%", height: "100%", display: "flex" };
+  const styleRule = (): SatoriNode => ({
+    type: "div",
+    props: {
+      style: fill,
+      children: [
+        { type: "style", props: { children: ".brand { background: #ff0000; }" } },
+        { type: "div", props: { className: "brand", style: fill } },
+      ],
+    },
+  });
+  const nodePixels = async (component: () => SatoriNode) =>
+    (await createNodeOg({ alt: () => "card", fonts, size, component }).renderPixels({})).pixels;
+  const nextPixels = async (component: () => React.ReactElement) => {
+    const response = await createNextOg({ alt: () => "card", size, component }).render({});
+    return decodeImagePixels(new Uint8Array(await response.arrayBuffer())).data;
+  };
+
+  it("applies custom properties and <style> rules in metaplate/node", async () => {
+    expect(redShare(await nodePixels(() => ({ type: "div", props: { style: { ...fill, ...brandVariable } } })))).toBeGreaterThan(0.95);
+    expect(redShare(await nodePixels(styleRule))).toBeGreaterThan(0.95);
+    const undefinedVariable = await nodePixels(() => ({ type: "div", props: { style: { ...fill, background: "var(--brand)" } } }));
+    expect(undefinedVariable.every((value, index) => index % 4 !== 3 || value === 0)).toBe(true);
+  }, RENDER_TIMEOUT);
+
+  it("applies custom properties but ignores <style> in next/og", async () => {
+    expect(redShare(await nextPixels(() => <div style={{ ...fill, ...brandVariable } as React.CSSProperties} />))).toBeGreaterThan(0.95);
+    expect(redShare(await nextPixels(() => (
+      <div style={fill}>
+        <style>{".brand { background: #ff0000; }"}</style>
+        <div className="brand" style={fill} />
+      </div>
+    )))).toBe(0);
+    await expect(nextPixels(() => <div style={{ ...fill, background: "var(--brand)" }} />)).rejects.toThrow();
   }, RENDER_TIMEOUT);
 });
