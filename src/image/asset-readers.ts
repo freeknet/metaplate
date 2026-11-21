@@ -2,8 +2,9 @@
  * `metaplate/assets`: Node readers that turn project files and allowlisted
  * remote URLs into `imageAsset` values for a plate's `<img src>`. No renderer
  * peers, so a Next.js, Astro, or build-script plate can import it without
- * loading Satori or Resvg. On an edge runtime, use `imageAssetLoader` from
- * `metaplate/image` with `fetch` against your own origin instead.
+ * loading Satori or Resvg. On an edge runtime, use `fetchImageLoader` from
+ * `metaplate/image` for remote URLs, or `imageAssetLoader` with `fetch`
+ * against your own origin for fixed files.
  */
 
 import { readFile, stat } from "node:fs/promises";
@@ -17,9 +18,9 @@ import {
   type ImageAssetOptions,
 } from "./asset.js";
 import { projectFilePath } from "../core/project-path.js";
+import { allowedOrigins, cacheSizeFrom, memoizeByUrl, originCheck } from "../core/remote-policy.js";
 import {
   REMOTE_IMAGE_ACCEPT,
-  RemoteImageError,
   assertRemoteFetchOptions,
   fetchRemoteResourceVia,
   type RemoteFetchOptions,
@@ -125,41 +126,6 @@ export type RemoteImageLoaderOptions = RemoteFetchOptions &
 /** Loads one image URL as an `imageAsset`, memoized per loader. */
 export type RemoteImageLoader = (url: string | URL) => Promise<ImageAsset>;
 
-function allowedOrigins(origins: readonly (string | URL)[] | undefined): ReadonlySet<string> {
-  if (!Array.isArray(origins) || origins.length === 0) {
-    throw new TypeError(
-      'remoteImageLoader needs an origins allowlist, such as origins: ["https://cdn.example.com"]',
-    );
-  }
-  const allowed = new Set<string>();
-  for (const entry of origins as readonly (string | URL)[]) {
-    let url: URL;
-    try {
-      url = new URL(String(entry));
-    } catch {
-      throw new TypeError(`origins entry ${JSON.stringify(String(entry))} is not a URL`);
-    }
-    if (url.protocol !== "http:" && url.protocol !== "https:") {
-      throw new TypeError(`origins entry ${url.href} must use http: or https:`);
-    }
-    if (url.username !== "" || url.password !== "" || url.pathname !== "/" || url.search !== "" || url.hash !== "") {
-      throw new TypeError(
-        `origins entries must be bare origins such as https://cdn.example.com; received ${JSON.stringify(String(entry))}`,
-      );
-    }
-    allowed.add(url.origin);
-  }
-  return allowed;
-}
-
-function cacheSizeFrom(cacheSize: number | undefined): number {
-  if (cacheSize === undefined) return REMOTE_IMAGE_LOADER_DEFAULTS.cacheSize;
-  if (!Number.isSafeInteger(cacheSize) || cacheSize < 0) {
-    throw new TypeError(`cacheSize must be a non-negative integer; received ${cacheSize}`);
-  }
-  return cacheSize;
-}
-
 /**
  * Loads remote images, such as per-page avatars or covers, for an `async`
  * plate component. Satori would otherwise fetch an `<img src>` URL itself,
@@ -175,23 +141,15 @@ function cacheSizeFrom(cacheSize: number | undefined): number {
  */
 export function remoteImageLoader(options: RemoteImageLoaderOptions): RemoteImageLoader {
   const { origins, cacheSize, formats, ...fetchOptions } = options;
-  const allowed = allowedOrigins(origins);
-  const capacity = cacheSizeFrom(cacheSize);
+  const allowed = allowedOrigins(origins, "remoteImageLoader");
+  const capacity = cacheSizeFrom(cacheSize, REMOTE_IMAGE_LOADER_DEFAULTS.cacheSize);
   const maxBytes = fetchOptions.maxBytes ?? REMOTE_IMAGE_LOADER_DEFAULTS.maxBytes;
   const assetOptions: ImageAssetOptions = { maxBytes, ...(formats === undefined ? {} : { formats }) };
   const remoteOptions: RemoteFetchOptions = { ...fetchOptions, maxBytes };
   assertImageAssetOptions(assetOptions);
   assertRemoteFetchOptions(remoteOptions);
 
-  const checkOrigin = (url: URL, label: string) => {
-    if (!allowed.has(url.origin)) {
-      throw new RemoteImageError(
-        "origin",
-        `${label} ${url.href} is not on an allowed origin (${[...allowed].join(", ")})`,
-        url.href,
-      );
-    }
-  };
+  const checkOrigin = originCheck(allowed);
 
   async function load(input: string | URL): Promise<ImageAsset> {
     const remote = await fetchRemoteResourceVia(
@@ -208,25 +166,6 @@ export function remoteImageLoader(options: RemoteImageLoaderOptions): RemoteImag
     }
   }
 
-  const cache = new Map<string, Promise<ImageAsset>>();
-  return (input) => {
-    let key: string;
-    try {
-      key = new URL(String(input)).href;
-    } catch {
-      // The fetcher reports the unparseable URL with its stable error code.
-      return load(input);
-    }
-    if (capacity === 0) return load(key);
-    const cached = cache.get(key);
-    if (cached) return cached;
-    const loaded = load(key);
-    loaded.catch(() => {
-      if (cache.get(key) === loaded) cache.delete(key);
-    });
-    if (cache.size >= capacity) cache.delete(cache.keys().next().value!);
-    cache.set(key, loaded);
-    return loaded;
-  };
+  return memoizeByUrl(capacity, load);
 }
 
