@@ -23,3 +23,12 @@ export {
   type ImageAssetOptions,
   type ImageAssetSource,
 } from "./image/asset.js";
+
+export {
+  FETCH_IMAGE_LOADER_DEFAULTS,
+  fetchImageLoader,
+  type FetchImageLoader,
+  type FetchImageLoaderOptions,
+} from "./image/fetch-loader.js";
+
+export { RemoteImageError, type RemoteImageErrorCode } from "./core/remote-policy.js";

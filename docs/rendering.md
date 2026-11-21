@@ -584,8 +584,8 @@ const avatar = await avatars(`https://avatars.example.com/u/${user.id}.png`);
 
 ### Edge runtimes
 
-`metaplate/assets` needs Node. On an edge runtime, serve the image as a
-static file of the same site and fetch it from your own origin, the pattern
+`metaplate/assets` needs Node. On an edge runtime, serve a fixed image such as
+a logo as a static file of the same site and fetch it from your own origin, the pattern
 the [edge guide](edge.md#edge-runtimes-with-metaplateedge) uses for fonts and
 Wasm:
 
@@ -617,9 +617,47 @@ const route = og.fetchableFrom((request: Request) => {
 ```
 
 The fetch goes to the deployment's own origin, never to a URL from request
-data. To show per-page images from another host on the edge, fetch them from
-that host with the runtime's `fetch` under your own allowlist, or render the
-cards at build time with `metaplate/node`.
+data.
+
+For per-page images from another host, such as avatars on a CDN, use
+`fetchImageLoader` from `metaplate/image`. It is `remoteImageLoader` built on
+the runtime's `fetch` instead of Node's network stack, so it runs on Cloudflare
+Workers (with [`metaplate/takumi`](takumi.md)), Netlify Edge, Deno, and Vercel
+Edge:
+
+```ts
+import { fetchImageLoader } from "metaplate/image";
+
+const avatars = fetchImageLoader({ origins: ["https://avatars.example.com"] });
+
+// In an async component:
+const { src, width, height } = await avatars(`https://avatars.example.com/u/${copy.userId}.png`);
+```
+
+It keeps `remoteImageLoader`'s policy wherever `fetch` allows: the required
+`origins` allowlist; `http:` and `https:` on default ports unless
+`allowedPorts` lists more; no credentials in URLs; each redirect (at most
+`maxRedirects`, default 3) followed by hand with `redirect: "manual"` and
+checked again; `maxBytes` (default 4 MiB) enforced from `Content-Length` and
+again while the body streams; one `timeoutMs` budget (default 10 s) for the
+whole fetch; the bytes checked by `imageAsset`; and the same bounded `cacheSize`
+cache. Failures reject with the same `RemoteImageError` codes, which
+`metaplate/image` also exports.
+
+One guarantee differs. A fetch runtime resolves DNS where Metaplate cannot see
+it, so `fetchImageLoader` cannot check the addresses a hostname resolves to, or
+stop DNS rebinding. It refuses only hosts written as non-public IP addresses
+(after URL parsing, so `http://2130706433/` is caught as `127.0.0.1`) or
+`localhost` names, unless `allowPrivate` is set. The allowlist is therefore the
+boundary: list only origins whose hostnames you control or trust. Cloudflare
+Workers cannot reach private networks anyway. On Deno or a self-hosted runtime,
+an allowlisted name that resolves to an internal address would be fetched.
+
+`fetch` defaults to the global one. Pass another, such as a Cloudflare service
+binding's, as the `fetch` option; it must return 3xx responses with their
+`Location` header under `redirect: "manual"`, as Workers, Deno, Node.js, and Bun
+do. A browser's `fetch` hides redirect targets, so a redirect there rejects with
+code `"redirect"` rather than being followed unchecked.
 
 ## Plate constraints
 

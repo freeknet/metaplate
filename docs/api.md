@@ -25,7 +25,7 @@ and small helpers that no guide covers are described below the table. The
 | `metaplate/fonts` | `fileFontLoader`, `packageFontLoader`, `fontsourceFontLoader`, `fontLoader`, their `load*` forms, `findPackageDirectory`, `fontsourceLanguageFontLoader`, `languageFontLoader`, `packageEmojiLoader` | [Fonts](fonts.md), [Emoji](emoji.md) |
 | `metaplate/font-data` | `fontLoader`, `loadFonts`, `languageFontLoader` | [Fonts](fonts.md#edge-runtimes-and-other-byte-sources) |
 | `metaplate/emoji` | `emojiLoader`, `twemojiName`, `emojiKey`, `emojiCodepoints` | [Emoji](emoji.md) |
-| `metaplate/image` | `imageDimensions`, `verifyImage`, `detectFormat`, `imageContentType`, `imageAsset`, `imageAssetLoader`, `IMAGE_ASSET_DEFAULTS` | [Verification](verification.md), [Images and assets](rendering.md#images-and-assets) |
+| `metaplate/image` | `imageDimensions`, `verifyImage`, `detectFormat`, `imageContentType`, `imageAsset`, `imageAssetLoader`, `fetchImageLoader`, `RemoteImageError`, `IMAGE_ASSET_DEFAULTS`, `FETCH_IMAGE_LOADER_DEFAULTS` | [Verification](verification.md), [Images and assets](rendering.md#images-and-assets), [Edge runtimes](rendering.md#edge-runtimes) |
 | `metaplate/png` | `pngDimensions`, `verifyPng` | Below |
 | `metaplate/assets` | `readImageAsset`, `fileImageLoader`, `remoteImageLoader`, `imageAsset`, `imageAssetLoader`, `RemoteImageError`, `IMAGE_ASSET_DEFAULTS`, `REMOTE_IMAGE_LOADER_DEFAULTS` | [Images and assets](rendering.md#images-and-assets) |
 | `metaplate/cli` | `runCli` | [Run the CLI from a script](verification.md#run-the-cli-from-a-script) |
@@ -51,6 +51,7 @@ The `metaplate preview` and `metaplate render` commands are documented in
 | `REMOTE_USER_AGENT` | `"metaplate-verify/<version>"` | The fixed `User-Agent` of every remote fetch. |
 | `IMAGE_ASSET_DEFAULTS` | `{ formats: ["png", "jpeg", "svg"], maxBytes: 4194304 }` | The formats and size (4 MiB) `imageAsset` accepts by default. |
 | `REMOTE_IMAGE_LOADER_DEFAULTS` | `{ cacheSize: 64, maxBytes: 4194304 }` | `remoteImageLoader`'s cache entries and per-image byte limit. |
+| `FETCH_IMAGE_LOADER_DEFAULTS` | `{ cacheSize: 64, maxBytes: 4194304, maxRedirects: 3, timeoutMs: 10000 }` | `fetchImageLoader`'s cache entries, per-image byte limit, redirects, and time budget. |
 
 ## Helpers
 

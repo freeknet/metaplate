@@ -7,18 +7,24 @@ import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib";
 import type { ImageSize } from "../core/social-image.js";
 import { imageContentType, verifyImage, type ImageDimensions, type ImageFormat } from "../image.js";
 import { integerOption } from "../core/internal.js";
-import { METAPLATE_VERSION } from "../core/version.js";
+import {
+  REMOTE_FETCH_DEFAULTS,
+  REMOTE_USER_AGENT,
+  RemoteImageError,
+  bareHostname,
+  checkUrl,
+  effectivePort,
+  nonPublicAddressKind,
+  parseUrl,
+} from "../core/remote-policy.js";
 
-/** Fixed request identity; no caller-supplied headers are ever sent. */
-export const REMOTE_USER_AGENT = `metaplate-verify/${METAPLATE_VERSION}`;
-
-/** Defaults for every remote fetch limit. */
-export const REMOTE_FETCH_DEFAULTS = Object.freeze({
-  maxRedirects: 3,
-  maxBytes: 16 * 1024 * 1024,
-  timeoutMs: 10_000,
-  connectionTimeoutMs: 10_000,
-});
+export {
+  REMOTE_FETCH_DEFAULTS,
+  REMOTE_USER_AGENT,
+  RemoteImageError,
+  nonPublicAddressKind,
+  type RemoteImageErrorCode,
+} from "../core/remote-policy.js";
 
 /** One resolved address, shaped like `dns.lookup({ all: true })` output. */
 export type RemoteAddress = Readonly<{ address: string; family: number }>;
@@ -54,38 +60,6 @@ export type RemoteFetchOptions = {
   resolve?: RemoteResolver;
 };
 
-export type RemoteImageErrorCode =
-  | "invalid-url"
-  | "scheme"
-  | "credentials"
-  | "port"
-  | "dns"
-  | "address"
-  | "redirect"
-  | "too-many-redirects"
-  | "status"
-  | "byte-limit"
-  | "timeout"
-  | "network"
-  | "content-type"
-  | "origin";
-
-/** A refused or failed remote fetch, with a stable machine-readable code. */
-export class RemoteImageError extends Error {
-  readonly code: RemoteImageErrorCode;
-  /** The URL being fetched when the failure happened. */
-  readonly url: string;
-  /** The HTTP status that was refused, for the `status` code. */
-  readonly status?: number;
-
-  constructor(code: RemoteImageErrorCode, message: string, url: string, status?: number) {
-    super(message);
-    this.name = "RemoteImageError";
-    this.code = code;
-    this.url = url;
-    if (status !== undefined) this.status = status;
-  }
-}
 
 export type RemoteImage = Readonly<{
   /** The requested URL, normalized. */
@@ -124,160 +98,6 @@ type Settings = {
 export type RemoteDialer = (address: RemoteAddress) => RemoteAddress;
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
-
-// ---------------------------------------------------------------------------
-// Address policy
-
-type Cidr = Readonly<{ bytes: readonly number[]; bits: number; kind: string }>;
-
-function ipv4Bytes(address: string): number[] | undefined {
-  const parts = address.split(".");
-  if (parts.length !== 4 || !parts.every((part) => /^\d{1,3}$/.test(part))) return undefined;
-  const bytes = parts.map(Number);
-  return bytes.every((byte) => byte <= 255) ? bytes : undefined;
-}
-
-function ipv6Bytes(address: string): number[] | undefined {
-  let text = address.split("%", 1)[0]!.toLowerCase();
-  const lastColon = text.lastIndexOf(":");
-  if (text.slice(lastColon + 1).includes(".")) {
-    const tail = ipv4Bytes(text.slice(lastColon + 1));
-    if (!tail) return undefined;
-    const high = (tail[0]! * 0x100 + tail[1]!).toString(16);
-    const low = (tail[2]! * 0x100 + tail[3]!).toString(16);
-    text = `${text.slice(0, lastColon + 1)}${high}:${low}`;
-  }
-  const halves = text.split("::");
-  if (halves.length > 2) return undefined;
-  const head = halves[0] ? halves[0].split(":") : [];
-  const rest = halves.length === 2 && halves[1] ? halves[1].split(":") : [];
-  const missing = 8 - head.length - rest.length;
-  if (halves.length === 1 ? missing !== 0 : missing < 1) return undefined;
-  const groups = [...head, ...new Array<string>(halves.length === 2 ? missing : 0).fill("0"), ...rest];
-  if (!groups.every((group) => /^[0-9a-f]{1,4}$/.test(group))) return undefined;
-  return groups.flatMap((group) => {
-    const value = Number.parseInt(group, 16);
-    return [value >> 8, value & 0xff];
-  });
-}
-
-function cidr(notation: string, kind: string): Cidr {
-  const [address, bits] = notation.split("/") as [string, string];
-  const bytes = address.includes(":") ? ipv6Bytes(address) : ipv4Bytes(address);
-  if (!bytes) throw new Error(`Invalid CIDR ${notation}`);
-  return Object.freeze({ bytes, bits: Number(bits), kind });
-}
-
-function contains(range: Cidr, bytes: readonly number[]): boolean {
-  if (range.bytes.length !== bytes.length) return false;
-  for (let bit = 0; bit < range.bits; bit += 8) {
-    const width = Math.min(8, range.bits - bit);
-    const mask = (0xff << (8 - width)) & 0xff;
-    const index = bit / 8;
-    if ((bytes[index]! & mask) !== (range.bytes[index]! & mask)) return false;
-  }
-  return true;
-}
-
-// Every block the IANA special-purpose registries mark "Globally Reachable:
-// False" is refused, along with multicast and the deprecated blocks the
-// registries list without flags. Sources, last updated 2025-10-09:
-//   https://www.iana.org/assignments/iana-ipv4-special-registry/
-//   https://www.iana.org/assignments/iana-ipv6-special-registry/
-// Where a refused block contains a more specific allocation the registry marks
-// "Globally Reachable: True", that allocation is listed in the matching
-// *_REACHABLE table and wins over the wider block.
-
-const IPV4_BLOCKED: readonly Cidr[] = [
-  cidr("0.0.0.0/8", "unspecified"),
-  cidr("10.0.0.0/8", "private"),
-  cidr("100.64.0.0/10", "shared (carrier-grade NAT)"),
-  cidr("127.0.0.0/8", "loopback"),
-  cidr("169.254.0.0/16", "link-local"),
-  cidr("172.16.0.0/12", "private"),
-  cidr("192.0.0.0/24", "IETF protocol assignment"),
-  cidr("192.0.2.0/24", "documentation"),
-  cidr("192.88.99.0/24", "deprecated 6to4 relay anycast"),
-  cidr("192.168.0.0/16", "private"),
-  cidr("198.18.0.0/15", "benchmarking"),
-  cidr("198.51.100.0/24", "documentation"),
-  cidr("203.0.113.0/24", "documentation"),
-  cidr("224.0.0.0/4", "multicast"),
-  cidr("240.0.0.0/4", "reserved or broadcast"),
-];
-
-/** Globally reachable allocations inside a block of `IPV4_BLOCKED`. */
-const IPV4_REACHABLE: readonly Cidr[] = [
-  cidr("192.0.0.9/32", "Port Control Protocol anycast"),
-  cidr("192.0.0.10/32", "TURN anycast"),
-];
-
-const IPV6_BLOCKED: readonly Cidr[] = [
-  cidr("::/128", "unspecified"),
-  cidr("::1/128", "loopback"),
-  cidr("64:ff9b:1::/48", "local-use NAT64"),
-  cidr("100::/64", "discard-only"),
-  cidr("100:0:0:1::/64", "dummy"),
-  cidr("2001::/32", "Teredo"),
-  cidr("2001::/23", "IETF protocol assignment"),
-  cidr("2001:db8::/32", "documentation"),
-  cidr("3fff::/20", "documentation"),
-  cidr("5f00::/16", "segment routing SID"),
-  cidr("fc00::/7", "unique-local"),
-  cidr("fe80::/10", "link-local"),
-  cidr("fec0::/10", "site-local"),
-  cidr("ff00::/8", "multicast"),
-];
-
-/** Globally reachable allocations inside a block of `IPV6_BLOCKED`. */
-const IPV6_REACHABLE: readonly Cidr[] = [
-  cidr("2001:1::1/128", "Port Control Protocol anycast"),
-  cidr("2001:1::2/128", "TURN anycast"),
-  cidr("2001:1::3/128", "DNS-SD service registration anycast"),
-  cidr("2001:3::/32", "AMT"),
-  cidr("2001:4:112::/48", "AS112-v6"),
-  cidr("2001:20::/28", "ORCHIDv2"),
-  cidr("2001:30::/28", "drone remote ID entity tags"),
-];
-
-function blockedKind(bytes: readonly number[], blocked: readonly Cidr[], reachable: readonly Cidr[]): string | undefined {
-  if (reachable.some((range) => contains(range, bytes))) return undefined;
-  return blocked.find((range) => contains(range, bytes))?.kind;
-}
-
-/** IPv6 forms that carry an IPv4 address, and the byte offset it starts at. */
-const IPV6_EMBEDDING: readonly (readonly [Cidr, number])[] = [
-  [cidr("::ffff:0:0/96", "IPv4-mapped"), 12],
-  [cidr("::/96", "IPv4-compatible"), 12],
-  [cidr("::ffff:0:0:0/96", "IPv4-translated"), 12],
-  [cidr("64:ff9b::/96", "NAT64"), 12],
-  [cidr("2002::/16", "6to4"), 2],
-];
-
-/**
- * Describes why an address is not globally reachable, or returns `undefined`
- * for a public address. IPv4 addresses carried in IPv4-mapped, IPv4-compatible,
- * IPv4-translated, NAT64 (64:ff9b::/96), and 6to4 forms are checked as the
- * IPv4 address they carry. Unparseable input is treated as not public.
- */
-export function nonPublicAddressKind(address: string): string | undefined {
-  const family = isIP(address.split("%", 1)[0]!);
-  if (family === 4) {
-    const bytes = ipv4Bytes(address)!;
-    return blockedKind(bytes, IPV4_BLOCKED, IPV4_REACHABLE);
-  }
-  const bytes = family === 6 ? ipv6Bytes(address) : undefined;
-  if (!bytes) return "unparseable";
-  const direct = blockedKind(bytes, IPV6_BLOCKED, IPV6_REACHABLE);
-  if (direct) return direct;
-  for (const [range, offset] of IPV6_EMBEDDING) {
-    if (!contains(range, bytes)) continue;
-    const embedded = bytes.slice(offset, offset + 4).join(".");
-    const kind = nonPublicAddressKind(embedded);
-    if (kind) return `${range.kind} ${kind}`;
-  }
-  return undefined;
-}
 
 // ---------------------------------------------------------------------------
 // Option and URL policy
@@ -319,54 +139,6 @@ export function assertRemoteFetchOptions(options: RemoteFetchOptions): void {
   settingsFrom(options, false);
 }
 
-function defaultPort(url: URL): number {
-  return url.protocol === "https:" ? 443 : 80;
-}
-
-function effectivePort(url: URL): number {
-  return url.port === "" ? defaultPort(url) : Number(url.port);
-}
-
-function bareHostname(url: URL): string {
-  return url.hostname.startsWith("[") ? url.hostname.slice(1, -1) : url.hostname;
-}
-
-/**
- * Applies the credential, scheme, and port policy to one hop. Credentials are
- * checked first so no later message ever echoes them.
- */
-function checkUrl(url: URL, settings: Settings, label: string): void {
-  if (url.username !== "" || url.password !== "") {
-    throw new RemoteImageError(
-      "credentials",
-      `${label} ${url.protocol}//${url.host} embeds credentials; URLs with user information are refused`,
-      `${url.protocol}//${url.host}${url.pathname}`,
-    );
-  }
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new RemoteImageError(
-      "scheme",
-      `${label} ${url.href} uses ${url.protocol}; only http: and https: are fetched`,
-      url.href,
-    );
-  }
-  const port = effectivePort(url);
-  if (port !== defaultPort(url) && !settings.allowedPorts.has(port)) {
-    throw new RemoteImageError(
-      "port",
-      `${label} ${url.href} uses port ${port}; only the scheme default is allowed unless the port is explicitly allowed`,
-      url.href,
-    );
-  }
-}
-
-function parseUrl(input: string, base: URL | undefined, label: string): URL {
-  try {
-    return new URL(input, base);
-  } catch {
-    throw new RemoteImageError("invalid-url", `${label} ${JSON.stringify(input)} is not a valid URL`, input);
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Deadline plumbing
@@ -645,7 +417,7 @@ export async function fetchRemoteResourceVia(
     let current = requested;
     for (;;) {
       const label = redirects.length === 0 ? "URL" : "Redirect to";
-      checkUrl(current, settings, label);
+      checkUrl(current, settings.allowedPorts, label);
       checkHop?.(current, label);
       const address = await vetAddress(current, settings, controller.signal);
       const result = await exchange(current, dial(address), settings, controller.signal, accept);

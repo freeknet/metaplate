@@ -15,6 +15,7 @@ guards.
 - [Cloudflare Workers](#cloudflare-workers)
 - [How it differs from Satori](#how-it-differs-from-satori)
 - [Fonts, languages, and emoji](#fonts-languages-and-emoji)
+- [Remote images](#remote-images)
 - [Render guards](#render-guards)
 - [Status](#status)
 
@@ -142,6 +143,28 @@ const diff = compareImages(await nodePlate.render(copy), await takumiPlate.rende
   would fetch them from a CDN; this entry never does. An emoji the loader has
   no image for is left blank (Satori would draw it from the fonts) and is
   reported by `missingGlyphs`. Without `emoji`, emoji are drawn from the fonts.
+
+## Remote images
+
+`metaplate/assets` needs Node, so on Workers load per-page images such as
+avatars with [`fetchImageLoader`](rendering.md#edge-runtimes) from
+`metaplate/image`, inside an `async` component. It applies the same origin
+allowlist, redirect checks, byte cap, and cache as `remoteImageLoader`, through
+the Worker's `fetch`.
+
+```ts
+import { fetchImageLoader } from "metaplate/image";
+
+const avatars = fetchImageLoader({ origins: ["https://avatars.example.com"] });
+
+const og = createTakumiOg({
+  // alt and fonts as above
+  component: async (copy: { title: string; userId: string }) => {
+    const { src, width, height } = await avatars(`https://avatars.example.com/u/${copy.userId}.png`);
+    return { type: "div", props: { style: { display: "flex", gap: 32 }, children: [{ type: "img", props: { src, width, height } }, copy.title] } };
+  },
+});
+```
 
 ## Render guards
 

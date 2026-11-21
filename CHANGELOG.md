@@ -7,6 +7,17 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Added
 
+- `fetchImageLoader` in `metaplate/image`: `remoteImageLoader` on the Fetch API, so
+  per-page images such as avatars load safely on Cloudflare Workers (with
+  `metaplate/takumi`), Netlify Edge, Deno, and Vercel Edge. It keeps the required
+  `origins` allowlist, the URL, scheme, credential, and port checks, redirects
+  followed by hand and re-checked on every hop, a byte cap enforced from
+  `Content-Length` and while streaming, one time budget, `imageAsset` checks, and
+  the bounded cache, with the same `RemoteImageError` codes (now also exported
+  from `metaplate/image`). Fetch runtimes hide DNS, so it refuses only hosts written
+  as non-public IP addresses or `localhost` names; the allowlist is the boundary,
+  as the rendering guide explains. The URL and address policy now lives in one
+  module shared with the Node fetcher, so both refuse the same input.
 - `metaplate/takumi` (experimental): `createTakumiOg` renders plates with
   Takumi (`takumi-js`, a new optional peer, `>=2.22.1 <3`) instead of Satori and
   Resvg. Takumi ships a precompiled WebAssembly build, so plates now render on
