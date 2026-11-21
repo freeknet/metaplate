@@ -35,3 +35,28 @@ export const loadResvgWasm = /* @__PURE__ */ optionalPeer(
   RESVG_WASM_PEER,
   async (): Promise<typeof import("@resvg/resvg-wasm")> => import("@resvg/resvg-wasm"),
 );
+
+/**
+ * Takumi's renderer and the two helpers `metaplate/takumi` converts plates
+ * with. `takumi-js` picks its own binding from the runtime's import
+ * conditions: the native addon on Node.js, its precompiled Wasm on Cloudflare
+ * Workers, Deno, and browsers.
+ */
+export const loadTakumi = /* @__PURE__ */ optionalPeer(
+  { package: "takumi-js", entries: "metaplate/takumi" },
+  async () => {
+    const [core, jsx, emoji] = await Promise.all([
+      import("takumi-js"),
+      import("takumi-js/helpers/jsx"),
+      import("takumi-js/helpers/emoji"),
+    ]);
+    return {
+      render: core.render,
+      renderSvg: core.renderSvg,
+      measure: core.measure,
+      fromJsx: jsx.fromJsx,
+      extractEmojis: emoji.extractEmojis,
+      isEmojiImageUrl: emoji.isEmojiImageUrl,
+    };
+  },
+);

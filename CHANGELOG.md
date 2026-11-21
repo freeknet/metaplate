@@ -7,6 +7,16 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Added
 
+- `metaplate/takumi` (experimental): `createTakumiOg` renders plates with
+  Takumi (`takumi-js`, a new optional peer, `>=2.22.1 <3`) instead of Satori and
+  Resvg. Takumi ships a precompiled WebAssembly build, so plates now render on
+  Cloudflare Workers, where `metaplate/edge` cannot start. It has the same plate
+  surface as `createEdgeOg` and runs every render guard except `avoid`;
+  `languageFonts` receive Satori's language codes, and emoji come from the
+  plate's emoji loader, never a CDN. Fonts must be TrueType, OpenType, or WOFF2.
+  Takumi defaults to `box-sizing: border-box` and differs from Satori in a few
+  other places; see docs/takumi.md. On the Workers Free plan a warm render used
+  about 13 ms of CPU against a 10 ms limit, so cache cards there.
 - A `fontFallback` render guard for `createSvgOg`, `createNodeOg`, and
   `createEdgeOg`. Satori draws text whose `fontFamily` stack has no loaded family
   with the first loaded font, and a weight or style the family lacks with another

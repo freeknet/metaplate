@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
 import { build as esbuild } from "esbuild";
@@ -9,6 +8,7 @@ import { emojiLoader, twemojiName } from "../../src/emoji.js";
 import { fontLoader } from "../../src/font-data.js";
 import { imageAssetLoader, imageDimensions, verifyImage } from "../../src/image.js";
 import { createNodeOg } from "../../src/node.js";
+import { entryBuilder } from "../helpers/entry-build.js";
 
 // Edge runtimes cannot read node_modules, so the entry takes Wasm and font
 // bytes from its caller. The test plays that caller: it reads the bytes with
@@ -577,34 +577,11 @@ it(
   30_000,
 );
 
-/**
- * `dist/edge.js` as the project's own tsup configuration builds it, so the
- * bundle checks below never depend on a stale or absent dist directory.
- */
-let edgeBuild: Promise<{ outDir: string; entry: string }> | undefined;
+/** `dist/edge.js` as the project's own tsup configuration builds it. */
+const edgeBuild = entryBuilder("edge");
+const buildEdgeEntry = edgeBuild.build;
 
-function buildEdgeEntry() {
-  edgeBuild ??= (async () => {
-    const { build } = await import("tsup");
-    const { default: config } = await import("../../tsup.config.js");
-    const outDir = mkdtempSync(path.join(tmpdir(), "metaplate-edge-build-"));
-    await build({
-      ...(config as object),
-      entry: { edge: path.join(root, "src", "edge.ts") },
-      outDir,
-      dts: false,
-      sourcemap: false,
-      clean: false,
-      silent: true,
-    });
-    return { outDir, entry: path.join(outDir, "edge.js") };
-  })();
-  return edgeBuild;
-}
-
-afterAll(async () => {
-  if (edgeBuild) rmSync((await edgeBuild).outDir, { recursive: true, force: true });
-});
+afterAll(edgeBuild.remove);
 
 // The same check package verification applies to `metaplate/font-data`.
 // Satori's default build embeds its own Yoga, so referencing it as well as
