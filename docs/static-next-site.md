@@ -5,6 +5,10 @@ file to the post-deploy check. Every file below comes from
 [`examples/next-static-site`](https://github.com/freeknet/metaplate/tree/main/examples/next-static-site),
 which is type-checked in this repository, so copy it as a starting point.
 
+Server-rendered pages on Cloudflare Workers (OpenNext) render the cards the same
+way but must not import the plate; see
+[Next.js on Cloudflare Workers](cloudflare-next.md).
+
 You end up with:
 
 - one plate that defines the design, and one module that holds what each card says;

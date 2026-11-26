@@ -18,6 +18,33 @@ are `createSvgOg` (`metaplate/render`), `createNodeOg` (`metaplate/node`),
 Only `createNodeOg` and `createEdgeOg` plates work with
 [`metaplate render`](render-cli.md).
 
+## A contract without a renderer
+
+`definePlate` from the root `metaplate` entry takes only the options that decide
+the URLs and metadata: `alt`, `size`, `imagePath`, `basePath`, `origin`,
+`variants`, `version`, `revision`, and `contentType` (default `"image/png"`). It
+returns `size`, `contentType`, `variantName`, `image`, `metadata`,
+`signedMetadata`, `sitePath`, and `variant(name)`, each behaving exactly as on a
+plate, and imports no renderer, so pages can use it where the renderer must not
+reach, such as a [Next.js app on Cloudflare Workers](cloudflare-next.md).
+
+Spread it into any factory to add the rendering:
+
+```ts
+import { definePlate } from "metaplate";
+import { createNodeOg } from "metaplate/node";
+
+const card = definePlate({ alt: (copy: { title: string }) => copy.title, imagePath: "og-image.png", version: "copy" });
+const og = createNodeOg({ ...card, fonts, component });
+```
+
+Only the contract options are enumerable, so the spread carries nothing else.
+Both run the same code, so `card.metadata(route, copy, options)` always equals
+`og.metadata(route, copy, options)`. Every factory takes `contentType` and throws
+at definition when it would serve another type: `createSvgOg` needs
+`"image/svg+xml"`, a `createNodeOg` or `createTakumiOg` plate with an `output`
+encoder needs that encoder's type, and the rest need `"image/png"`.
+
 ## Definition options
 
 ### Every factory
@@ -33,6 +60,7 @@ Only `createNodeOg` and `createEdgeOg` plates work with
 | `variants` | `{ [name]: { size, imagePath?, alt? } }` | None | [Other sizes](variants.md) of the same card. |
 | `version` | `"copy"` | None | Adds `?v=<token>` to published URLs, [derived from the copy](metadata.md#versioned-image-urls). |
 | `revision` | `string` | None | Names the design's version. Raise it when a helper or theme the component imports changes. |
+| `contentType` | `string` | None | Set by spreading in a [`definePlate` contract](#a-contract-without-a-renderer). The plate throws at definition unless it serves exactly this type. |
 
 ### `createSvgOg`, `createNodeOg`, and `createEdgeOg`
 

@@ -143,6 +143,9 @@ const fetchable = og.fetchableFrom((request: Request) => ({
 - **A static Next.js site?** [Static Next.js sites](docs/static-next-site.md) takes
   you from the first file to the post-deploy check, with a complete, type-checked
   [example](https://github.com/freeknet/metaplate/tree/main/examples/next-static-site).
+- **Next.js on Cloudflare Workers?** [Next.js on Cloudflare Workers](docs/cloudflare-next.md)
+  renders the cards before an OpenNext build and keeps the renderer out of the
+  Worker with a `definePlate` contract.
 - **A particular design?** [Card recipes](docs/recipes.md) covers text beside a
   photograph, long titles, several fonts, one card per record, and more.
 - **Making sure a card never ships broken?** [Testing your cards](docs/testing.md)
@@ -335,7 +338,8 @@ every route is in [`deployment-evidence.json`](https://github.com/freeknet/metap
 
 - `metaplate` — framework-free paths, dimensions, Open Graph and X metadata
   (including video and audio, and X player and app cards), cache-busting
-  image URL versions (`socialImageVersion`), `<meta>` tag serialization, Schema.org JSON-LD, Adaptive Cards, social compatibility
+  image URL versions (`socialImageVersion`), renderer-free plate contracts
+  (`definePlate`), `<meta>` tag serialization, Schema.org JSON-LD, Adaptive Cards, social compatibility
   profiles, and byte-level social image verification.
 - `metaplate/render` — Satori-based SVG generation, with every render guard
   that reads the layout (`RenderGuardError`). Satori is

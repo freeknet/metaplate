@@ -160,6 +160,7 @@ Nothing here is required, but older code often has a shorter form now.
 | A look at each card after changing fonts | The [`fontFallback` guard](rendering.md#render-guards), which reports a family, weight, or style no loaded font provides | Unreleased |
 | Hand-written `fetch` for per-page images on an edge runtime | [`fetchImageLoader`](rendering.md#edge-runtimes) from `metaplate/image`, with `remoteImageLoader`'s allowlist, redirect checks, and byte cap | Unreleased |
 | Build-time cards because `metaplate/edge` cannot start on Cloudflare Workers | [`metaplate/takumi`](takumi.md) (experimental), which renders there | Unreleased |
+| Page metadata rebuilt with `socialImageMetadata` and `socialImageVersion` to keep the renderer out of a server bundle, restating the plate's `imagePath`, `version`, and `revision` | [`definePlate`](plate.md#a-contract-without-a-renderer), spread into the plate, so pages and renderer share one contract ([Next.js on Cloudflare Workers](cloudflare-next.md)) | Unreleased |
 
 ## Workarounds you can delete
 
