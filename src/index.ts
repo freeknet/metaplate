@@ -23,6 +23,18 @@ export {
 export { IMAGE_VERSION_PARAMETER, socialImageVersion } from "./metadata/image-version.js";
 
 export {
+  definePlate,
+  type PlateContract,
+  type PlateContractDefinition,
+  type PlateContractView,
+  type PlateMetadataOptions,
+  type PlateUrlOptions,
+  type PlateVariant,
+  type PlateVariants,
+  type PlateVersioning,
+} from "./metadata/plate-contract.js";
+
+export {
   socialImageCompatibility,
   type CompatibilitySeverity,
   type SocialCompatibilityImage,
