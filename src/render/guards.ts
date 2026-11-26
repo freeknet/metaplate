@@ -55,6 +55,16 @@ export type RenderGuards = {
    */
   fontFallback?: RenderGuardLevel;
   /**
+   * A `lineClamp`, `WebkitLineClamp`, or `textOverflow: "ellipsis"` that
+   * Satori ignores, drawing every line: `lineClamp` on an element whose
+   * display is not `block`, `textOverflow` without `overflow: "hidden"` and
+   * a `whiteSpace` that does not wrap, or either on an element whose text is
+   * inside child elements or beside an inline one. `overflow` stays quiet
+   * while the full text still fits. Read from the plate's inline styles;
+   * values set by `<style>` rules or `tw` are not seen.
+   */
+  lineClamp?: RenderGuardLevel;
+  /**
    * Receives each problem found by a guard set to `"warn"`. Without it,
    * warnings go to `console.warn`, so a `"warn"` guard is never silent.
    */
@@ -87,6 +97,7 @@ export type RenderGuardName =
   | "textOverlap"
   | "avoid"
   | "fontFallback"
+  | "lineClamp"
   | "blank";
 
 type IssueBase = Readonly<{
@@ -155,6 +166,23 @@ export type RenderGuardIssue =
       loaded: readonly string[];
     }>)
   | (IssueBase & Readonly<{
+      guard: "lineClamp";
+      element: string;
+      /** The element's own text, or the first text inside it when it has none. */
+      text: string;
+      /** The style Satori ignores. */
+      property: "lineClamp" | "WebkitLineClamp" | "textOverflow";
+      /** The element's display: as written, or the default for its tag (`block` for a `div`, `inline` for a `span`). */
+      display: string;
+      /**
+       * `"display"`: the display does not allow the clamp. `"children"`: the text
+       * is inside child elements, or beside an inline one. `"overflow"`:
+       * `textOverflow` without `overflow: "hidden"`. `"whiteSpace"`: `textOverflow`
+       * on text that wraps.
+       */
+      reason: "display" | "children" | "overflow" | "whiteSpace";
+    }>)
+  | (IssueBase & Readonly<{
       guard: "blank";
       /** The single color of every pixel, as RGBA bytes. */
       color: readonly [number, number, number, number];
@@ -191,6 +219,7 @@ const GUARD_NAMES: readonly RenderGuardName[] = [
   "textOverlap",
   "avoid",
   "fontFallback",
+  "lineClamp",
   "blank",
 ];
 
@@ -202,6 +231,7 @@ export const LAYOUT_GUARD_NAMES: readonly RenderGuardName[] = [
   "textOverlap",
   "avoid",
   "fontFallback",
+  "lineClamp",
 ];
 
 const isPixels = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0;

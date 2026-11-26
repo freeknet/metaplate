@@ -51,6 +51,34 @@ All notable changes to Metaplate are documented in this file. The project uses
   encodes as JPEG. A bundle test keeps Satori, Resvg, React, Next, Takumi, and
   Node built-ins unreachable from the root entry.
 
+- `metaplate render` writes social `<meta>` tags into static HTML pages. A render
+  page may name an `html` file (resolved against the directory the command runs
+  in, never outside it) and its page-level tags in `page` (the `SocialMetaOptions`
+  fields). The tags are the plate's own `metadata` with the page's `version`, so
+  `og:image` carries the same `?v=` URL the manifest records, rendered through
+  `socialMetaHtml`. They go between `<!-- metaplate:social -->` and
+  `<!-- /metaplate:social -->`, or on their own lines before `</head>` the first
+  time; re-running writes the same bytes, and an unchanged page is not rewritten.
+  `og:url` is `page.url` exactly as given. A page without `</head>` or markers,
+  with unpaired or repeated markers, with a block a crawler would not read, or
+  with an `og:image` or `twitter:image` outside the block fails the run before
+  anything renders. A page is written atomically, and only after all of its
+  images succeed. `--json` reports each page in a new `html` array.
+
+- A `lineClamp` render guard for `createSvgOg`, `createNodeOg`, `createEdgeOg`, and
+  `createTakumiOg`. Satori ignores `lineClamp` on an element whose display is not
+  `block` (a flex column, a `span`), and draws every line with no error; the
+  `overflow` guard stays quiet while the text still fits. The guard walks the
+  element tree, calling nested function components, and reports such a clamp as
+  `reason: "display"`, a `WebkitLineClamp` without `-webkit-box` and a vertical
+  orient, a `textOverflow: "ellipsis"` without `overflow: "hidden"` or a
+  non-wrapping `whiteSpace` (`"overflow"`, `"whiteSpace"`; its display does not
+  matter), and a clamp on an element whose text is inside a child or beside an
+  inline one (`"children"`). The rules were probed on Satori 0.63.2 and are pinned
+  by a test that renders each case. On Takumi, which clamps more, it applies
+  Satori's rules so a plate stays portable. Values set by `<style>` rules or `tw`
+  are not seen. Off by default, like every guard.
+
 ### Fixed
 
 - The rendering guide and the brand-colors recipe said plates have no stylesheet
@@ -70,6 +98,13 @@ All notable changes to Metaplate are documented in this file. The project uses
   `metaplate verify-page` after the deploy. It points to the experimental
   `metaplate/takumi` for rendering on the Worker itself. The deployment matrix row
   for Cloudflare Workers links to it.
+
+### Tests
+
+- A Satori-vs-Takumi parity suite renders 16 plates through `metaplate/node`
+  and `metaplate/takumi` and holds each to a per-plate budget of changed
+  pixels, so a `takumi-js` or `satori` update that moves layout fails before
+  it merges. It also pins Takumi's refusal of a truncated PNG.
 
 ## [0.8.4] - 2026-11-09
 

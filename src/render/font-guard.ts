@@ -81,6 +81,22 @@ const isClassComponent = (type: { prototype?: { isReactComponent?: unknown } }):
   Boolean(type.prototype?.isReactComponent);
 
 /**
+ * What a function component renders, called with its props as Satori calls
+ * it. `undefined` for a class component, or one that throws or returns a
+ * promise: the walk skips it, and Satori reports it.
+ */
+export function renderComponent(type: (props: unknown) => unknown, props: unknown): unknown {
+  if (isClassComponent(type as never)) return undefined;
+  let rendered: unknown;
+  try {
+    rendered = type(props ?? {});
+  } catch {
+    return undefined;
+  }
+  return rendered instanceof Promise ? undefined : rendered;
+}
+
+/**
  * Every text the element tree draws, with the font request it inherits.
  * Function components are called with their props, as Satori calls them; one
  * that throws or returns a promise is skipped, and Satori reports it.
@@ -99,15 +115,7 @@ function collectText(node: unknown, request: FontRequest, element: string, found
   if (typeof node !== "object" || !("type" in node)) return;
   const { type, props } = node as { type: unknown; props?: Record<string, unknown> };
   if (typeof type === "function") {
-    if (isClassComponent(type as never)) return;
-    let rendered: unknown;
-    try {
-      rendered = (type as (props: unknown) => unknown)(props ?? {});
-    } catch {
-      return;
-    }
-    if (rendered instanceof Promise) return;
-    collectText(rendered, request, element, found, depth + 1);
+    collectText(renderComponent(type as (props: unknown) => unknown, props), request, element, found, depth + 1);
     return;
   }
   if (typeof type === "string" && OPAQUE_ELEMENTS.has(type)) return;
