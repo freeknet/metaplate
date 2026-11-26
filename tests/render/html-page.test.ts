@@ -9,6 +9,9 @@ import {
 } from "../../src/render/html-page.js";
 import path from "node:path";
 
+/** U+FEFF, the byte order mark. */
+const BOM = String.fromCharCode(0xfeff);
+
 const render = (indent: string) => `${indent}<meta property="og:image" content="https://example.com/a.png">`;
 
 const PAGE = [
@@ -114,6 +117,47 @@ describe("spliceSocialBlock", () => {
     expect(() => spliceSocialBlock(html, render)).toThrow(message);
   });
 
+  it("inserts before the </head> a parser acts on, not one inside a comment", () => {
+    const html = "<head>\n<!-- </head> -->\n<title>x</title>\n</head>\n<body></body>";
+    const once = spliceSocialBlock(html, render);
+    expect(once).toBe(
+      `<head>\n<!-- </head> -->\n<title>x</title>\n  ${SOCIAL_BLOCK_START}\n  <meta property="og:image" content="https://example.com/a.png">\n  ${SOCIAL_BLOCK_END}\n</head>\n<body></body>`,
+    );
+    expect(spliceSocialBlock(once, render)).toBe(once);
+  });
+
+  it.each([
+    ["a script string", '<script>var s = "</head>";</script>'],
+    ["a style sheet", "<style>/* </head> */</style>"],
+    ["a template", "<template><p></head></p></template>"],
+    ["a title", "<title></head></title>"],
+  ])("skips a </head> inside %s", (_name, decoy) => {
+    const html = `<head>\n${decoy}\n</head>\n<body></body>`;
+    expect(spliceSocialBlock(html, render)).toBe(
+      `<head>\n${decoy}\n  ${SOCIAL_BLOCK_START}\n  <meta property="og:image" content="https://example.com/a.png">\n  ${SOCIAL_BLOCK_END}\n</head>\n<body></body>`,
+    );
+  });
+
+  it("does not refuse an existing block that follows a commented-out </head>", () => {
+    const html = `<head>\n<!-- </head> -->\n${SOCIAL_BLOCK_START}\n${SOCIAL_BLOCK_END}\n</head>`;
+    expect(spliceSocialBlock(html, render)).toContain(`${SOCIAL_BLOCK_START}\n<meta property="og:image"`);
+  });
+
+  it("refuses to insert when the head ends before its </head>", () => {
+    expect(() => spliceSocialBlock("<head>\n<div>x</div>\n</head>", render)).toThrow(
+      "the page's <head> ends before a </head> a crawler would read",
+    );
+    expect(() => spliceSocialBlock("<html><body><!-- </head> --></body></html>", render)).toThrow(
+      "the page's <head> ends before a </head> a crawler would read",
+    );
+  });
+
+  it("keeps a leading byte order mark and inserts as without it", () => {
+    const once = spliceSocialBlock(BOM + PAGE, render);
+    expect(once).toBe(BOM + spliceSocialBlock(PAGE, render));
+    expect(spliceSocialBlock(once, render)).toBe(once);
+  });
+
   it("uses an existing block without needing </head>", () => {
     const html = `<meta charset="utf-8">\n${SOCIAL_BLOCK_START}\n${SOCIAL_BLOCK_END}\n<body>`;
     expect(spliceSocialBlock(html, render)).toContain(`${SOCIAL_BLOCK_START}\n<meta property="og:image"`);
@@ -170,6 +214,46 @@ describe("buildHtmlPage", () => {
   it("refuses a block a crawler would not read", () => {
     const inScript = PAGE.replace("</title>", `</title>\n<script>/* ${SOCIAL_BLOCK_START} ${SOCIAL_BLOCK_END} */</script>`);
     expect(() => buildHtmlPage(source(), inScript)).toThrow("where a crawler would not read it");
+  });
+
+  describe("a page saved with a UTF-8 byte order mark", () => {
+    it("inserts the block and keeps the mark, and a re-run returns the same text", () => {
+      const html = buildHtmlPage(source(), BOM + PAGE);
+      expect(html).toBe(BOM + buildHtmlPage(source(), PAGE));
+      expect(html.indexOf(BOM, 1)).toBe(-1);
+      expect(buildHtmlPage(source(), html)).toBe(html);
+    });
+
+    it("replaces an existing block", () => {
+      const before = BOM + PAGE.replace(
+        "  </head>",
+        `    ${SOCIAL_BLOCK_START}\n    <meta property="og:image" content="https://example.com/old.png">\n    ${SOCIAL_BLOCK_END}\n  </head>`,
+      );
+      const after = buildHtmlPage(source(), before);
+      expect(after.startsWith(BOM + "<!doctype html>")).toBe(true);
+      expect(after).not.toContain("old.png");
+      expect(after).toBe(BOM + buildHtmlPage(source(), PAGE));
+    });
+
+    it("keeps CRLF line endings too", () => {
+      const crlf = PAGE.replaceAll("\n", "\r\n");
+      const html = buildHtmlPage(source(), BOM + crlf);
+      expect(html).toBe(BOM + buildHtmlPage(source(), crlf));
+      expect(html.replaceAll("\r\n", "")).not.toContain("\n");
+      expect(buildHtmlPage(source(), html)).toBe(html);
+    });
+  });
+
+  it("writes a page with a commented-out </head> before the real one, where a crawler reads it", () => {
+    const html = buildHtmlPage(source(), "<head>\n<!-- </head> -->\n<title>x</title>\n</head>\n<body></body>");
+    expect(html.startsWith("<head>\n<!-- </head> -->\n<title>x</title>\n  <!-- metaplate:social -->\n")).toBe(true);
+    expect(html.endsWith("  <!-- /metaplate:social -->\n</head>\n<body></body>")).toBe(true);
+    expect(buildHtmlPage(source(), html)).toBe(html);
+  });
+
+  it("refuses a page whose only </head> is commented out instead of writing into the comment", () => {
+    const html = "<html><head><title>x</title><body><!-- </head> --></body></html>";
+    expect(() => buildHtmlPage(source(), html)).toThrow("the page's <head> ends before a </head> a crawler would read");
   });
 
   it("reports an invalid page field", () => {
