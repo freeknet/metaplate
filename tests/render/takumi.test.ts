@@ -231,6 +231,32 @@ describe("guards", () => {
     expect(warnings.map((issue) => issue.guard)).toEqual(["fontFallback"]);
   }, RENDER_TIMEOUT);
 
+  it("reports a lineClamp that Takumi ignores too, and passes one both engines honor", async () => {
+    const long = "The quick brown fox jumps over the lazy dog again and again until the line wraps many times over";
+    const clamped = (display: string) => ({
+      type: "div",
+      props: { style: { display, lineClamp: 2, width: 300, fontSize: 20, lineHeight: 1 }, children: long },
+    });
+    // Takumi, like Satori, does not clamp a flex container: the guard's warning holds on both.
+    const heights = async (display: string) => {
+      const [{ measure }, { fromJsx }] = await Promise.all([import("takumi-js"), import("takumi-js/helpers/jsx")]);
+      const { node, css } = await fromJsx(card([clamped(display)]) as Parameters<typeof fromJsx>[0]);
+      const measured = await measure(node, { width: 400, height: 300, fonts: [{ name: "Inter", weight: 700, data: inter("woff2") }], css });
+      return measured.children[0]!.height;
+    };
+    expect(await heights("block")).toBe(40);
+    expect(await heights("flex")).toBeGreaterThan(40);
+
+    const { warnings, onWarning } = collected();
+    const og = plate({
+      component: () => card([clamped("flex"), clamped("block")]),
+      guards: { lineClamp: "warn", onWarning },
+    });
+    await og.render({ title: "x" });
+    expect(warnings.map((issue) => issue.guard === "lineClamp" && [issue.property, issue.reason, issue.display]))
+      .toEqual([["lineClamp", "display", "flex"]]);
+  }, RENDER_TIMEOUT);
+
   it("reports a frame that is one color", async () => {
     const og = plate({
       component: () => card([text("Gone", 100, 900)], { background: "#ffffff" }),
