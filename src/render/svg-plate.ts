@@ -12,6 +12,7 @@ import {
   overflowDetector,
   type GuardTarget,
 } from "./guards.js";
+import { checkLineClamp } from "./clamp-guard.js";
 import { checkFontFallback, FaceRegistry } from "./font-guard.js";
 import type { SatoriLayoutNode, SatoriOptions, SvgOgDefinition } from "./svg.js";
 
@@ -95,6 +96,7 @@ async function renderSvg<Copy, Variant extends string>(
   // has finished, so one RenderGuardError lists every issue in the layout.
   layout?.finish();
   if (faces) checkFontFallback(element, faces.all, report, target);
+  if (guardLevel(definition.guards, "lineClamp") !== "off") checkLineClamp(element, report, target);
   report.settle();
   return svg;
 }
