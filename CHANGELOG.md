@@ -51,6 +51,20 @@ All notable changes to Metaplate are documented in this file. The project uses
   anything renders. A page is written atomically, and only after all of its
   images succeed. `--json` reports each page in a new `html` array.
 
+- A `lineClamp` render guard for `createSvgOg`, `createNodeOg`, `createEdgeOg`, and
+  `createTakumiOg`. Satori ignores `lineClamp` on an element whose display is not
+  `block` (a flex column, a `span`), and draws every line with no error; the
+  `overflow` guard stays quiet while the text still fits. The guard walks the
+  element tree, calling nested function components, and reports such a clamp as
+  `reason: "display"`, a `WebkitLineClamp` without `-webkit-box` and a vertical
+  orient, a `textOverflow: "ellipsis"` without `overflow: "hidden"` or a
+  non-wrapping `whiteSpace` (`"overflow"`, `"whiteSpace"`; its display does not
+  matter), and a clamp on an element whose text is inside a child or beside an
+  inline one (`"children"`). The rules were probed on Satori 0.63.2 and are pinned
+  by a test that renders each case. On Takumi, which clamps more, it applies
+  Satori's rules so a plate stays portable. Values set by `<style>` rules or `tw`
+  are not seen. Off by default, like every guard.
+
 ### Fixed
 
 - The rendering guide and the brand-colors recipe said plates have no stylesheet
@@ -60,6 +74,13 @@ All notable changes to Metaplate are documented in this file. The project uses
   0.51.0 or later. `createNextOg` ignores `<style>` (its `next/og` bundles Satori
   0.29.0), and an undefined `var()` in a `background` fails its render. Tests now
   pin each behavior.
+
+### Tests
+
+- A Satori-vs-Takumi parity suite renders 16 plates through `metaplate/node`
+  and `metaplate/takumi` and holds each to a per-plate budget of changed
+  pixels, so a `takumi-js` or `satori` update that moves layout fails before
+  it merges. It also pins Takumi's refusal of a truncated PNG.
 
 ## [0.8.4] - 2026-11-09
 
