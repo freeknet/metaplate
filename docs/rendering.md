@@ -701,6 +701,10 @@ differences bite in practice:
   is drawn with another of the family's faces; see
   [Several fonts](recipes.md#several-fonts). The
   [`fontFallback` guard](#render-guards) reports both.
+- **`lineClamp` needs `display: "block"`.** On a flex, grid, or inline element,
+  Satori ignores it and draws every line, and the `overflow` guard stays quiet
+  while the text still fits; see [Long titles](recipes.md#long-titles). The
+  [`lineClamp` guard](#render-guards) reports it.
 - **React accessibility lint rules do not apply.** Rules such as Biome's
   `lint/a11y/noSvgWithoutTitle` or `jsx-a11y/*` are written for DOM SVG and will
   ask for exactly the `<title>` above. Suppress them in the plate file rather
@@ -754,6 +758,7 @@ Each guard takes `"error"`, `"warn"`, or `"off"`:
 | `textOverlap` | Two text elements whose laid-out boxes intersect | `createSvgOg`, `createNodeOg`, `createEdgeOg` |
 | `avoid` | Text that comes too close to an element the plate keys, such as a photo | `createSvgOg`, `createNodeOg`, `createEdgeOg` |
 | `fontFallback` | Text whose `fontFamily`, `fontWeight`, or `fontStyle` no loaded font provides | `createSvgOg`, `createNodeOg`, `createEdgeOg` |
+| `lineClamp` | A `lineClamp`, `WebkitLineClamp`, or `textOverflow: "ellipsis"` that Satori ignores, drawing every line | `createSvgOg`, `createNodeOg`, `createEdgeOg` |
 | `blank` | A rasterised image in which every pixel is the same color | `createNodeOg`, `createEdgeOg` |
 
 `"error"` rejects the render (and so `render`, `renderPixels`, `artifact`,
@@ -764,7 +769,8 @@ being rendered, and the guard's own details: `languageCode` and `segment`
 for missing glyphs, `element`, `text`, and `box` for overflow and the layout
 guards (plus `safeArea`, the `other` text, or the `avoided` element),
 `element`, `text`, `fontFamily`, `fontWeight`, `fontStyle`, `missing`, and
-`loaded` for a font fallback, `color` for a blank image. Its `name` is `"RenderGuardError"`; `instanceof` works when the
+`loaded` for a font fallback, `element`, `text`, `property`, `display`, and
+`reason` for an ignored clamp, `color` for a blank image. Its `name` is `"RenderGuardError"`; `instanceof` works when the
 class is imported from the same entry as the plate factory, because each
 entry is bundled separately.
 
@@ -805,7 +811,9 @@ with both reports all of them.
   names the likely cause. When the root itself is larger than the canvas, it
   points at a padded root without `boxSizing: "border-box"`. Otherwise the
   text needs more room than its container has, and the fix is shorter text, a
-  smaller font size, or [`lineClamp`](recipes.md#long-titles).
+  smaller font size, or [`lineClamp`](recipes.md#long-titles). A clamp Satori
+  ignores leaves no overflow to report while the text fits; the `lineClamp`
+  guard catches that.
 - **`fontFallback`** walks the element tree the component returned, carrying
   inline `fontFamily`, `fontWeight`, and `fontStyle` down to each text the way
   CSS inherits them, and calls nested function components with their props as
@@ -822,6 +830,34 @@ with both reports all of them.
   during the render count as loaded. It does not see values set by `<style>`
   rules or Tailwind `tw`, or a `var()` family; a relative weight such as
   `bolder` is not checked.
+- **`lineClamp`** walks the same element tree, calling nested function
+  components, and reports each element whose inline truncation Satori ignores.
+  Satori raises no error for these, and `overflow` cannot catch them, because
+  the full text still fits its container. Satori 0.63.2 applies:
+  - `lineClamp` only on an element whose display is `block`. A `display` the
+    element does not set is the default for its tag, as in Satori: `block` for
+    `div`, `p`, headings, and the other block elements, `inline` for `span`,
+    `b`, and unknown tags. `flex`, `grid`, `inline-block`, `inline-flex`,
+    `list-item`, and `-webkit-box` ignore it (`reason: "display"`).
+  - `WebkitLineClamp` only with `display: "-webkit-box"` and
+    `WebkitBoxOrient: "vertical"` (`reason: "display"`).
+  - `textOverflow: "ellipsis"` whatever the display, but only with an
+    `overflow` other than `visible` (`reason: "overflow"`) and a `whiteSpace`
+    that does not wrap, `nowrap` or `pre`, set on the element or inherited
+    (`reason: "whiteSpace"`).
+  - Each of them only to text that is the element's own child. Text inside a
+    child element, or beside an inline child such as a `<span>`, `<b>`, or
+    `<br>`, is drawn in full (`reason: "children"`); a block child beside the
+    text is fine.
+
+  `property` names the style that was ignored and `display` the element's
+  display. Elements with `display: "none"`, elements with no text, and a clamp
+  of `0` or `"none"` are not checked. Like `fontFallback`, it reads inline
+  styles only, so a clamp or display set by `<style>` rules or Tailwind `tw` is
+  not seen. It is off by default, like every guard; turn it on in development
+  or in the build that renders your cards. On
+  [`createTakumiOg`](takumi.md#render-guards) it applies Satori's rules, which
+  are stricter than Takumi's, so a plate that passes clamps on both.
 - **`blank`** reads the raw RGBA pixels after Resvg rasterises them and
   before any `output` encoder runs, stopping at the first pixel that differs
   from the first; fully transparent pixels count as one color whatever their
