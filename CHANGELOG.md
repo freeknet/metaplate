@@ -24,7 +24,13 @@ All notable changes to Metaplate are documented in this file. The project uses
   Cloudflare Workers, where `metaplate/edge` cannot start. It has the same plate
   surface as `createEdgeOg` and runs every render guard except `avoid`;
   `languageFonts` receive Satori's language codes, and emoji come from the
-  plate's emoji loader, never a CDN. Fonts must be TrueType, OpenType, or WOFF2.
+  plate's emoji loader, never a CDN, as the same graphemes Satori passes it
+  (`1️⃣`, `❤️`, U+FE0F included). Takumi's own fetcher is switched off, so a
+  render makes no network request: `data:` URIs draw, and any other image `src`
+  or CSS `url()` (public, private, or relative) fails the render with an error
+  naming it. Load remote images with `fetchImageLoader` (Satori, under
+  `metaplate/node` and `metaplate/edge`, fetches public URLs itself and refuses
+  private addresses). Fonts must be TrueType, OpenType, or WOFF2.
   Takumi defaults to `box-sizing: border-box` and differs from Satori in a few
   other places; see docs/takumi.md. On the Workers Free plan a warm render used
   about 13 ms of CPU against a 10 ms limit, so cache cards there.
@@ -34,8 +40,10 @@ All notable changes to Metaplate are documented in this file. The project uses
   of its faces (an italic one, when only the weight matches), all without an error.
   The guard reports each distinct request no loaded face satisfies, as
   `missing: "family"` or `missing: "face"` with the `loaded` faces listed. It reads
-  inline styles inherited down the tree and calls nested function components;
-  faces a `languageFonts` loader returns count as loaded. Values set by `<style>`
+  inline styles inherited down the tree, starting each element from the
+  renderer's default style for its tag (`<h1>` and `<strong>` bold, `<em>`
+  italic), resolves `var()` from custom properties declared inline, and calls
+  nested function components; faces a `languageFonts` loader returns count as loaded. Values set by `<style>`
   rules or `tw` are not seen. Off by default, like every guard.
 - `metaplate verify-page --expect-robots-block` (`expectRobotsBlock` in
   `verifyRemotePage`) for a staging site that blocks crawlers on purpose. Each
@@ -70,7 +78,9 @@ All notable changes to Metaplate are documented in this file. The project uses
   `og:image` carries the same `?v=` URL the manifest records, rendered through
   `socialMetaHtml`. They go between `<!-- metaplate:social -->` and
   `<!-- /metaplate:social -->`, or on their own lines before `</head>` the first
-  time; re-running writes the same bytes, and an unchanged page is not rewritten.
+  time (skipping a `</head>` in a comment or `<script>`); re-running writes the
+  same bytes, line endings and a UTF-8 byte order mark are kept, and an
+  unchanged page is not rewritten.
   `og:url` is `page.url` exactly as given. A page without `</head>` or markers,
   with unpaired or repeated markers, with a block a crawler would not read, or
   with an `og:image` or `twitter:image` outside the block fails the run before

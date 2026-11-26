@@ -2,6 +2,7 @@ import type { MeasuredNode, Node as TakumiNode } from "takumi-js";
 import { loadTakumi } from "../core/peers.js";
 import { OG_CONTENT_TYPE } from "../core/social-image.js";
 import { webSha256 } from "../core/stable-hash.js";
+import { twemojiName } from "../fonts/emoji.js";
 import type { LanguageFontLoader } from "../fonts/language-fonts.js";
 import { checkLineClamp } from "./clamp-guard.js";
 import { checkFontFallback, FaceRegistry } from "./font-guard.js";
@@ -233,30 +234,101 @@ function fallbackFonts(
 
 const TRANSPARENT = "data:image/svg+xml;base64," + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>');
 
+const VARIATION_SELECTOR_16 = "️";
+const ZERO_WIDTH_JOINER = "‍";
+const graphemes = new Intl.Segmenter("en", { granularity: "grapheme" });
+
+/**
+ * Every grapheme cluster of the tree's text, by its Twemoji file stem. Takumi
+ * names an emoji image after the stem, which drops U+FE0F from sequences
+ * without a zero-width joiner (`1️⃣` becomes `31-20e3`), so the stem alone
+ * cannot give back the grapheme Satori would pass to the emoji loader. Where
+ * two spellings share a stem, the one with U+FE0F wins: it is the one Takumi
+ * draws as an emoji.
+ */
+function graphemesByName(node: TakumiNode, found = new Map<string, string>()): Map<string, string> {
+  if (node.type === "text") {
+    for (const { segment } of graphemes.segment(node.text)) {
+      const name = twemojiName(segment);
+      const known = found.get(name);
+      if (known === undefined || (!known.includes(VARIATION_SELECTOR_16) && segment.includes(VARIATION_SELECTOR_16))) {
+        found.set(name, segment);
+      }
+    }
+  } else if (node.type === "container") {
+    for (const child of node.children ?? []) if (child) graphemesByName(child, found);
+  }
+  return found;
+}
+
+/**
+ * The spellings of an emoji named by its Twemoji stem, most likely first: as
+ * the copy spells it, as named, and with U+FE0F after the first code point,
+ * where a fully-qualified sequence without a zero-width joiner carries it
+ * (`❤️`, `1️⃣`).
+ */
+function spellings(name: string, original: string | undefined): string[] {
+  const named = String.fromCodePoint(...name.split("-").map((hex) => Number.parseInt(hex, 16)));
+  const [first = "", ...rest] = [...named];
+  const qualified = named.includes(ZERO_WIDTH_JOINER) ? named : first + VARIATION_SELECTOR_16 + rest.join("");
+  return [...new Set([original ?? named, named, qualified])];
+}
+
 /**
  * Takumi turns emoji into images named after their code points on a CDN.
  * Each is pointed at the plate's own emoji loader instead, so a render never
- * fetches from a third party; an emoji the loader has no image for is left
- * transparent and reported by `missingGlyphs`.
+ * fetches from a third party. The loader receives the grapheme as the copy
+ * spells it, as under Satori; an emoji it has no image for is left
+ * transparent and reported, in that spelling, by `missingGlyphs`.
  */
 async function withEmojiImages(
   node: TakumiNode,
   takumi: Takumi,
   emoji: NonNullable<SvgOgDefinition<unknown>["emoji"]>,
+  originals: ReadonlyMap<string, string>,
   onMissing: (grapheme: string) => void,
 ): Promise<TakumiNode> {
   if (node.type === "image" && typeof node.src === "string" && takumi.isEmojiImageUrl(node.src)) {
     const name = node.src.slice(node.src.lastIndexOf("/") + 1).replace(/\.svg$/, "");
-    const grapheme = String.fromCodePoint(...name.split("-").map((hex) => Number.parseInt(hex, 16)));
-    // Twemoji names drop the variation selector of a single-code-point emoji.
-    const image = (await emoji(grapheme)) ?? ([...grapheme].length === 1 ? await emoji(`${grapheme}️`) : undefined);
-    if (image === undefined) onMissing(grapheme);
+    const candidates = spellings(name, originals.get(name));
+    let image: string | undefined;
+    for (const candidate of candidates) {
+      image = await emoji(candidate);
+      if (image !== undefined) break;
+    }
+    if (image === undefined) onMissing(candidates[0]!);
     return { ...node, src: image ?? TRANSPARENT };
   }
   if (node.type !== "container" || !node.children) return node;
-  const children = await Promise.all(node.children.map((child) => withEmojiImages(child, takumi, emoji, onMissing)));
+  const children = await Promise.all(
+    node.children.map((child) => withEmojiImages(child, takumi, emoji, originals, onMissing)),
+  );
   return { ...node, children };
 }
+
+/**
+ * Takumi's own fetcher is switched off, so metaplate/takumi makes no network
+ * request. `data:` URIs and inline SVG never reach it; remote images come in
+ * through metaplate's loaders as `data:` URIs. Any other image `src` or CSS
+ * `url()`, public or private, absolute or relative, fails the render with
+ * this error before a request is made.
+ */
+function refuseUrl(url: string): never {
+  throw new Error(
+    `metaplate/takumi does not fetch images: ${url}. Load remote images with fetchImageLoader from ` +
+      "metaplate/image (or remoteImageLoader from metaplate/assets on Node.js) and pass the data URI it returns as src.",
+  );
+}
+
+/**
+ * Takumi checks `allowUrl` before every fetch and redirect. The `fetch` is a
+ * second lock, and also makes Takumi hand relative URLs to the check instead
+ * of skipping them silently.
+ */
+const NO_NETWORK = {
+  allowUrl: refuseUrl,
+  fetch: async (url: string): Promise<Response> => refuseUrl(url),
+};
 
 /** The axis-aligned canvas box of a measured node, through its transform. */
 function bounds({ width, height, transform: [a, b, c, d, e, f] }: MeasuredNode) {
@@ -350,8 +422,13 @@ function takumiFrames<Copy, Variant extends string>(
 
     const converted = await takumi.fromJsx(element as Parameters<Takumi["fromJsx"]>[0]);
     const node = emoji
-      ? await withEmojiImages(takumi.extractEmojis(converted.node, "twemoji"), takumi, emoji, (grapheme) =>
-          reportMissing(report, target, "emoji", grapheme))
+      ? await withEmojiImages(
+          takumi.extractEmojis(converted.node, "twemoji"),
+          takumi,
+          emoji,
+          graphemesByName(converted.node),
+          (grapheme) => reportMissing(report, target, "emoji", grapheme),
+        )
       : converted.node;
     const module = definition.takumi?.module;
     const options = {
@@ -361,12 +438,14 @@ function takumiFrames<Copy, Variant extends string>(
       css: converted.css,
       // Emoji are images already, or drawn from the fonts: never fetched.
       emoji: "from-font" as const,
+      // Nor is anything else: Takumi makes no request (see refuseUrl).
+      images: NO_NETWORK,
       loadFallbackFonts: fallbackFonts(languageFonts, report, target, faces),
       ...(module === undefined ? {} : { module: (await module) as never }),
     };
 
     if (measures) layoutChecks(guards, report, target, node, await takumi.measure(node, options));
-    if (faces) checkFontFallback(element, faces.all, report, target);
+    if (faces) checkFontFallback(element, faces.all, report, target, "takumi");
     if (guardLevel(guards, "lineClamp") !== "off") checkLineClamp(element, report, target);
     // Warnings are reported, and error-level issues thrown, once the layout
     // is known, so one RenderGuardError lists every issue it has.
