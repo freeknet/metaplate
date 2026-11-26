@@ -460,6 +460,11 @@ The routes passed to `pageMetadata` and to `metaplate render` have to match,
 including the trailing slash, because the route decides both the file path and
 the URL. Keeping `guideRoute` in one place is what guarantees that.
 
+A hand-written page in `public/`, outside the App Router, gets no metadata from
+Next. Give its entry in the render module an `html` path and `metaplate render`
+writes the tags into the file itself; see
+[Writing tags into static HTML](render-cli.md#writing-tags-into-static-html).
+
 ## 6. Audit the export
 
 `metaplate render` proves the files are good. It cannot prove a page points at
