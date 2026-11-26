@@ -119,6 +119,7 @@ Page findings:
 | `image-limit` | unknown | More distinct image URLs than `--max-images`; the rest are listed but not fetched. Or more than 64 image references; the rest are counted but not inspected. |
 | `html-limit` | warning, under each Meta target when given | Open Graph tags that only appear after the first 1,000,000 bytes of HTML, which Meta's crawler does not read; or, with `--target whatsapp`, a `<head>` that does not end within the first 300,000 bytes. |
 | `robots-disallowed`, `robots-unreachable`, `robots-unknown` | see [Crawler access](#crawler-access-robotstxt) | A crawler's robots.txt rules keep it from the page. |
+| `robots-not-blocked` | error | With [`--expect-robots-block`](#sites-that-block-crawlers-on-purpose), robots.txt lets a crawler fetch the page. |
 
 Each image reference (`og:image`, `og:image:secure_url`, `twitter:image`, and
 each JSON-LD image) is verified separately. A URL named by several tags is
@@ -175,9 +176,16 @@ and every fetched image URL:
 
 ```text
 ✓ https://example.com/blog/launch (1 image reference)
+  ✗ robots.txt disallows Twitterbot (X) on 1 of 2 URLs: https://cdn.example.com/og.png (og:image[0]) [https://cdn.example.com/robots.txt line 4 (Disallow: /og)]
   ✓ og:image[0] https://cdn.example.com/og.png 1200x630 png (48213 bytes)
-  ✗ robots.txt disallows Twitterbot (X) on 1 of 2 URLs
 ```
+
+Each evaluated crawler gets one line, whatever the number of targets and
+images: the URLs it is disallowed from, each with the page or the image
+references that name it, then the deciding rule, or the unreachable file,
+in brackets. When that crawler's findings are errors, the same line, prefixed
+with the page URL, goes to standard error once. The findings themselves are
+still filed under each target and image in the [JSON report](#json-report).
 
 Crawlers are evaluated from the rules alone. No request is ever sent with a
 crawler's user agent; robots.txt is fetched by the same hardened fetcher, as
@@ -231,6 +239,64 @@ The file is fetched and read as RFC 9309 describes:
   non-http scheme) cannot be judged: every check against it is `null` and a
   `robots-unknown` finding is reported.
 
+### Sites that block crawlers on purpose
+
+A staging or preview site usually keeps crawlers out on purpose, with
+`User-agent: *` and `Disallow: /`. Without more, that block is reported like
+any other, as a warning or an error per crawler, and a `verify-page` step
+for the staging site fails or warns on every run. Filtering those lines out
+would also hide the same block if it reached production. Declare it instead:
+
+```sh
+npx metaplate verify-page --expect-robots-block --target linkedin --target whatsapp https://staging.example.com/products/cart-1
+```
+
+```text
+✓ https://staging.example.com/products/cart-1 (1 image reference)
+  ✓ robots.txt disallows LinkedInBot (LinkedIn) on 2 of 2 URLs, as expected: https://staging.example.com/products/cart-1 (page), https://staging.example.com/og-image.png?v=3 (og:image[0]) [https://staging.example.com/robots.txt line 2 (Disallow: /)]
+  ✓ robots.txt disallows WhatsApp (WhatsApp) on 2 of 2 URLs, as expected: https://staging.example.com/products/cart-1 (page), https://staging.example.com/og-image.png?v=3 (og:image[0]) [https://staging.example.com/robots.txt line 2 (Disallow: /)]
+  ✓ og:image[0] https://staging.example.com/og-image.png?v=3 1200x630 png (48213 bytes)
+```
+
+`--expect-robots-block` says robots.txt is meant to keep every evaluated
+crawler from the page:
+
+- It applies to each crawler evaluated, separately: the crawler of every
+  `--target`, and every `--crawler` token, whatever the platform documents
+  about robots.txt. A crawler documented to ignore robots.txt is evaluated
+  only when named with `--crawler`, and then its rules are checked like any
+  other's, although they do not keep it out.
+- A crawler meets the expectation when robots.txt disallows it from the page:
+  the requested URL or a redirect target. A crawler that cannot fetch the page
+  never reads its image URLs, so images do not decide it. An unreachable
+  robots.txt (`5xx` or a network failure) counts as a block, because RFC 9309
+  crawlers treat it as disallowing everything.
+- A met expectation is reported on a `✓` line and files no finding: the
+  crawler's `robots-disallowed` and `robots-unreachable` findings, page and
+  image, are dropped.
+- A crawler that robots.txt allows on every page URL fails: one
+  `robots-not-blocked` error on the page, under each of its targets (or
+  untargeted, for a `--crawler` token), and the run exits 1. This holds even
+  when its images are disallowed, since the crawler can still fetch the page
+  and build a preview without them:
+
+  ```text
+  ✗ https://staging.example.com/products/cart-1 robots.txt allows LinkedInBot (LinkedIn) to fetch the page, but --expect-robots-block expects it disallowed: https://staging.example.com/products/cart-1 (page)
+  ```
+
+- When no page URL is disallowed and one could not be evaluated (the fetch
+  policy refused robots.txt), the result is unknown: a `?` line and the usual
+  `robots-unknown` finding, which does not change the exit code.
+- It needs a crawler to evaluate: without a `--target` whose crawler reads
+  robots.txt, or a `--crawler`, it is an argument error rather than a check
+  that cannot fail.
+
+The page's own `<meta name="robots" content="noindex">` does not switch this
+on. `noindex` governs search indexing, not link previews, and a crawler has
+to fetch the page to see it, so only robots.txt decides whether a preview
+crawler is kept out. Without the flag, a page any crawler is blocked from
+prints a one-line hint that names it.
+
 Platforms that are not in the table:
 
 - Bluesky: each client fetches card metadata when a post is written and
@@ -248,6 +314,7 @@ Platforms that are not in the table:
 | `--json` | | Print one JSON report for every page (below). |
 | `--target NAME` | | Evaluate a compatibility profile, and its crawler's robots.txt rules. Repeatable. |
 | `--crawler TOKEN` | | Also evaluate robots.txt for this product token. Repeatable. |
+| `--expect-robots-block` | | robots.txt is meant to keep every evaluated crawler from the page, as on a staging site: report the block as expected, and fail a crawler it does not block. See [Sites that block crawlers on purpose](#sites-that-block-crawlers-on-purpose). |
 | `--max-file-size N` | | Fail any image larger than `N` bytes. |
 | `--max-html-bytes N` | 4 MiB | Abort a page larger than `N` bytes. |
 | `--max-images N` | 8 | Fetch at most `N` distinct image URLs per page (1 to 100). |
@@ -345,9 +412,13 @@ URL in argument order, shaped like the `verify-url` report:
   `finalUrl`, `redirects`, `contentType`, and `bytes` are added, and `image`
   is added once its bytes are recognized.
 - Every issue is `{ "severity", "code", "message" }`, plus `target` under a
-  target. `severity` is `error`, `warning`, or `unknown`.
+  target, and, for a robots.txt finding, `crawler`: the product token it is
+  about. `severity` is `error`, `warning`, or `unknown`. A robots.txt finding
+  is filed under every target and image it concerns, so group by `crawler`
+  to count crawlers, as the human output does.
 - `robots`, present when a crawler was evaluated:
-  `{ "files": [...], "crawlers": [...] }`. Each file is `{ "origin", "url",
+  `{ "files": [...], "crawlers": [...] }`, plus `"expectBlock": true` with
+  `--expect-robots-block`. Each file is `{ "origin", "url",
   "status" }` (`parsed`, `unavailable`, `unreachable`, or `unknown`) with
   `httpStatus`, `finalUrl`, `bytes`, `truncated`, and `message` when known.
   Each crawler is `{ "token", "platform", "robots", "targets", "requested",
@@ -356,7 +427,8 @@ URL in argument order, shaped like the `verify-url` report:
   (unknown), and each check is `{ "resource": "page" | "image", "url",
   "robotsUrl", "allowed" }` plus `references` for images and the deciding
   `group` and `rule` (`{ "kind", "pattern", "line" }`) when the file was
-  parsed.
+  parsed. With `--expect-robots-block`, each crawler also has `expectation`:
+  `met`, `unmet`, or `unknown`.
 - A page that could not be fetched is
   `{ "url", "valid": false, "globalIssues": [{ "severity": "error", "code", "message" }], "targets": {}, "images": [] }`.
 
@@ -392,7 +464,8 @@ Options are the `verifyRemoteImage` fetch options (`allowPrivate`,
 `connectionTimeoutMs`, `resolve`), plus `maxHtmlBytes`, `maxImages`,
 `maxImageReferences` (default 64; the first `og:image`, its
 `og:image:secure_url`, and `twitter:image` are always inspected), `targets`,
-`crawlers`, and `maxFileSize`. `REMOTE_PAGE_DEFAULTS` holds the page
+`crawlers`, `expectRobotsBlock` (`--expect-robots-block`; it throws a
+`TypeError` when no crawler would be evaluated), and `maxFileSize`. `REMOTE_PAGE_DEFAULTS` holds the page
 defaults, `REMOTE_ROBOTS_DEFAULTS` the robots.txt limits, and
 `CRAWLER_HTML_LIMITS` the Meta and WhatsApp read limits.
 

@@ -152,6 +152,7 @@ export {
   type RemotePageRobotsFile,
   type RemotePageRobotsReport,
   type RemotePageRobotsStatus,
+  type RobotsExpectation,
   type RobotsIssueCode,
 } from "../verify/page-crawlers.js";
 
