@@ -10,6 +10,16 @@ import { verifyPlateImage } from "../verify/social-verification.js";
 import { assertVersionToken } from "../metadata/image-version.js";
 import { copyIdentity, taggedSerialize } from "../core/stable-hash.js";
 import { METAPLATE_VERSION } from "../core/version.js";
+import type { SocialMetaInput } from "../metadata/meta-tags.js";
+import type { SocialMetaOptions } from "../metadata/page-tags.js";
+import {
+  PAGE_META_KEYS,
+  assertSafeHtmlTarget,
+  buildHtmlPage,
+  htmlTarget,
+  readHtmlPage,
+  type HtmlPageSource,
+} from "./html-page.js";
 
 /**
  * Not an entry point: the engine behind `metaplate render`. Its public types
@@ -51,6 +61,11 @@ export type RenderablePlate<Copy> = {
    */
   image?(route: string, copy: Copy, options?: { version?: string }): { readonly url: string };
   /**
+   * The page metadata, versioned exactly as `artifact`'s is. Plates from
+   * `createNodeOg` and `createEdgeOg` have it; a page naming `html` needs it.
+   */
+  metadata?(route: string, copy: Copy, options?: { version?: string }): SocialMetaInput;
+  /**
    * The Satori SVG for this size. `metaplate render` never calls it;
    * `metaplate preview` uses it, when present, to draw layout debug boxes.
    */
@@ -68,6 +83,20 @@ export type RenderPage<Copy> = {
    * file `path`.
    */
   version?: string;
+  /**
+   * A static HTML file to write this page's social `<meta>` tags into,
+   * relative to the directory the command runs in. The tags go between
+   * `<!-- metaplate:social -->` and `<!-- /metaplate:social -->`, or just
+   * before `</head>` the first time, and are written only after every image
+   * of the page has rendered.
+   */
+  html?: string;
+  /**
+   * Page-level tags for `html`: `og:title`, `og:description`, `og:url`, and
+   * the rest of `SocialMetaOptions`. `url` is emitted exactly as given and is
+   * the base relative image URLs resolve against.
+   */
+  page?: SocialMetaOptions;
 };
 
 /**
@@ -176,10 +205,23 @@ function checkPages(value: unknown, label: string): RenderPage<unknown>[] {
         fail(`${pageLabel}.version: ${(error as Error).message}`);
       }
     }
+    if (page.html !== undefined && (typeof page.html !== "string" || page.html === "")) {
+      fail(`${pageLabel}.html must be a non-empty path to an HTML file`);
+    }
+    if (page.page !== undefined) {
+      if (page.html === undefined) fail(`${pageLabel}.page has no effect without ${pageLabel}.html`);
+      if (!isObject(page.page) || Array.isArray(page.page)) fail(`${pageLabel}.page must be an object`);
+      const unknown = Object.keys(page.page).filter((key) => !(PAGE_META_KEYS as readonly string[]).includes(key));
+      if (unknown.length > 0) {
+        fail(`${pageLabel}.page has unknown field ${unknown.join(", ")}; expected ${PAGE_META_KEYS.join(", ")}`);
+      }
+    }
     return {
       ...(page.route === undefined ? {} : { route: page.route }),
       copy: page.copy,
       ...(page.version === undefined ? {} : { version: page.version }),
+      ...(page.html === undefined ? {} : { html: page.html as string }),
+      ...(page.page === undefined ? {} : { page: page.page as SocialMetaOptions }),
     };
   });
 }
@@ -255,9 +297,7 @@ export function planImages(jobs: readonly RenderJob<unknown>[], outDir: string):
   const planned: PlannedImage[] = [];
   const seen = new Map<string, string>();
   for (const job of jobs) {
-    const views = job.plate.variantName === undefined
-      ? [job.plate, ...job.plate.variants.map((name) => job.plate.variant(name))]
-      : [job.plate];
+    const views = jobViews(job.plate);
     for (const page of job.pages) {
       const route = page.route ?? "/";
       for (const view of views) {
@@ -284,6 +324,133 @@ export function planImages(jobs: readonly RenderJob<unknown>[], outDir: string):
     }
   }
   return planned;
+}
+
+/** The sizes a job renders: a default plate's default size and every variant, or one variant view. */
+function jobViews(plate: RenderablePlate<unknown>): RenderablePlate<unknown>[] {
+  return plate.variantName === undefined
+    ? [plate, ...plate.variants.map((name) => plate.variant(name))]
+    : [plate];
+}
+
+/** One page whose social tags `metaplate render` writes into a static HTML file. */
+export type PlannedHtmlPage = HtmlPageSource & {
+  /** Paths, relative to the output directory, of the images this page renders. */
+  images: string[];
+};
+
+/**
+ * Plans every page that names an `html` file: resolves the file against
+ * `root` (the directory the command runs in), takes the page's metadata from
+ * its job's plate with the page's version token, and refuses two pages that
+ * name one file, including on a case-insensitive filesystem.
+ */
+export function planHtmlPages(jobs: readonly RenderJob<unknown>[], outDir: string, root: string): PlannedHtmlPage[] {
+  const planned: PlannedHtmlPage[] = [];
+  const seen = new Map<string, string>();
+  jobs.forEach((job, jobIndex) => {
+    job.pages.forEach((page, pageIndex) => {
+      if (page.html === undefined) return;
+      const label = `${jobs.length === 1 ? "job" : `job[${jobIndex}]`}.pages[${pageIndex}]`;
+      const route = page.route ?? "/";
+      const plate = job.plate;
+      if (typeof plate.metadata !== "function") {
+        fail(`${label}.html needs a plate with a metadata() method, such as one from createNodeOg or createEdgeOg`);
+      }
+      let target: { path: string; target: string };
+      try {
+        target = htmlTarget(root, page.html);
+      } catch (error) {
+        fail(`${label}.${(error as Error).message}`);
+      }
+      const key = target.path.toLowerCase();
+      const previous = seen.get(key);
+      if (previous !== undefined) fail(`${label} and ${previous} both write ${target.path}`);
+      seen.set(key, label);
+      const metadata = page.version === undefined
+        ? plate.metadata(route, page.copy)
+        : plate.metadata(route, page.copy, { version: page.version });
+      planned.push({
+        ...target,
+        route,
+        metadata,
+        page: page.page ?? {},
+        images: jobViews(plate).map((view) => outputTarget(outDir, view.sitePath(route)).path),
+      });
+    });
+  });
+  return planned;
+}
+
+/**
+ * Checks every planned page before anything renders: the file exists inside
+ * `root`, is UTF-8, has well-formed markers or a `</head>`, its page fields are
+ * valid, and a crawler would read the block. A page that fails stops the run
+ * before a single write, as a refused image path does.
+ */
+export async function preflightHtmlPages(pages: readonly PlannedHtmlPage[], root: string): Promise<void> {
+  for (const page of pages) {
+    try {
+      await assertSafeHtmlTarget(root, page.target);
+      buildHtmlPage(page, (await readHtmlPage(page.target)).text);
+    } catch (error) {
+      throw new Error(`${page.path}: ${(error as Error).message}`, { cause: error });
+    }
+  }
+}
+
+/** What happened to one page's HTML file. */
+export type HtmlOutcome =
+  | { path: string; route: string; valid: true; changed: boolean; issues: RenderIssue[] }
+  | { path: string; route: string; valid: false; issues: RenderIssue[] };
+
+/**
+ * Writes each page's tags once its images have all rendered and verified. A
+ * page with a failed image is left exactly as it was. The page is read and
+ * rebuilt at write time, and one whose bytes would not change is not written.
+ * Otherwise the new text is staged beside it, read back and compared, and
+ * renamed over it.
+ */
+export async function writeHtmlPages(
+  pages: readonly PlannedHtmlPage[],
+  outcomes: readonly RenderOutcome[],
+  root: string,
+  onOutcome?: (outcome: HtmlOutcome) => void,
+): Promise<HtmlOutcome[]> {
+  const byPath = new Map(outcomes.map((outcome) => [outcome.path, outcome]));
+  const results: HtmlOutcome[] = [];
+  for (const page of pages) {
+    let outcome: HtmlOutcome;
+    try {
+      const images = page.images.map((image) => byPath.get(image));
+      if (images.some((image) => image === undefined || !image.valid)) {
+        throw new Error("left unchanged because an image of this page failed");
+      }
+      const published = new Set((page.metadata.openGraph?.images ?? []).map((image) => image.url));
+      for (const image of images as Extract<RenderOutcome, { valid: true }>[]) {
+        if (!published.has(image.url)) {
+          throw new Error(`the page metadata does not list the rendered image URL ${image.url}`);
+        }
+      }
+      await assertSafeHtmlTarget(root, page.target);
+      const current = await readHtmlPage(page.target);
+      const next = buildHtmlPage(page, current.text);
+      const changed = next !== current.text;
+      if (changed) {
+        const bytes = Buffer.from(next, "utf8");
+        await writeFileAtomic(page.target, bytes, async (staged) => {
+          if (!(await readFile(staged)).equals(bytes)) throw new Error("the file on disk does not match the new page");
+        });
+      }
+      outcome = { path: page.path, route: page.route, valid: true, changed, issues: [] };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      outcome = { path: page.path, route: page.route, valid: false, issues: [{ severity: "error", message }] };
+    }
+    onOutcome?.(outcome);
+    results.push(outcome);
+  }
+  return results;
 }
 
 /** Runs `task` over `items` with at most `limit` in flight, keeping input order. */

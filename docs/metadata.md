@@ -151,6 +151,10 @@ on one line). `indent` accepts only spaces and tabs. It does not emit
 `<title>` or `<link rel="canonical">`; those belong to the page, which must
 escape its own title text.
 
+For a hand-written HTML file, `metaplate render` can write these tags into the
+page between marker comments, with the image URLs it just rendered; see
+[Writing tags into static HTML](render-cli.md#writing-tags-into-static-html).
+
 Next.js `generateMetadata` can carry the tags through `other`, as
 [`examples/api/social-meta-tags.ts`](https://github.com/freeknet/metaplate/blob/main/examples/api/social-meta-tags.ts) shows, but Next
 renders every `other` entry with a `name` attribute and groups repeated keys.
