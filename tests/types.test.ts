@@ -28,7 +28,9 @@ import {
   type SvgOgDefinition,
 } from "../src/render.js";
 import {
+  definePlate,
   socialImageMetadata,
+  type PlateContract,
   type SocialCompatibilityImage,
   type SocialImageMetadata,
   type SocialImageOptions,
@@ -175,6 +177,30 @@ export function renderJobsAreChecked() {
   // @ts-expect-error -- an SVG-only plate has no artifact().
   const svgJob: RenderJob<Copy> = { plate: svg, pages: [{ copy: { title: "t" } }] };
   return [module, wrongCopy, svgJob];
+}
+
+// A plate contract spread into a renderer infers the copy and variant names
+// from the contract, keeps excess-property checks on the renderer's own
+// options, and has the same metadata type as the renderer's plate.
+export function plateContractsAreTyped() {
+  const plate = definePlate({
+    alt: (copy: Copy) => copy.title,
+    version: "copy",
+    variants: { square: { size: { width: 1080, height: 1080 } } },
+  });
+  const og = createNodeOg({ ...plate, fonts: () => [], component: (copy) => copy.title });
+  const names: readonly "square"[] = og.variants;
+  const same: ReturnType<typeof og.metadata> = plate.metadata("/", { title: "t" }, { twitter: { variant: "square" } });
+  const contract: PlateContract<Copy, "square"> = plate;
+  // @ts-expect-error -- a renderer option is still checked when the contract is spread in.
+  createNodeOg({ ...plate, fonts: () => [], component: (copy) => copy.title, colour: "red" });
+  // @ts-expect-error -- the component receives the contract's copy.
+  createNodeOg({ ...plate, fonts: () => [], component: (copy: { heading: string }) => copy.heading });
+  // @ts-expect-error -- `story` is not a declared variant of the contract.
+  plate.variant("story");
+  // @ts-expect-error -- definePlate takes only the contract options.
+  definePlate({ alt: (copy: Copy) => copy.title, fonts: () => [] });
+  return [names, same, contract];
 }
 
 // X player and app cards are discriminated by `card`: each requires its own

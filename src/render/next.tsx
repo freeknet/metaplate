@@ -7,6 +7,7 @@ import type { ImageSigningKeys } from "../metadata/signing.js";
 import { pageFields, type SocialMetaOptions } from "../metadata/page-tags.js";
 import { nextTwitterShape } from "../metadata/x-cards.js";
 import {
+  assertContractContentType,
   createPlateHandlers,
   createPlateSocial,
   createPlateViews,
@@ -68,6 +69,12 @@ export type NextOgDefinition<Copy, Variant extends string = string> = {
   basePath?: string;
   /** Scheme and host for absolute image URLs, such as `https://example.com`. */
   origin?: string;
+  /**
+   * The media type a `definePlate` contract publishes. Spread in from the
+   * contract rather than set by hand: `next/og` renders PNG, so anything
+   * other than `image/png` throws at definition.
+   */
+  contentType?: string;
   fonts?: FontLoader;
   response?: Omit<ImageResponseOptions, "width" | "height" | "fonts">;
   /**
@@ -91,6 +98,7 @@ export function createNextOg<Copy, Variant extends string = string>(
         "callbacks or pixels. Remove guards, or render through metaplate/node in a route handler.",
     );
   }
+  assertContractContentType(definition.contentType, OG_CONTENT_TYPE);
   const social = createPlateSocial(definition, OG_CONTENT_TYPE);
 
   return createPlateViews(social.variants, (name) => {
