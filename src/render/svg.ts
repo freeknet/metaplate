@@ -2,9 +2,15 @@ import type { ImageSize } from "../core/social-image.js";
 import type { EmojiLoader } from "../fonts/emoji.js";
 import { assertRenderGuards, LAYOUT_GUARD_NAMES, type RenderGuards } from "./guards.js";
 import type { LanguageFontLoader } from "../fonts/language-fonts.js";
-import type { PlateContext, PlateElement, PlateVariants, PlateVersioning } from "./plate.js";
+import {
+  assertContractContentType,
+  type PlateContext,
+  type PlateElement,
+  type PlateVariants,
+  type PlateVersioning,
+} from "./plate.js";
 import { loadSatori } from "../core/peers.js";
-import { createSvgPlate } from "./svg-plate.js";
+import { createSvgPlate, SVG_CONTENT_TYPE } from "./svg-plate.js";
 
 export { SVG_CONTENT_TYPE, type SvgRenderOptions } from "./svg-plate.js";
 
@@ -137,6 +143,13 @@ export type SvgOgDefinition<Copy, Variant extends string = string> = {
   basePath?: string;
   /** Scheme for absolute image URLs, such as `https://example.com`. */
   origin?: string;
+  /**
+   * The media type a `definePlate` contract publishes. Spread in from the
+   * contract rather than set by hand: the plate throws at definition unless
+   * it renders exactly this type (`image/svg+xml` for `createSvgOg`, the
+   * `output` format or `image/png` for the raster renderers).
+   */
+  contentType?: string;
   satori?: SatoriOptions;
   /**
    * Draws emoji as images: `packageEmojiLoader` from `metaplate/fonts` reads
@@ -170,5 +183,6 @@ export function createSvgOg<Copy, Variant extends string = string>(
   definition: SvgOgDefinition<Copy, Variant>,
 ) {
   assertRenderGuards(definition.guards, LAYOUT_GUARD_NAMES, "metaplate/render");
+  assertContractContentType(definition.contentType, SVG_CONTENT_TYPE);
   return createSvgPlate(definition, loadSatori);
 }
