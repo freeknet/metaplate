@@ -82,6 +82,9 @@ verify-page options (plus the verify-url fetch options, which apply to every req
   --max-images N      Fetch at most N distinct image URLs per page (default 8)
   --crawler TOKEN     Also evaluate robots.txt for this crawler token (repeatable);
                       the crawlers of each --target are evaluated automatically
+  --expect-robots-block  robots.txt is meant to keep every evaluated crawler from the page
+                      (a staging site): report the block as expected, and fail any
+                      crawler robots.txt still lets fetch the page
 
 render options:
   --out DIR          Directory the site is published from (default public)
@@ -498,26 +501,109 @@ function imageLine(image: RemotePageImageReport): string {
   return `  ${image.valid && compatible ? "?" : "✗"} ${where}`;
 }
 
-/** Routes each finding: errors to stderr, warnings and unknowns to stdout. */
-function reportIssues(lines: Lines, page: string, issues: readonly { severity: string; message: string }[], prefix: string) {
+type PageIssue = { severity: string; code: string; message: string; crawler?: string };
+
+/**
+ * Routes each finding: errors to stderr, warnings and unknowns to stdout.
+ * robots.txt findings are left out; `crawlerLines` reports them once per crawler.
+ */
+function reportIssues(lines: Lines, page: string, issues: readonly PageIssue[], prefix: string) {
   for (const found of issues) {
+    if (found.code.startsWith("robots-")) continue;
     const message = `${prefix}${found.message}`;
     if (found.severity === "error") lines.err.push(`✗ ${page} ${message}`);
     else lines.out.push(`  ${SYMBOL[found.severity] ?? "!"} ${message}`);
   }
 }
 
-/** One summary line per evaluated crawler; the findings themselves are printed as issues. */
-function crawlerLine(crawler: RemotePageCrawlerReport): string {
+type CrawlerCheck = RemotePageCrawlerReport["checks"][number];
+type RobotsFiles = NonNullable<RemotePageVerification["robots"]>["files"];
+
+const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
+
+/** Each URL with what names it: `page`, or the image references. */
+function urlList(checks: readonly CrawlerCheck[]): string {
+  return checks.map((check) => `${check.url} (${check.resource === "page" ? "page" : (check.references ?? []).join(", ")})`).join(", ");
+}
+
+/** The deciding rules, or unreachable files, behind disallowed checks, each named once. */
+function reasons(checks: readonly CrawlerCheck[], files: RobotsFiles): string {
+  const seen = new Set<string>();
+  for (const { rule, robotsUrl } of checks) {
+    if (rule) seen.add(`${robotsUrl} line ${rule.line} (${rule.kind === "allow" ? "Allow" : "Disallow"}: ${rule.pattern})`);
+    else if (files.find((file) => file.url === robotsUrl)?.status === "unreachable") {
+      seen.add(`${robotsUrl} is unreachable, so RFC 9309 crawlers treat its origin as disallowed`);
+    }
+  }
+  return seen.size > 0 ? ` [${[...seen].join("; ")}]` : "";
+}
+
+/** The worst severity among robots.txt findings, per crawler token. */
+function robotsSeverities(report: RemotePageVerification): Map<string, string> {
+  const rank: Readonly<Record<string, number>> = { unknown: 1, warning: 2, error: 3 };
+  const worst = new Map<string, string>();
+  const issues: PageIssue[] = [
+    ...report.globalIssues,
+    ...Object.values(report.targets).flatMap((target) => target.issues),
+    ...report.images.flatMap((image) => [...image.globalIssues, ...Object.values(image.targets).flatMap((target) => target.issues)]),
+  ];
+  for (const found of issues) {
+    if (found.crawler === undefined) continue;
+    const previous = worst.get(found.crawler);
+    if (previous === undefined || (rank[found.severity] ?? 0) > (rank[previous] ?? 0)) worst.set(found.crawler, found.severity);
+  }
+  return worst;
+}
+
+/** One line per evaluated crawler, with every URL its robots.txt result concerns. */
+function crawlerLine(crawler: RemotePageCrawlerReport, files: RobotsFiles): string {
   const who = crawler.platform ? `${crawler.token} (${crawler.platform})` : crawler.token;
-  const count = crawler.checks.length;
-  const urls = `${count} URL${count === 1 ? "" : "s"}`;
-  if (crawler.allowed === null) return `  ? robots.txt: could not evaluate ${who} for every one of ${urls}`;
-  if (crawler.allowed) return `  ✓ robots.txt allows ${who} on ${urls}`;
-  const denied = crawler.checks.filter((check) => check.allowed === false).length;
+  const urls = plural(crawler.checks.length, "URL");
+  const denied = crawler.checks.filter((check) => check.allowed === false);
+  const unknown = crawler.checks.filter((check) => check.allowed === null);
+  const disallows = `robots.txt disallows ${who} on ${denied.length} of ${urls}`;
+  switch (crawler.expectation) {
+    case "met":
+      return `✓ ${disallows}, as expected: ${urlList(denied)}${reasons(denied, files)}`;
+    case "unmet": {
+      const page = crawler.checks.filter((check) => check.resource === "page");
+      const partly = denied.length > 0 ? `; it disallows only ${urlList(denied)}` : "";
+      return `✗ robots.txt allows ${who} to fetch the page, but --expect-robots-block expects it disallowed: ${urlList(page)}${partly}`;
+    }
+    case "unknown":
+      return `? robots.txt: could not confirm the expected block for ${who}: ${urlList(unknown.filter((check) => check.resource === "page"))}`;
+    default:
+      break;
+  }
+  if (denied.length === 0 && unknown.length > 0) {
+    return `? robots.txt: could not evaluate ${who} on ${unknown.length} of ${urls}: ${urlList(unknown)}`;
+  }
+  if (denied.length === 0) return `✓ robots.txt allows ${who} on ${urls}`;
   const symbol = crawler.robots === "honors" || crawler.robots === "requested" ? "✗" : "!";
   const note = crawler.robots === "ignores" ? ", which documents that it ignores robots.txt" : "";
-  return `  ${symbol} robots.txt disallows ${who} on ${denied} of ${urls}${note}`;
+  const unsure = unknown.length > 0 ? ` (${unknown.length} could not be evaluated)` : "";
+  return `${symbol} ${disallows}${note}${unsure}: ${urlList(denied)}${reasons(denied, files)}`;
+}
+
+/**
+ * The crawler lines on stdout; each crawler with an error finding also gets
+ * one stderr line, however many targets and images the finding was filed under.
+ */
+function crawlerLines(lines: Lines, page: string, report: RemotePageVerification) {
+  const robots = report.robots;
+  if (!robots) return;
+  const severities = robotsSeverities(report);
+  let pageBlocked = false;
+  for (const crawler of robots.crawlers) {
+    const line = crawlerLine(crawler, robots.files);
+    lines.out.push(`  ${line}`);
+    if (severities.get(crawler.token) === "error") lines.err.push(`✗ ${page} ${line.slice(2)}`);
+    const reported = severities.has(crawler.token);
+    if (reported && crawler.checks.some((check) => check.resource === "page" && check.allowed === false)) pageBlocked = true;
+  }
+  if (pageBlocked && !robots.expectBlock) {
+    lines.out.push("  hint: if robots.txt blocks crawlers on purpose, as on a staging site, --expect-robots-block reports the block as expected and fails when it stops blocking");
+  }
 }
 
 function describePage(page: string, report: RemotePageVerification): Lines & { failed: boolean } {
@@ -529,7 +615,7 @@ function describePage(page: string, report: RemotePageVerification): Lines & { f
     out: [`${failed ? "✗" : "✓"} ${page} (${count} image reference${count === 1 ? "" : "s"}${redirected})`],
     err: [],
   };
-  for (const crawler of report.robots?.crawlers ?? []) lines.out.push(crawlerLine(crawler));
+  crawlerLines(lines, page, report);
   reportIssues(lines, page, report.globalIssues, "");
   for (const [target, targetReport] of Object.entries(report.targets)) {
     reportIssues(lines, page, targetReport.issues, `${target}: `);
@@ -558,6 +644,7 @@ async function verifyPages(args: string[]) {
         ...invocation.fetch,
         targets: invocation.socialTargets,
         ...(invocation.crawlers ? { crawlers: invocation.crawlers } : {}),
+        ...(invocation.expectRobotsBlock ? { expectRobotsBlock: true } : {}),
         ...(invocation.maxFileSize !== undefined ? { maxFileSize: invocation.maxFileSize } : {}),
       });
       reports.push(report);

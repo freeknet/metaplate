@@ -4,6 +4,7 @@ import { MAX_IMAGE_DIMENSION, type ImageSize } from "../core/social-image.js";
 import { SOCIAL_TARGETS, type SocialTarget } from "../verify/compatibility-profiles.js";
 import type { ImageFormat } from "../image.js";
 import { isRobotsProductToken } from "../verify/robots.js";
+import { crawlersForTargets } from "../verify/social-crawlers.js";
 
 export const VERIFY_USAGE =
   "Usage: metaplate verify [--json] [--require-content] [--baseline DIR [--max-diff PERCENT] [--threshold N] [--write-diff DIR] [--update-baseline]] [--target TARGET] [--url URL] [--alt TEXT] [--max-file-size BYTES] [--format svg|png|jpeg|webp|gif] --size WIDTHxHEIGHT <file|dir|glob> [...] [--size WIDTHxHEIGHT <file|dir|glob> [...]]";
@@ -73,7 +74,7 @@ export type VerifyUrlInvocation = Omit<VerifyInvocation, "targets" | "url"> & {
 };
 
 export const VERIFY_PAGE_USAGE =
-  "Usage: metaplate verify-page [--json] [--target TARGET] [--crawler TOKEN] [--max-file-size BYTES] [--max-html-bytes BYTES] [--max-images N] [--max-bytes BYTES] [--max-redirects N] [--timeout MS] [--allow-port PORT] [--allow-private] <url> [...]";
+  "Usage: metaplate verify-page [--json] [--target TARGET] [--crawler TOKEN] [--expect-robots-block] [--max-file-size BYTES] [--max-html-bytes BYTES] [--max-images N] [--max-bytes BYTES] [--max-redirects N] [--timeout MS] [--allow-port PORT] [--allow-private] <url> [...]";
 
 /** Fetch limits for `verify-page`: the `verify-url` limits plus the page's own. */
 export type VerifyPageFetchOptions = VerifyUrlFetchOptions & {
@@ -87,6 +88,8 @@ export type VerifyPageInvocation = {
   socialTargets: SocialTarget[];
   /** robots.txt product tokens from `--crawler`, deduplicated; omitted when none. */
   crawlers?: string[];
+  /** `--expect-robots-block`: robots.txt is meant to keep every evaluated crawler from the page. */
+  expectRobotsBlock?: true;
   maxFileSize?: number;
   fetch: VerifyPageFetchOptions;
 };
@@ -385,8 +388,9 @@ export function parseVerifyPageInvocation(args: string[]): VerifyPageInvocation 
   const usage = VERIFY_PAGE_USAGE;
   const shared = fetchLimitFlags(limits, usage);
   const crawlers: string[] = [];
+  let expectRobotsBlock = false;
   const { entries, json, socialTargets, maxFileSize } = parseGroups(args, "verify-page", usage, {
-    switches: shared.switches,
+    switches: { ...shared.switches, "--expect-robots-block": () => { expectRobotsBlock = true; } },
     values: {
       ...shared.values,
       "--crawler": (value) => {
@@ -397,11 +401,17 @@ export function parseVerifyPageInvocation(args: string[]): VerifyPageInvocation 
       "--max-images": (value) => { limits.maxImages = parseInteger(value, "max images", usage, 1, 100); },
     },
   }, false);
+  if (expectRobotsBlock && crawlers.length === 0 && crawlersForTargets(socialTargets).length === 0) {
+    throw new Error(
+      `--expect-robots-block needs a crawler to check: a --target whose crawler reads robots.txt, or --crawler TOKEN. ${usage}`,
+    );
+  }
   return {
     urls: entries.map(({ value }) => value),
     json,
     socialTargets,
     ...(crawlers.length > 0 ? { crawlers } : {}),
+    ...(expectRobotsBlock ? { expectRobotsBlock: true as const } : {}),
     ...(maxFileSize !== undefined ? { maxFileSize } : {}),
     fetch: { ...limits, allowedPorts: [...new Set(limits.allowedPorts)] },
   };
