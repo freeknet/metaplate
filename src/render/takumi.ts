@@ -366,7 +366,7 @@ function takumiFrames<Copy, Variant extends string>(
     };
 
     if (measures) layoutChecks(guards, report, target, node, await takumi.measure(node, options));
-    if (faces) checkFontFallback(element, faces.all, report, target);
+    if (faces) checkFontFallback(element, faces.all, report, target, "takumi");
     if (guardLevel(guards, "lineClamp") !== "off") checkLineClamp(element, report, target);
     // Warnings are reported, and error-level issues thrown, once the layout
     // is known, so one RenderGuardError lists every issue it has.
