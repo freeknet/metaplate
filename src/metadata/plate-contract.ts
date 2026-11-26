@@ -438,6 +438,14 @@ export function definePlate<Copy, Variant extends string = string>(
   if (typeof contentType !== "string" || !isMediaType(contentType)) {
     throw new TypeError(`Invalid contentType: ${String(contentType)}`);
   }
+  // Renderers compare it with the type they produce, written in lowercase with
+  // no parameters, so any other spelling could never match one.
+  const essence = contentType.split(";")[0]!.trim().toLowerCase();
+  if (contentType !== essence) {
+    throw new TypeError(
+      `contentType must be a lowercase media type with no parameters, such as ${JSON.stringify(essence)}; got ${JSON.stringify(contentType)}`,
+    );
+  }
   const social = createPlateSocial(definition, contentType);
 
   const surface = (name: Variant | undefined): PlateContractView<Copy, Variant> => {
