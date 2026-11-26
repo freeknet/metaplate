@@ -10,8 +10,9 @@ const titleSize = (title: string) => (title.length > 72 ? 48 : title.length > 36
 export const og = createNodeOg<Copy>({
   alt: (copy) => copy.alt,
   fonts: fontsourceFontLoader([{ font: "inter", weight: 700 }]),
-  // The clamp keeps text on the card, so this catches layout mistakes, not long copy.
-  guards: { overflow: "error" },
+  // The clamp keeps text on the card, so overflow catches layout mistakes, not long
+  // copy; lineClamp fails the render if Satori would ignore the clamp.
+  guards: { overflow: "error", lineClamp: "error" },
   component: (copy) => (
     <div
       style={{

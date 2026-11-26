@@ -37,6 +37,19 @@ All notable changes to Metaplate are documented in this file. The project uses
   inline styles inherited down the tree and calls nested function components;
   faces a `languageFonts` loader returns count as loaded. Values set by `<style>`
   rules or `tw` are not seen. Off by default, like every guard.
+- A `lineClamp` render guard for `createSvgOg`, `createNodeOg`, `createEdgeOg`, and
+  `createTakumiOg`. Satori ignores `lineClamp` on an element whose display is not
+  `block` (a flex column, a `span`), and draws every line with no error; the
+  `overflow` guard stays quiet while the text still fits. The guard walks the
+  element tree, calling nested function components, and reports such a clamp as
+  `reason: "display"`, a `WebkitLineClamp` without `-webkit-box` and a vertical
+  orient, a `textOverflow: "ellipsis"` without `overflow: "hidden"` or a
+  non-wrapping `whiteSpace` (`"overflow"`, `"whiteSpace"`; its display does not
+  matter), and a clamp on an element whose text is inside a child or beside an
+  inline one (`"children"`). The rules were probed on Satori 0.63.2 and are pinned
+  by a test that renders each case. On Takumi, which clamps more, it applies
+  Satori's rules so a plate stays portable. Values set by `<style>` rules or `tw`
+  are not seen. Off by default, like every guard.
 
 ### Fixed
 
