@@ -106,7 +106,7 @@ describe("Socket evidence integrity", () => {
 
   it("rejects score artifact with source for wrong package", async () => {
     const tampered = await withScore(scoreReport, (score) => {
-      (score as JsonObject).source = "https://socket.dev/npm/package/other-package@0.8.3";
+      (score as JsonObject).source = "https://socket.dev/npm/package/other-package@0.8.4";
       return score;
     });
     expect(validateSocketReport(tampered.report).some((error) => error.includes("source") || error.includes("package"))).toBe(true);
@@ -114,7 +114,7 @@ describe("Socket evidence integrity", () => {
 
   it("rejects score artifact with URL suffix garbage", async () => {
     const tampered = await withScore(scoreReport, (score) => {
-      (score as JsonObject).source = "https://socket.dev/npm/package/metaplate@0.8.3/garbage";
+      (score as JsonObject).source = "https://socket.dev/npm/package/metaplate@0.8.4/garbage";
       return score;
     });
     expect(validateSocketReport(tampered.report).some((error) => error.includes("source"))).toBe(true);
@@ -130,7 +130,7 @@ describe("Socket evidence integrity", () => {
 
   it("rejects score artifact with URL with credentials", async () => {
     const tampered = await withScore(scoreReport, (score) => {
-      (score as JsonObject).source = "https://user:pass@socket.dev/npm/package/metaplate@0.8.3";
+      (score as JsonObject).source = "https://user:pass@socket.dev/npm/package/metaplate@0.8.4";
       return score;
     });
     expect(validateSocketReport(tampered.report).some((error) => error.includes("source"))).toBe(true);
@@ -142,7 +142,7 @@ describe("Socket evidence integrity", () => {
   });
 
   it("rejects disposition report with wrong source hostname", async () => {
-    const tampered = { ...dispositionReport, source: "https://evil.dev/npm/package/metaplate@0.8.3" };
+    const tampered = { ...dispositionReport, source: "https://evil.dev/npm/package/metaplate@0.8.4" };
     expect(validateSocketReport(tampered).some((error) => error.includes("source"))).toBe(true);
   });
 
@@ -419,5 +419,19 @@ describe("Socket evidence integrity", () => {
       return score;
     });
     expect(validateSocketReport(t6.report).some((e) => e.includes("lowest") && e.includes("unexpected"))).toBe(true);
+  });
+});
+
+describe("README Socket badge", () => {
+  // The badge reports on the release the Socket baseline certifies. Moving the
+  // baseline without the badge left the README on an older release (#220).
+  it("names the version of the Socket baseline", async () => {
+    const readme = await readFile("README.md", "utf8");
+    const badges = [...readme.matchAll(/https:\/\/(?:badge\.)?socket\.dev\/npm\/package\/metaplate\/(?:overview\/)?([^)\s]+)/g)].map(
+      (match) => match[1],
+    );
+    expect(badges.length).toBeGreaterThan(0);
+    expect(new Set(badges)).toEqual(new Set([scoreReport.version]));
+    expect(dispositionReport.version).toBe(scoreReport.version);
   });
 });
