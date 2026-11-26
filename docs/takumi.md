@@ -186,5 +186,8 @@ fails the render without the cost of a paint.
 Experimental. Takumi is young, effectively maintained by one person, and
 releases often (27 versions in the 90 days to 2026-11-20). Its types already
 announce removals for v3. Metaplate pins the version it tests in its lockfile,
-and its test suite compares Takumi's output with Satori's on every update.
+and on every update its test suite renders 16 plates (layout, typography,
+images, gradients, clamping, overflow, borders, and four sizes) through both
+`metaplate/node` and `metaplate/takumi` and fails when any one differs from
+Satori by more than its budget.
 This entry may change in a minor release while it is experimental.
