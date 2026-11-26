@@ -3,7 +3,7 @@ import path from "node:path";
 import { socialMetaHtml, type SocialMetaInput } from "../metadata/meta-tags.js";
 import type { SocialMetaOptions } from "../metadata/page-tags.js";
 import { isAbsoluteUrl } from "../core/internal.js";
-import { extractPageSocialMetadata } from "../verify/html-metadata.js";
+import { extractPageSocialMetadata, headEndTagOffset } from "../verify/html-metadata.js";
 
 /**
  * Not an entry point: writes a render-module page's social `<meta>` tags into
@@ -21,6 +21,8 @@ export const SOCIAL_BLOCK_END = "<!-- /metaplate:social -->";
 const START = /<!--\s*metaplate:social\s*-->/g;
 const END = /<!--\s*\/metaplate:social\s*-->/g;
 const HEAD_END = /<\/head\s*>/i;
+/** U+FEFF, the byte order mark. */
+const BOM = String.fromCharCode(0xfeff);
 const BLANK = /^[ \t]*$/;
 const HTML_FILE = /\.html?$/i;
 
@@ -66,21 +68,34 @@ function matches(html: string, pattern: RegExp): RegExpExecArray[] {
   return [...html.matchAll(pattern)];
 }
 
+/** Splits one leading byte order mark off `html`, which the HTML parser drops and the file keeps. */
+function splitBom(html: string): [bom: string, text: string] {
+  return html.startsWith(BOM) ? [BOM, html.slice(BOM.length)] : ["", html];
+}
+
 /**
  * Writes the social block into `html` and returns the new document.
  *
  * An existing `<!-- metaplate:social -->` ... `<!-- /metaplate:social -->`
  * block is replaced in place, keeping the start marker's indentation. Without
- * one, the block is inserted on its own lines just before the first
- * `</head>` (matched case-insensitively), indented like the line above it.
- * The document's line ending (CRLF when it has any) is used inside the block.
- * The result depends only on the document outside the block and on `render`,
- * so writing it again yields the same bytes.
+ * one, the block is inserted on its own lines just before the `</head>` that
+ * ends the head as a parser reads it (never one inside a comment, a raw-text
+ * element such as `<script>`, or `<template>`), indented like the line above
+ * it. The document's line ending (CRLF when it has any) is used inside the
+ * block, and a leading byte order mark is kept. The result depends only on
+ * the document outside the block and on `render`, so writing it again yields
+ * the same bytes.
  *
  * @throws When the markers are repeated, unpaired, or out of order, when the
- *   block sits after `</head>`, or when there is no block and no `</head>`.
+ *   block sits after `</head>`, when there is no block and no `</head>`, or
+ *   when there is no block and the head ends before its `</head>`.
  */
-export function spliceSocialBlock(html: string, render: (indent: string) => string): string {
+export function spliceSocialBlock(source: string, render: (indent: string) => string): string {
+  const [bom, html] = splitBom(source);
+  return bom + spliceText(html, render);
+}
+
+function spliceText(html: string, render: (indent: string) => string): string {
   const eol = html.includes("\r\n") ? "\r\n" : "\n";
   const starts = matches(html, START);
   const ends = matches(html, END);
@@ -96,31 +111,39 @@ export function spliceSocialBlock(html: string, render: (indent: string) => stri
       : [SOCIAL_BLOCK_END, SOCIAL_BLOCK_START];
     throw new Error(`the page has ${found} without ${missing}; add the missing marker or remove the other`);
   }
-  const head = HEAD_END.exec(html);
+  // The `</head>` a parser acts on, not merely the first one in the text.
+  const head = headEndTagOffset(html);
   if (starts.length === 1) {
     const start = starts[0]!;
     const end = ends[0]!;
     if (end.index < start.index) {
       throw new Error(`the page has ${SOCIAL_BLOCK_END} before ${SOCIAL_BLOCK_START}`);
     }
-    if (head && head.index < start.index) {
+    if (head !== undefined && head < start.index) {
       throw new Error(`the page has its ${SOCIAL_BLOCK_START} block after </head>; move the markers into <head>`);
     }
     const indent = lineIndent(html, start.index) ?? "";
     return html.slice(0, start.index) + block(render, indent, eol) + html.slice(end.index + end[0].length);
   }
-  if (!head) {
+  if (head === undefined) {
+    if (HEAD_END.test(html)) {
+      throw new Error(
+        `the page's <head> ends before a </head> a crawler would read (body text or a tag such as <div> ends it, ` +
+          `and a </head> in a comment or <script> does not count); fix the head, or add the two marker comments ` +
+          "where the tags belong",
+      );
+    }
     throw new Error(
       `the page has no </head> and no ${SOCIAL_BLOCK_START} block; add </head>, or the two marker comments ` +
         "where the tags belong",
     );
   }
-  const closingIndent = lineIndent(html, head.index);
+  const closingIndent = lineIndent(html, head);
   if (closingIndent === undefined) {
     // `</head>` shares a line with other markup: give the block lines of its own.
-    return `${html.slice(0, head.index)}${eol}${block(render, "", eol)}${eol}${html.slice(head.index)}`;
+    return `${html.slice(0, head)}${eol}${block(render, "", eol)}${eol}${html.slice(head)}`;
   }
-  const lineStart = head.index - closingIndent.length;
+  const lineStart = head - closingIndent.length;
   const above = previousLineIndent(html, lineStart);
   const indent = above !== undefined && above.length > closingIndent.length ? above : `${closingIndent}  `;
   return `${html.slice(0, lineStart)}${indent}${block(render, indent, eol)}${eol}${html.slice(lineStart)}`;
@@ -194,7 +217,10 @@ function emittedImageUrls(source: HtmlPageSource): string[] {
  * comment or `<script>`, or after the head has ended) and a hand-written
  * `og:image` left elsewhere in the page.
  */
-export function buildHtmlPage(source: HtmlPageSource, html: string): string {
+export function buildHtmlPage(source: HtmlPageSource, text: string): string {
+  // A parser drops one leading byte order mark, so the page is spliced and
+  // scanned without it, and it is put back so the file keeps its bytes.
+  const [bom, html] = splitBom(text);
   const images = source.metadata.openGraph?.images ?? [];
   const relative = images.find((image) => !isAbsoluteUrl(image.url));
   if (relative !== undefined && source.page.url === undefined) {
@@ -225,12 +251,13 @@ export function buildHtmlPage(source: HtmlPageSource, html: string): string {
         "element such as <script>, or after <head> has ended)",
     );
   }
-  return next;
+  return bom + next;
 }
 
 /**
  * Reads a page's HTML as UTF-8, refusing bytes that do not round-trip, so a
  * file in another encoding is never rewritten with replacement characters.
+ * A leading byte order mark stays in `text`; `buildHtmlPage` keeps it.
  */
 export async function readHtmlPage(target: string): Promise<{ bytes: Uint8Array; text: string }> {
   const bytes = await readFile(target);
