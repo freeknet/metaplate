@@ -175,6 +175,7 @@ Every guard except `avoid`, which fails at definition time:
 | `missingGlyphs` | Characters Takumi's fallback hook receives that no language font covers, and emoji the emoji loader has no image for |
 | `overflow`, `safeArea`, `textOverlap` | Boxes from Takumi's `measure()`, through the same checks as Satori's. A transformed element is checked by its transformed box, where Satori uses the box before the transform |
 | `fontFallback` | The same element-tree check as Satori's |
+| `lineClamp` | The same element-tree check, with Satori's rules. Takumi also ignores `lineClamp` on a flex or grid element, but clamps an `inline-block` element and text in child elements, which Satori does not; the guard reports those too, so a plate that passes clamps on both renderers |
 | `blank` | The raw pixels. With `blank` on, `render` paints twice (pixels, then PNG) |
 | `avoid` | Not supported: Takumi's layout keeps no React `key` |
 
@@ -186,5 +187,8 @@ fails the render without the cost of a paint.
 Experimental. Takumi is young, effectively maintained by one person, and
 releases often (27 versions in the 90 days to 2026-11-20). Its types already
 announce removals for v3. Metaplate pins the version it tests in its lockfile,
-and its test suite compares Takumi's output with Satori's on every update.
+and on every update its test suite renders 16 plates (layout, typography,
+images, gradients, clamping, overflow, borders, and four sizes) through both
+`metaplate/node` and `metaplate/takumi` and fails when any one differs from
+Satori by more than its budget.
 This entry may change in a minor release while it is experimental.

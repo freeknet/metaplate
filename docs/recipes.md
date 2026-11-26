@@ -210,8 +210,9 @@ const titleSize = (title: string) => (title.length > 72 ? 48 : title.length > 36
 export const og = createNodeOg<Copy>({
   alt: (copy) => copy.alt,
   fonts: fontsourceFontLoader([{ font: "inter", weight: 700 }]),
-  // The clamp keeps text on the card, so this catches layout mistakes, not long copy.
-  guards: { overflow: "error" },
+  // The clamp keeps text on the card, so overflow catches layout mistakes, not long
+  // copy; lineClamp fails the render if Satori would ignore the clamp.
+  guards: { overflow: "error", lineClamp: "error" },
   component: (copy) => (
     <div
       style={{
@@ -252,7 +253,15 @@ Choose by who writes the copy:
 - **Someone else's data writes it:** keep the clamp, because one long row should not
   block the deploy.
 - **One line only:** use `whiteSpace: "nowrap"`, `overflow: "hidden"`, and
-  `textOverflow: "ellipsis"` with `display: "block"` and a width.
+  `textOverflow: "ellipsis"` on an element with a width. Its `display` does not
+  matter here.
+
+A clamp Satori cannot apply is ignored without an error: `lineClamp` on a flex
+column, for example, draws every line, and the `overflow` guard stays quiet while
+the text still fits. Turn on the [`lineClamp` guard](rendering.md#render-guards)
+to report it, along with a `textOverflow` that lacks `overflow: "hidden"` or
+`whiteSpace: "nowrap"`, and a clamp on an element whose text sits in a child
+`<span>`. Put the clamp on the element that holds the text itself.
 
 Prefer these to cutting the string yourself: `lineClamp` breaks where the text
 actually wraps, whatever the font's widths are.

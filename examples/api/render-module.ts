@@ -66,6 +66,25 @@ const about = {
   pages: [{ route: "/about", copy: { title: "About", section: "Project" } }],
 } satisfies RenderJob<Copy>;
 
+// A hand-written page in public/ gets its <meta> tags written between
+// <!-- metaplate:social --> markers (or before </head> the first time), with
+// the same versioned image URLs the manifest records. Add `landing` to the
+// default export once public/landing/index.html exists.
+export const landing = {
+  plate: og,
+  pages: [{
+    route: "/landing/",
+    copy: { title: "Our new look", section: "News" },
+    html: "public/landing/index.html",
+    page: {
+      title: "Our new look",
+      description: "What changed, and why.",
+      url: "https://example.github.io/docs/landing/",
+      siteName: "Project guide",
+    },
+  }],
+} satisfies RenderJob<Copy>;
+
 // The default export may also be a single job or an async function, for
 // pages read from a CMS or the file system at build time.
 export default [site, about] satisfies RenderModule;
