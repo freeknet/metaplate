@@ -5,6 +5,8 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-26
+
 ### Added
 
 - `fetchImageLoader` in `metaplate/image`: `remoteImageLoader` on the Fetch API, so
@@ -1370,7 +1372,8 @@ reflects that `render` may return any consumer-encoded format ([#54]).
 - Typed package exports for framework-neutral, rendering, Node.js, Next.js,
   font, and PNG entry points.
 
-[Unreleased]: https://github.com/freeknet/metaplate/compare/v0.8.4...HEAD
+[Unreleased]: https://github.com/freeknet/metaplate/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/freeknet/metaplate/compare/v0.8.4...v0.9.0
 [0.8.4]: https://github.com/freeknet/metaplate/compare/v0.8.3...v0.8.4
 [0.8.3]: https://github.com/freeknet/metaplate/compare/v0.8.2...v0.8.3
 [0.8.2]: https://github.com/freeknet/metaplate/compare/v0.8.1...v0.8.2
