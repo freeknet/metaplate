@@ -77,6 +77,16 @@ export type RemotePageOptions = RemoteFetchOptions & {
    * no request is ever sent with a crawler's user agent.
    */
   crawlers?: readonly string[];
+  /**
+   * Declares that robots.txt is meant to keep every evaluated crawler from
+   * the page, as on a staging site. A crawler disallowed from the page (or
+   * from a page redirect) then meets the expectation, and its
+   * `robots-disallowed` and `robots-unreachable` findings, page and image,
+   * are not reported. A crawler allowed on every page URL gets one
+   * `robots-not-blocked` error instead. Requires at least one crawler, from
+   * `targets` or `crawlers`.
+   */
+  expectRobotsBlock?: boolean;
   /** Compatibility profiles evaluated against the image each consumer would pick. */
   targets?: readonly SocialTarget[];
   /** Application byte ceiling applied to every image. */
@@ -112,6 +122,8 @@ export type RemotePageIssue<Code extends string = RemotePageIssueCode | RemotePa
   code: Code;
   message: string;
   target?: SocialTarget;
+  /** For robots.txt findings: the product token of the crawler concerned. */
+  crawler?: string;
 }>;
 
 export type RemotePageTargetReport<Code extends string> = Readonly<{
@@ -557,13 +569,17 @@ function htmlLimitIssues(
 /** Image fetch codes that mean the URL was refused by policy, so no crawler would be judged on it. */
 const REFUSED_CODES = new Set<string>(["invalid-url", "scheme", "credentials", "port", "address", "image-limit"]);
 
+function robotsIssue(found: RobotsFinding): RemotePageIssue<RobotsIssueCode> {
+  return Object.freeze({ ...issue(found.severity, found.code, found.message, found.target), crawler: found.crawler });
+}
+
 /** Rebuilds a frozen image report with robots findings added. */
 function withFindings(image: RemotePageImageReport, findings: readonly RobotsFinding[]): RemotePageImageReport {
   if (findings.length === 0) return image;
   const globalIssues = [...image.globalIssues];
   const targets: Partial<Record<SocialTarget, RemotePageTargetReport<RemotePageImageIssueCode>>> = { ...image.targets };
   for (const found of findings) {
-    const added = issue(found.severity, found.code, found.message, found.target);
+    const added = robotsIssue(found);
     if (found.target === undefined) {
       globalIssues.push(added);
       continue;
@@ -599,6 +615,15 @@ export async function verifyRemotePageVia(
   const maxImageReferences =
     integerOption("maxImageReferences", options.maxImageReferences, 1) ?? REMOTE_PAGE_DEFAULTS.maxImageReferences;
   const crawlers = resolveCrawlers(targets, requestedCrawlerTokens(options.crawlers));
+  if (options.expectRobotsBlock !== undefined && typeof options.expectRobotsBlock !== "boolean") {
+    throw new TypeError("expectRobotsBlock must be a boolean");
+  }
+  if (options.expectRobotsBlock && crawlers.length === 0) {
+    // With nothing to evaluate, the expectation could never fail.
+    throw new TypeError(
+      "expectRobotsBlock needs a crawler to evaluate: give targets whose crawler reads robots.txt, or crawlers",
+    );
+  }
 
   const page = await fetchRemoteResourceVia(input, { ...options, maxBytes: maxHtmlBytes }, dial, REMOTE_PAGE_ACCEPT);
   const essence = page.contentType?.split(";", 1)[0]!.trim().toLowerCase();
@@ -661,10 +686,10 @@ export async function verifyRemotePageVia(
       for (const target of imageTargets[position]!) entry.targets.add(target);
       chains.set(image.url, entry);
     });
-    const checked = await checkCrawlers(crawlers, urls, options, dial);
+    const checked = await checkCrawlers(crawlers, urls, options, dial, options.expectRobotsBlock === true);
     robots = checked.report;
     for (const found of checked.findings) {
-      if (found.image === undefined) globalIssues.push(issue(found.severity, found.code, found.message, found.target));
+      if (found.image === undefined) globalIssues.push(robotsIssue(found));
     }
     images = images.map((image, position) => withFindings(
       image,

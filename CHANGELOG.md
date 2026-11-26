@@ -37,6 +37,18 @@ All notable changes to Metaplate are documented in this file. The project uses
   inline styles inherited down the tree and calls nested function components;
   faces a `languageFonts` loader returns count as loaded. Values set by `<style>`
   rules or `tw` are not seen. Off by default, like every guard.
+- `metaplate verify-page --expect-robots-block` (`expectRobotsBlock` in
+  `verifyRemotePage`) for a staging site that blocks crawlers on purpose. Each
+  evaluated crawler, from `--target` or `--crawler`, must be disallowed from the
+  page (the requested URL or a redirect target); images do not decide it, since a
+  crawler that cannot read the page never sees them. A met block is a `✓` line and
+  files no finding. A crawler robots.txt still lets fetch the page fails with one
+  `robots-not-blocked` error, so the step catches a staging block that was lifted.
+  The JSON report gains `robots.expectBlock` and a per-crawler `expectation`
+  (`met`, `unmet`, or `unknown`). A page's `noindex` does not switch it on: it
+  governs indexing, not previews. Without a crawler to evaluate, the flag is an
+  argument error.
+
 - `definePlate` in the root `metaplate` entry: a plate's URL and metadata
   contract with no renderer (#216). It takes `alt`, `size`, `imagePath`,
   `basePath`, `origin`, `variants`, `version`, `revision`, and `contentType`, and
@@ -81,6 +93,14 @@ All notable changes to Metaplate are documented in this file. The project uses
 
 ### Fixed
 
+- `metaplate verify-page` printed one robots.txt block up to once per crawler,
+  again per target, and again per target for each image, so two targets and one
+  image gave six lines for one `Disallow: /` and buried the dimension, format, and
+  size lines. It now prints one line per crawler that lists the disallowed URLs
+  (the page and each image, with the references naming it) and the deciding rule,
+  and sends a crawler's errors to standard error once. The JSON report still files
+  each finding under every target and image it concerns, and robots.txt issues
+  now carry `crawler`, the product token they are about.
 - The rendering guide and the brand-colors recipe said plates have no stylesheet
   and ignore `var(--brand)`. Only the site's own CSS is out of reach. Custom
   properties declared in the plate resolve in every adapter, and `<style>`

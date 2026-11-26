@@ -182,6 +182,8 @@ describe("verify CLI", () => {
     expect(help.stdout).toContain(VERIFY_URL_USAGE);
     expect(help.stdout).toContain(VERIFY_PAGE_USAGE);
     expect(help.stdout).toContain(RENDER_USAGE);
+    expect(help.stdout).toContain("  --expect-robots-block  robots.txt is meant to keep every evaluated crawler from the page");
+    expect(VERIFY_PAGE_USAGE).toContain("[--expect-robots-block]");
     expect(shortHelp.stdout).toBe(help.stdout);
     for (const [command, usage] of [["verify", VERIFY_USAGE], ["verify-url", VERIFY_URL_USAGE], ["verify-page", VERIFY_PAGE_USAGE], ["render", RENDER_USAGE]] as const) {
       const commandHelp = run([command, "--help"], cwd);
@@ -582,6 +584,9 @@ describe("parseVerifyPageInvocation", () => {
     { args: ["verify-page", "--bogus", "https://example.com/"] },
     { args: ["verify-page", "--crawler", "Twitterbot/1.0", "https://example.com/"] },
     { args: ["verify-page", "--crawler", "*", "https://example.com/"] },
+    // Nothing would be evaluated, so the expectation could never fail.
+    { args: ["verify-page", "--expect-robots-block", "https://example.com/"] },
+    { args: ["verify-page", "--expect-robots-block", "--target", "slack", "https://example.com/"] },
   ] satisfies { args: string[] }[])("rejects invalid arguments: $args", ({ args }) => {
     expect(() => parseVerifyPageInvocation(args)).toThrow(VERIFY_PAGE_USAGE);
   });
@@ -708,8 +713,16 @@ describe("verify-page CLI", () => {
     expect(result.stdout).toContain("  ✓ robots.txt allows ExampleBot on 2 URLs");
     expect(result.stdout).toContain("  ✗ robots.txt disallows ExampleBot on 1 of 2 URLs");
     expect(result.stderr).toContain(
-      `✗ ${server.origin}/wrong-size ${server.origin}/robots.txt disallows ${server.origin}/wrong-size for ExampleBot at line 2 (Disallow: /wrong-size).`,
+      `✗ ${server.origin}/wrong-size robots.txt disallows ExampleBot on 1 of 2 URLs: ${server.origin}/wrong-size (page) [${server.origin}/robots.txt line 2 (Disallow: /wrong-size)]\n`,
     );
+  });
+
+  it("parses --expect-robots-block", () => {
+    expect(parseVerifyPageInvocation(["verify-page", "--expect-robots-block", "--target", "linkedin", "https://example.com/"]))
+      .toMatchObject({ expectRobotsBlock: true, socialTargets: ["linkedin"] });
+    expect(parseVerifyPageInvocation(["verify-page", "--expect-robots-block", "--crawler", "ExampleBot", "https://example.com/"]))
+      .toMatchObject({ expectRobotsBlock: true, crawlers: ["ExampleBot"] });
+    expect(parseVerifyPageInvocation(["verify-page", "--target", "linkedin", "https://example.com/"])).not.toHaveProperty("expectRobotsBlock");
   });
 
   it("refuses a loopback page without --allow-private", async () => {
@@ -727,5 +740,180 @@ describe("verify-page CLI", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("--size is not accepted here.");
     expect(result.stderr.split(VERIFY_PAGE_USAGE)).toHaveLength(2);
+  });
+});
+
+describe("verify-page robots.txt on a staging site (#219)", () => {
+  afterEach(closeLocalServers);
+
+  const card = completePng(1200, 630);
+  const head = `
+    <meta name="robots" content="noindex">
+    <meta property="og:image" content="/og-image.png?v=1">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Card">
+    <meta name="twitter:card" content="summary_large_image">
+  `;
+
+  /** A staging-like site: one product page and its card, with `robots` as its robots.txt (404 when undefined). */
+  async function staging(robots: string | undefined) {
+    const server = await localServer(pathRoutes({
+      "/products/cart-1": serveBytes(new TextEncoder().encode(`<html><head>${head}</head></html>`), "text/html"),
+      "/og-image.png": serveBytes(card, "image/png"),
+      ...(robots === undefined ? {} : { "/robots.txt": serveBytes(new TextEncoder().encode(robots), "text/plain") }),
+    }));
+    const page = `${server.origin}/products/cart-1`;
+    const image = `${server.origin}/og-image.png?v=1`;
+    const verify = (...flags: string[]) => runAsync([
+      "verify-page", "--allow-private", "--allow-port", String(server.port), ...flags, page,
+    ]);
+    return { origin: server.origin, page, image, verify };
+  }
+
+  const robotsLines = (output: string) => output.split("\n").filter((line) => line.includes("robots.txt"));
+  // The loopback card URL is http, which fails every target's crawler-ready
+  // URL rule; tests that assert the exit code name crawlers with --crawler,
+  // which adds no profile checks.
+  const crawlers = ["--crawler", "Twitterbot", "--crawler", "LinkedInBot", "--crawler", "WhatsApp"];
+
+  it("prints one robots.txt line per crawler, listing the page and image URLs, instead of one per target and image", async () => {
+    const { origin, page, image, verify } = await staging("User-agent: *\nDisallow: /\n");
+    const result = await verify("--target", "linkedin", "--target", "whatsapp");
+    const rule = `[${origin}/robots.txt line 2 (Disallow: /)]`;
+
+    // Neither platform documents whether its crawler obeys robots.txt: warnings only.
+    expect(robotsLines(result.stderr)).toEqual([]);
+    expect(robotsLines(result.stdout)).toEqual([
+      `  ! robots.txt disallows LinkedInBot (LinkedIn) on 2 of 2 URLs: ${page} (page), ${image} (og:image[0]) ${rule}`,
+      `  ! robots.txt disallows WhatsApp (WhatsApp) on 2 of 2 URLs: ${page} (page), ${image} (og:image[0]) ${rule}`,
+      expect.stringContaining("  hint: if robots.txt blocks crawlers on purpose"),
+    ]);
+
+    // The whole audit: the image facts are no longer buried.
+    const plain = await verify("--crawler", "LinkedInBot", "--crawler", "WhatsApp");
+    expect(plain.status).toBe(0);
+    expect(plain.stderr).toBe("");
+    expect(plain.stdout.split("\n")).toEqual([
+      `✓ ${page} (1 image reference)`,
+      `  ! robots.txt disallows LinkedInBot (LinkedIn) on 2 of 2 URLs: ${page} (page), ${image} (og:image[0]) ${rule}`,
+      `  ! robots.txt disallows WhatsApp (WhatsApp) on 2 of 2 URLs: ${page} (page), ${image} (og:image[0]) ${rule}`,
+      "  hint: if robots.txt blocks crawlers on purpose, as on a staging site, --expect-robots-block reports the block as expected and fails when it stops blocking",
+      `  ✓ og:image[0] ${image} 1200x630 png (${card.byteLength} bytes)`,
+      `  ! og:image[0]: "/og-image.png?v=1" is relative and was resolved to ${image}; Open Graph and X Card URLs should be absolute.`,
+      `  ! og:image[0]: ${image} is served over http; crawlers that require https will not load it.`,
+      "",
+    ]);
+  });
+
+  it("sends one stderr line per crawler whose platform documents that it obeys robots.txt", async () => {
+    const { page, verify } = await staging("User-agent: *\nDisallow: /\n");
+    const result = await verify("--target", "facebook", "--target", "instagram", "--target", "x");
+
+    expect(result.status).toBe(1);
+    expect(robotsLines(result.stderr)).toEqual([
+      expect.stringContaining(`✗ ${page} robots.txt disallows Twitterbot (X) on 2 of 2 URLs: `),
+      expect.stringContaining(`✗ ${page} robots.txt disallows facebookexternalhit (Meta (Facebook, Instagram, Messenger, Threads)) on 2 of 2 URLs: `),
+    ]);
+  });
+
+  it("reports the block as expected with --expect-robots-block, and passes", async () => {
+    const { page, image, verify } = await staging("User-agent: *\nDisallow: /\n");
+    const expectedLines = [
+      expect.stringContaining(`  ✓ robots.txt disallows Twitterbot (X) on 2 of 2 URLs, as expected: ${page} (page), ${image} (og:image[0])`),
+      expect.stringContaining("  ✓ robots.txt disallows LinkedInBot (LinkedIn) on 2 of 2 URLs, as expected: "),
+      expect.stringContaining("  ✓ robots.txt disallows WhatsApp (WhatsApp) on 2 of 2 URLs, as expected: "),
+    ];
+    const result = await verify("--expect-robots-block", ...crawlers);
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+    expect(robotsLines(result.stdout)).toEqual(expectedLines);
+
+    // With targets, Twitterbot's X error is gone too; only the URL profile rule remains.
+    const targeted = await verify("--expect-robots-block", "--target", "x", "--target", "linkedin", "--target", "whatsapp");
+    expect(robotsLines(targeted.stderr)).toEqual([]);
+    expect(robotsLines(targeted.stdout)).toEqual(expectedLines);
+  });
+
+  it("fails with --expect-robots-block when robots.txt does not block", async () => {
+    const { page, verify } = await staging(undefined);
+    const result = await verify("--expect-robots-block", ...crawlers);
+    const allows = (who: string) => `robots.txt allows ${who} to fetch the page, but --expect-robots-block expects it disallowed: ${page} (page)`;
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain(`  ✗ ${allows("LinkedInBot (LinkedIn)")}\n`);
+    expect(result.stderr.split("\n")).toEqual([
+      `✗ ${page} ${allows("Twitterbot (X)")}`,
+      `✗ ${page} ${allows("LinkedInBot (LinkedIn)")}`,
+      `✗ ${page} ${allows("WhatsApp (WhatsApp)")}`,
+      "1 of 1 pages failed verification",
+      "",
+    ]);
+
+    // A target crawler fails the same way, one line each.
+    const targeted = await verify("--expect-robots-block", "--target", "linkedin", "--target", "whatsapp");
+    expect(robotsLines(targeted.stderr)).toEqual([
+      `✗ ${page} ${allows("LinkedInBot (LinkedIn)")}`,
+      `✗ ${page} ${allows("WhatsApp (WhatsApp)")}`,
+    ]);
+  });
+
+  it("judges --expect-robots-block by the page: a blocked page with an allowed image passes", async () => {
+    const { origin, page, verify } = await staging("User-agent: *\nDisallow: /products/\n");
+    const result = await verify("--expect-robots-block", "--crawler", "LinkedInBot");
+
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+    expect(robotsLines(result.stdout)).toEqual([
+      `  ✓ robots.txt disallows LinkedInBot (LinkedIn) on 1 of 2 URLs, as expected: ${page} (page) [${origin}/robots.txt line 2 (Disallow: /products/)]`,
+    ]);
+  });
+
+  it("judges --expect-robots-block by the page: an allowed page with a blocked image fails", async () => {
+    const { page, image, verify } = await staging("User-agent: *\nDisallow: /og-image.png\n");
+    const result = await verify("--expect-robots-block", "--target", "linkedin");
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      `✗ ${page} robots.txt allows LinkedInBot (LinkedIn) to fetch the page, but --expect-robots-block expects it disallowed: ${page} (page); it disallows only ${image} (og:image[0])\n`,
+    );
+  });
+
+  it("adds the expectation to --json without removing the per-target findings", async () => {
+    const blocked = await staging("User-agent: *\nDisallow: /\n");
+    const plain = JSON.parse((await blocked.verify("--json", "--target", "linkedin")).stdout);
+    expect(plain.pages[0].robots).not.toHaveProperty("expectBlock");
+    expect(plain.pages[0].robots.crawlers[0]).not.toHaveProperty("expectation");
+    expect(plain.pages[0].targets.linkedin.issues).toEqual([
+      expect.objectContaining({ severity: "warning", code: "robots-disallowed", target: "linkedin", crawler: "LinkedInBot" }),
+    ]);
+    expect(plain.pages[0].images[0].targets.linkedin.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "robots-disallowed", crawler: "LinkedInBot" }),
+    ]));
+
+    const expected = await blocked.verify("--json", "--expect-robots-block", "--crawler", "LinkedInBot");
+    const met = JSON.parse(expected.stdout);
+    expect(expected.status).toBe(0);
+    expect(met.pages[0]).toMatchObject({ valid: true, globalIssues: [] });
+    expect(met.pages[0].robots).toMatchObject({ expectBlock: true, crawlers: [{ token: "LinkedInBot", allowed: false, expectation: "met" }] });
+    expect(met.pages[0].images[0].globalIssues.map(({ code }: { code: string }) => code)).not.toContain("robots-disallowed");
+    const metTargeted = JSON.parse((await blocked.verify("--json", "--expect-robots-block", "--target", "linkedin")).stdout);
+    // No robots finding; the loopback card's http URL alone keeps it incompatible.
+    expect(metTargeted.pages[0].targets.linkedin).toEqual({ compatible: false, issues: [] });
+
+    const open = await staging(undefined);
+    const failed = await open.verify("--json", "--expect-robots-block", "--crawler", "LinkedInBot");
+    const unmet = JSON.parse(failed.stdout);
+    expect(failed.status).toBe(1);
+    expect(failed.stderr).toBe("");
+    expect(unmet.pages[0].robots).toMatchObject({ expectBlock: true, crawlers: [{ token: "LinkedInBot", allowed: true, expectation: "unmet" }] });
+    expect(unmet.pages[0].globalIssues).toEqual([
+      expect.objectContaining({ severity: "error", code: "robots-not-blocked", crawler: "LinkedInBot" }),
+    ]);
+    const unmetTargeted = JSON.parse((await open.verify("--json", "--expect-robots-block", "--target", "linkedin")).stdout);
+    expect(unmetTargeted.pages[0].targets.linkedin).toEqual({
+      compatible: false,
+      issues: [expect.objectContaining({ severity: "error", code: "robots-not-blocked", target: "linkedin", crawler: "LinkedInBot" })],
+    });
   });
 });
