@@ -196,7 +196,7 @@ Every guard except `avoid`, which fails at definition time:
 | --- | --- |
 | `missingGlyphs` | Characters Takumi's fallback hook receives that no language font covers, and emoji the emoji loader has no image for |
 | `overflow`, `safeArea`, `textOverlap` | Boxes from Takumi's `measure()`, through the same checks as Satori's. A transformed element is checked by its transformed box, where Satori uses the box before the transform |
-| `fontFallback` | The same element-tree check as Satori's |
+| `fontFallback` | The same element-tree check as Satori's, starting each element from Takumi's default style for its tag: `th` is bold and `cite`, `dfn`, and `address` italic as well, `strong` and `b` are `bolder`, and `bolder` and `lighter` resolve as in CSS |
 | `lineClamp` | The same element-tree check, with Satori's rules. Takumi also ignores `lineClamp` on a flex or grid element, but clamps an `inline-block` element and text in child elements, which Satori does not; the guard reports those too, so a plate that passes clamps on both renderers |
 | `blank` | The raw pixels. With `blank` on, `render` paints twice (pixels, then PNG) |
 | `avoid` | Not supported: Takumi's layout keeps no React `key` |
