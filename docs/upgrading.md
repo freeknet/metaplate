@@ -88,7 +88,7 @@ Work through every row newer than the version you are on.
 | 0.8.1 | The `satori` peer floor rises to 0.38.2. | Upgrade Satori. Below it, `inset` and fragments misbehave with no error. |
 | 0.8.4 | `cached()` throws a `TypeError` for copy that holds a function, and `--incremental` always renders such a page, because a function's captured values cannot be keyed. | Pass the data the function uses instead of the function. |
 
-The next release adds `"fontFallback"` and `"lineClamp"` to `RenderGuardName`, and
+0.9.0 adds `"fontFallback"` and `"lineClamp"` to `RenderGuardName`, and
 `fontFallback` and `lineClamp` members to `RenderGuardIssue`. Code that switches over
 `issue.guard` with an exhaustiveness check needs a case for each; nothing else
 changes, and both guards are off by default.
@@ -158,13 +158,13 @@ Nothing here is required, but older code often has a shorter form now.
 | A `metaplate verify --target` step after `metaplate render`, repeating each size | [`metaplate render --target`](render-cli.md#formats-and-verification) | 0.8.3 |
 | A test that drops or rewrites `url` so `verifySocialImage` skips the HTTPS rule | [`checkUrl: false`](testing.md#check-bytes-against-the-descriptor) | 0.8.4 |
 | A signed route that left out `cached()` because it dropped `{ signed }` | [`cached().handlerFrom(resolve, { signed })`](signed-routes.md) | 0.8.4 |
-| A look at each card after changing fonts | The [`fontFallback` guard](rendering.md#render-guards), which reports a family, weight, or style no loaded font provides | Unreleased |
-| A look at each card to see whether a `lineClamp` took | The [`lineClamp` guard](rendering.md#render-guards), which reports a clamp or ellipsis Satori ignores | Unreleased |
-| Hand-written `fetch` for per-page images on an edge runtime | [`fetchImageLoader`](rendering.md#edge-runtimes) from `metaplate/image`, with `remoteImageLoader`'s allowlist, redirect checks, and byte cap | Unreleased |
-| Build-time cards because `metaplate/edge` cannot start on Cloudflare Workers | [`metaplate/takumi`](takumi.md) (experimental), which renders there | Unreleased |
-| `grep -v robots` on `metaplate verify-page` output for a staging site | [`--expect-robots-block`](verify-page.md#sites-that-block-crawlers-on-purpose), which reports the block as expected and fails when it is lifted | Unreleased |
-| Page metadata rebuilt with `socialImageMetadata` and `socialImageVersion` to keep the renderer out of a server bundle, restating the plate's `imagePath`, `version`, and `revision` | [`definePlate`](plate.md#a-contract-without-a-renderer), spread into the plate, so pages and renderer share one contract ([Next.js on Cloudflare Workers](cloudflare-next.md)) | Unreleased |
-| A script that splices `socialMetaHtml` output into a static HTML page between markers | A render page's [`html` and `page`](render-cli.md#writing-tags-into-static-html), which `metaplate render` writes after the page's images succeed | Unreleased |
+| A look at each card after changing fonts | The [`fontFallback` guard](rendering.md#render-guards), which reports a family, weight, or style no loaded font provides | 0.9.0 |
+| A look at each card to see whether a `lineClamp` took | The [`lineClamp` guard](rendering.md#render-guards), which reports a clamp or ellipsis Satori ignores | 0.9.0 |
+| Hand-written `fetch` for per-page images on an edge runtime | [`fetchImageLoader`](rendering.md#edge-runtimes) from `metaplate/image`, with `remoteImageLoader`'s allowlist, redirect checks, and byte cap | 0.9.0 |
+| Build-time cards because `metaplate/edge` cannot start on Cloudflare Workers | [`metaplate/takumi`](takumi.md) (experimental), which renders there | 0.9.0 |
+| `grep -v robots` on `metaplate verify-page` output for a staging site | [`--expect-robots-block`](verify-page.md#sites-that-block-crawlers-on-purpose), which reports the block as expected and fails when it is lifted | 0.9.0 |
+| Page metadata rebuilt with `socialImageMetadata` and `socialImageVersion` to keep the renderer out of a server bundle, restating the plate's `imagePath`, `version`, and `revision` | [`definePlate`](plate.md#a-contract-without-a-renderer), spread into the plate, so pages and renderer share one contract ([Next.js on Cloudflare Workers](cloudflare-next.md)) | 0.9.0 |
+| A script that splices `socialMetaHtml` output into a static HTML page between markers | A render page's [`html` and `page`](render-cli.md#writing-tags-into-static-html), which `metaplate render` writes after the page's images succeed | 0.9.0 |
 
 ## Workarounds you can delete
 
