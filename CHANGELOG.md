@@ -24,7 +24,13 @@ All notable changes to Metaplate are documented in this file. The project uses
   Cloudflare Workers, where `metaplate/edge` cannot start. It has the same plate
   surface as `createEdgeOg` and runs every render guard except `avoid`;
   `languageFonts` receive Satori's language codes, and emoji come from the
-  plate's emoji loader, never a CDN. Fonts must be TrueType, OpenType, or WOFF2.
+  plate's emoji loader, never a CDN, as the same graphemes Satori passes it
+  (`1️⃣`, `❤️`, U+FE0F included). Takumi's own fetcher is switched off, so a
+  render makes no network request: `data:` URIs draw, and any other image `src`
+  or CSS `url()` (public, private, or relative) fails the render with an error
+  naming it. Load remote images with `fetchImageLoader` (Satori, under
+  `metaplate/node` and `metaplate/edge`, fetches public URLs itself and refuses
+  private addresses). Fonts must be TrueType, OpenType, or WOFF2.
   Takumi defaults to `box-sizing: border-box` and differs from Satori in a few
   other places; see docs/takumi.md. On the Workers Free plan a warm render used
   about 13 ms of CPU against a 10 ms limit, so cache cards there.
