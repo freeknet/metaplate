@@ -13,6 +13,9 @@ const RENDER_TIMEOUT = 30_000;
 const interBold = readFileSync(
   path.join(import.meta.dirname, "../../node_modules/@fontsource/inter/files/inter-latin-700-normal.woff"),
 );
+const interRegular = readFileSync(
+  path.join(import.meta.dirname, "../../node_modules/@fontsource/inter/files/inter-latin-400-normal.woff"),
+);
 const plateFonts = fontLoader([{ name: "Inter", weight: 700, data: interBold }]);
 const size = { width: 400, height: 200 } as const;
 
@@ -76,10 +79,51 @@ describe("fontFallback guard", () => {
     const Label = ({ children }: { children: string }) => <span style={{ fontWeight: 300 }}>{children}</span>;
     const [issue] = await issuesFor(() => root({ fontFamily: "Inter", fontWeight: 700 }, <Label>Inside</Label>));
     expect(issue).toMatchObject({ missing: "face", text: "Inside", fontWeight: 300 });
-    // A relative weight or a var() family has no static answer, so nothing is reported.
+    // Satori has no rule for a relative weight, so nothing is reported.
     expect(await issuesFor(() => root({ fontFamily: "Inter", fontWeight: "bolder" }, "Relative"))).toEqual([]);
-    expect(await issuesFor(() => root({ "--face": "Nope", fontFamily: "var(--face)", fontWeight: 700 } as React.CSSProperties, "Variable")))
+  }, RENDER_TIMEOUT);
+
+  it("starts each element from Satori's default style for its tag", async () => {
+    // Only Inter 700 loaded: headings and <strong>/<b> ask for bold, which is loaded.
+    expect(await issuesFor(() => root({}, [<h1 key="h">Heading</h1>, <strong key="s">Strong</strong>, <b key="b">Bold</b>]))).toEqual([]);
+    const strict = createSvgOg({
+      alt: () => "card",
+      fonts: plateFonts,
+      size,
+      component: () => root({}, <h1>Heading</h1>),
+      guards: { fontFallback: "error" },
+    });
+    await expect(strict.renderSvg({})).resolves.toMatch(/^<svg/);
+    // <em> asks for italic, which is not.
+    expect((await issuesFor(() => root({ fontWeight: 700 }, <em>Leaning</em>)))
+      .map((issue) => issue.guard === "fontFallback" && [issue.missing, issue.element, issue.fontWeight, issue.fontStyle]))
+      .toEqual([["face", "em", 700, "italic"]]);
+  }, RENDER_TIMEOUT);
+
+  it("reports text a tag's default makes bold or italic when only the regular face is loaded", async () => {
+    const fonts = fontLoader([{ name: "Inter", weight: 400, data: interRegular }]);
+    const summary = (issues: RenderGuardIssue[]) =>
+      issues.map((issue) => issue.guard === "fontFallback" && [issue.missing, issue.element, issue.text, issue.fontWeight, issue.fontStyle]);
+    for (const [Tag, weight, style] of [["h1", 700, "normal"], ["h6", 700, "normal"], ["strong", 700, "normal"], ["b", 700, "normal"], ["em", 400, "italic"], ["i", 400, "italic"]] as const) {
+      expect(summary(await issuesFor(() => root({}, [<span key="p">Plain</span>, <Tag key="t">Tagged</Tag>]), { fonts })))
+        .toEqual([["face", Tag, "Tagged", weight, style]]);
+    }
+    // The inline style overrides the tag's default.
+    expect(await issuesFor(() => root({}, [<h1 key="h" style={{ fontWeight: 400 }}>Regular</h1>, <em key="e" style={{ fontStyle: "normal" }}>Upright</em>]), { fonts }))
       .toEqual([]);
+  }, RENDER_TIMEOUT);
+
+  it("resolves var() font values from custom properties in inline styles, and skips one it cannot", async () => {
+    const variable = (style: Record<string, unknown>, children: React.ReactNode) => root(style as React.CSSProperties, children);
+    // Declared on an ancestor, inherited, and resolved where it is used.
+    const [issue, ...rest] = await issuesFor(() =>
+      variable({ "--face": "Nope", "--weight": "700" }, <span style={{ fontFamily: "var(--face)", fontWeight: "var(--weight)" } as React.CSSProperties}>Variable</span>));
+    expect(rest).toEqual([]);
+    expect(issue).toMatchObject({ missing: "family", fontFamily: "Nope", fontWeight: 700 });
+    expect(await issuesFor(() => variable({ "--face": "Inter", fontFamily: "var(--face)", fontWeight: "var(--missing, 700)" }, "Resolved")))
+      .toEqual([]);
+    // An undeclared property with no fallback has no static answer: nothing is reported, not a face of the first font.
+    expect(await issuesFor(() => variable({ fontFamily: "var(--undeclared)", fontWeight: 400 }, "Unknown"))).toEqual([]);
   }, RENDER_TIMEOUT);
 
   it("counts a family that only a language font supplies as loaded", async () => {
