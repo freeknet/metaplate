@@ -1,12 +1,13 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { afterAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { emojiLoader, twemojiName } from "../../src/emoji.js";
 import { fontLoader, languageFontLoader } from "../../src/font-data.js";
 import { compareImages, createNodeOg } from "../../src/node.js";
 import { RenderGuardError, type RenderGuardIssue } from "../../src/render/guards.js";
 import { createTakumiOg, type TakumiOgDefinition } from "../../src/takumi.js";
 import { entryBuilder } from "../helpers/entry-build.js";
+import { closeLocalServers, localServer, serveBytes } from "../helpers/http-fixtures.js";
 import { squareGlyphFont } from "../helpers/test-font.js";
 
 // Takumi loads its native addon and fonts on first render; cold macOS and
@@ -294,10 +295,81 @@ describe("emoji", () => {
     fetch.mockRestore();
   }, RENDER_TIMEOUT);
 
+  it("passes the loader each grapheme as the copy spells it, as Satori does", async () => {
+    const red = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36"><rect width="36" height="36" fill="#ff0000"/></svg>';
+    const requested: string[] = [];
+    // Keyed by exact grapheme, U+FE0F included, as a loader written for Satori may be.
+    const images = new Map([["1️⃣", red], ["❤️", red]]);
+    const emoji = emojiLoader(({ grapheme }) => {
+      requested.push(grapheme);
+      return images.get(grapheme);
+    });
+    const { warnings, onWarning } = collected();
+    const og = plate({ emoji, guards: { missingGlyphs: "warn", onWarning } });
+    const { pixels } = await og.renderPixels({ title: "1️⃣ ❤️ #️⃣" });
+    let drawn = 0;
+    for (let offset = 0; offset < pixels.length; offset += 4) {
+      if (pixels[offset]! > 200 && pixels[offset + 1]! < 60 && pixels[offset + 2]! < 60) drawn += 1;
+    }
+    expect(drawn).toBeGreaterThan(2 * 50 * 50);
+    expect(requested).toEqual(expect.arrayContaining(["1️⃣", "❤️", "#️⃣"]));
+    expect(requested).not.toContain("1⃣");
+    expect(warnings).toEqual([expect.objectContaining({ guard: "missingGlyphs", languageCode: "emoji", segment: "#️⃣" })]);
+  }, RENDER_TIMEOUT);
+
   it("reports emoji as missing glyphs without an emoji loader", async () => {
     const { warnings, onWarning } = collected();
     await plate({ guards: { missingGlyphs: "warn", onWarning } }).render({ title: "Shipped 🚀" });
     expect(warnings).toEqual([expect.objectContaining({ languageCode: "emoji", segment: "🚀" })]);
+  }, RENDER_TIMEOUT);
+});
+
+describe("remote images", () => {
+  afterEach(closeLocalServers);
+  const png = readFileSync(path.join(root, "tests/fixtures/compare/card.png"));
+  const image = (src: string): Child => ({ type: "img", props: { src, width: 200, height: 200 } });
+  const background = (url: string): Child => ({
+    type: "div",
+    props: { style: { width: 200, height: 200, backgroundImage: `url(${url})`, backgroundSize: "100% 100%" } },
+  });
+  const refusal = (url: string) =>
+    new RegExp(`metaplate/takumi does not fetch images: ${url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.*fetchImageLoader`);
+
+  it.each([
+    ["an img src", image],
+    ["a CSS url() background", background],
+  ])("refuses %s without making a request", async (_kind, child) => {
+    const server = await localServer(serveBytes(png, "image/png"));
+    const url = `${server.origin}/image.png`;
+    const og = plate({ component: () => card([child(url)]) });
+    await expect(og.render({ title: "x" })).rejects.toThrow(refusal(url));
+    await expect(og.renderSvg({ title: "x" })).rejects.toThrow(refusal(url));
+    expect(server.requests).toEqual([]);
+  }, RENDER_TIMEOUT);
+
+  it("refuses public and relative sources, and measures with the same policy", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch");
+    for (const url of ["https://example.com/avatar.png", "/avatar.png"]) {
+      const og = plate({ component: () => card([image(url)]), guards: { overflow: "warn", onWarning: () => {} } });
+      await expect(og.render({ title: "x" })).rejects.toThrow(refusal(url));
+    }
+    expect(fetch).not.toHaveBeenCalled();
+    fetch.mockRestore();
+  }, RENDER_TIMEOUT);
+
+  it("draws data URIs, as an img src and as a CSS url()", async () => {
+    const redSvg = "data:image/svg+xml;base64," + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="#ff0000"/></svg>');
+    const redPng = await plate({ component: () => card([], { background: "#ff0000" }) }).render({ title: "x" });
+    const og = plate({
+      component: () => card([image(redSvg), background(`data:image/png;base64,${Buffer.from(redPng).toString("base64")}`)], { gap: 20 }),
+    });
+    const { pixels } = await og.renderPixels({ title: "x" });
+    let drawn = 0;
+    for (let offset = 0; offset < pixels.length; offset += 4) {
+      if (pixels[offset]! > 200 && pixels[offset + 1]! < 60 && pixels[offset + 2]! < 60) drawn += 1;
+    }
+    // Two 200x200 boxes, each drawn red only if its image decoded.
+    expect(drawn).toBeGreaterThan(2 * 190 * 190);
   }, RENDER_TIMEOUT);
 });
 
