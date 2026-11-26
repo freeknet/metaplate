@@ -654,9 +654,11 @@ Workers cannot reach private networks anyway. On Deno or a self-hosted runtime,
 an allowlisted name that resolves to an internal address would be fetched.
 
 `fetch` defaults to the global one. Pass another, such as a Cloudflare service
-binding's, as the `fetch` option; it must return 3xx responses with their
-`Location` header under `redirect: "manual"`, as Workers, Deno, Node.js, and Bun
-do. A browser's `fetch` hides redirect targets, so a redirect there rejects with
+binding's, as the `fetch` option, wrapped so it keeps its binding:
+`fetch: (url, init) => env.IMAGES.fetch(url, init)`. It must return 3xx
+responses with their `Location` header under `redirect: "manual"`, as Workers,
+Deno, Node.js, and Bun do. The time budget holds even for a `fetch` that ignores
+the abort signal: the load still fails with code `"timeout"`. A browser's `fetch` hides redirect targets, so a redirect there rejects with
 code `"redirect"` rather than being followed unchecked.
 
 ## Plate constraints
@@ -817,7 +819,12 @@ with both reports all of them.
 - **`fontFallback`** walks the element tree the component returned, carrying
   inline `fontFamily`, `fontWeight`, and `fontStyle` down to each text the way
   CSS inherits them, and calls nested function components with their props as
-  Satori does. Satori matches a family name case-insensitively and without
+  Satori does. Each element starts from Satori's default style for its tag,
+  under its inline style: `h1`–`h6`, `strong`, and `b` ask for bold, `em` and
+  `i` for italic, and `code`, `kbd`, and `pre` for `monospace`. Custom
+  properties declared in inline styles are inherited, and a `var()` in
+  `fontFamily`, `fontWeight`, or `fontStyle` resolves against them, fallback
+  included, as in Satori. Satori matches a family name case-insensitively and without
   quotes, takes the first family in the stack that is loaded, and skips generic
   names such as `sans-serif`. With no family named, or only generic ones, it
   uses the plate's first font. The guard reports, once per distinct request in
@@ -828,8 +835,11 @@ with both reports all of them.
   matches). `loaded` lists the faces Satori chooses from. Faces a
   [`languageFonts`](fonts.md) loader or `satori.loadAdditionalAsset` returns
   during the render count as loaded. It does not see values set by `<style>`
-  rules or Tailwind `tw`, or a `var()` family; a relative weight such as
-  `bolder` is not checked.
+  rules or Tailwind `tw`. A `var()` family with no declared value and no
+  fallback, and a relative weight such as `bolder`, are not checked. Under
+  `createTakumiOg` the guard follows Takumi's tag defaults instead, which also
+  make `th` bold and `cite`, `dfn`, and `address` italic, give `strong` and `b`
+  `bolder`, and resolve `bolder` and `lighter` as CSS does.
 - **`lineClamp`** walks the same element tree, calling nested function
   components, and reports each element whose inline truncation Satori ignores.
   Satori raises no error for these, and `overflow` cannot catch them, because

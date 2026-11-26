@@ -262,10 +262,12 @@ also the base that relative image URLs resolve against, so a plate with no
 **The block.** The tags go between `<!-- metaplate:social -->` and
 `<!-- /metaplate:social -->`. On the first run the block is inserted on its
 own lines just before `</head>` (matched in any case), indented like the line
-above it; after that the block is replaced in place and nothing outside it
-changes, so a second run writes the same bytes and an unchanged page is not
-written at all. To put the tags somewhere else in `<head>`, add the two
-markers there yourself. CRLF files keep CRLF.
+above it; a `</head>` inside a comment, `<script>`, `<style>`, or `<template>`
+is skipped, as a browser skips it. After that the block is replaced in place
+and nothing outside it changes, so a second run writes the same bytes and an
+unchanged page is not written at all. To put the tags somewhere else in
+`<head>`, add the two markers there yourself. CRLF files keep CRLF, and a file
+that starts with a UTF-8 byte order mark keeps it.
 
 **What fails.** These stop the run before anything renders or is written, with
 the earlier manifest kept, as a refused image path does:
@@ -275,8 +277,10 @@ the earlier manifest kept, as a refused image path does:
   the manifest, or another page's `html` (case-insensitively);
 - a file that is not UTF-8;
 - no `</head>` and no markers (the command does not guess where `<head>`
-  ends), a start marker without an end marker or the reverse, more than one
-  of either, markers out of order, or a block after `</head>`;
+  ends), a head that ends before its `</head>` (at body text or a tag such as
+  `<div>`) with no markers, a start marker without an end marker or the
+  reverse, more than one of either, markers out of order, or a block after
+  `</head>`;
 - a block a crawler would not read, such as one inside a comment or
   `<script>`, and an `og:image` or `twitter:image` outside the block, which
   would leave a crawler with two cards;

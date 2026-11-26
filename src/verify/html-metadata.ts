@@ -197,7 +197,8 @@ export function decodeAttributeValue(value: string): string {
 
 type Tag =
   | { kind: "start"; name: string; attributes: ReadonlyMap<string, string>; text?: string }
-  | { kind: "end"; name: string }
+  /** `start` is the offset of the end tag's `<`. */
+  | { kind: "end"; name: string; start: number }
   /** Character data between `start` and `end`; the consumer inspects it only when it matters. */
   | { kind: "text"; start: number; end: number };
 
@@ -348,7 +349,7 @@ function* tags(html: string): Generator<Tag> {
       const nameEnd = tagNameEnd(html, index + 2);
       const close = html.indexOf(">", nameEnd);
       if (close === -1) return;
-      yield { kind: "end", name: html.slice(index + 2, nameEnd).toLowerCase() };
+      yield { kind: "end", name: html.slice(index + 2, nameEnd).toLowerCase(), start: index };
       resume = close + 1;
     } else if (isAsciiAlpha(next)) {
       const tag = startTag(html, index + 1);
@@ -733,6 +734,24 @@ class HeadTracker {
     }
     return true;
   }
+}
+
+/**
+ * The offset of the `</head>` end tag that closes the head, as the head/body
+ * tracking of `extractPageSocialMetadata` reads the document: a `</head>`
+ * inside a comment, a raw-text element such as `<script>`, or `<template>`
+ * content is never it. `undefined` when the head ends some other way first
+ * (body content, a start tag that starts the body) or does not end at all.
+ */
+export function headEndTagOffset(html: string): number | undefined {
+  const head = new HeadTracker();
+  for (const tag of tags(html)) {
+    if (head.inert(tag)) continue;
+    head.advance(tag, html);
+    if (head.mode === "head") continue;
+    return tag.kind === "end" && tag.name === "head" ? tag.start : undefined;
+  }
+  return undefined;
 }
 
 /**
