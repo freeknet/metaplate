@@ -11,8 +11,11 @@ import { describeTarget, quote, type GuardReport, type GuardTarget } from "./gua
  * the wrong typeface with no error. Satori's `onNodeDetected` reports each
  * element's own declarations but not what it inherits, so this guard walks
  * the element tree itself, carrying inline `fontFamily`, `fontWeight`, and
- * `fontStyle` down to every text it finds. Values set by `<style>` rules or
- * `tw` are not seen.
+ * `fontStyle` down to every text it finds, starting each element from its
+ * renderer's default style for the tag (`<h1>` and `<strong>` bold, `<em>`
+ * italic, `<code>` monospace) as the renderer does. Custom properties declared
+ * in inline styles are inherited and resolve `var()` the same way. Values set
+ * by `<style>` rules or `tw` are not seen.
  */
 
 /** A face the render can draw with: a plate font, or one a loader returned. */
@@ -21,12 +24,55 @@ export type LoadedFace = Readonly<{ name: string; weight?: number; style?: strin
 type FontRequest = Readonly<{
   /** The `fontFamily` stack as written, or `undefined` when none applies. */
   family: string | undefined;
+  /** `true` when the family is a `var()` with no value or fallback: the request is not checked. */
+  unresolved: boolean;
   /** `undefined` when the weight is relative or not a plain value, so no face check is possible. */
   weight: number | undefined;
   style: "normal" | "italic" | undefined;
+  /** Custom properties in scope, as declared (unresolved), keyed with their leading `--`. */
+  vars: ReadonlyMap<string, string>;
 }>;
 
-const INITIAL: FontRequest = { family: undefined, weight: 400, style: "normal" };
+const INITIAL: FontRequest = { family: undefined, unresolved: false, weight: 400, style: "normal", vars: new Map() };
+
+/** The font properties a renderer's default style for a tag sets, the only ones this guard reads. */
+type FontPreset = Readonly<{ fontFamily?: string; fontWeight?: string; fontStyle?: string }>;
+
+/** Which renderer's tag defaults and keyword handling the walk mirrors. */
+export type FontRenderer = "satori" | "takumi";
+
+const BOLD: FontPreset = { fontWeight: "bold" };
+const ITALIC: FontPreset = { fontStyle: "italic" };
+const MONOSPACE: FontPreset = { fontFamily: "monospace" };
+
+/**
+ * Satori's default element styles (the tag table in satori/dist/index.js,
+ * applied under each element's inline style), reduced to font properties.
+ */
+const SATORI_PRESETS: Readonly<Record<string, FontPreset>> = {
+  h1: BOLD, h2: BOLD, h3: BOLD, h4: BOLD, h5: BOLD, h6: BOLD, strong: BOLD, b: BOLD,
+  i: ITALIC, em: ITALIC,
+  code: MONOSPACE, kbd: MONOSPACE, pre: MONOSPACE,
+  select: { fontWeight: "normal", fontStyle: "normal" },
+};
+
+/**
+ * Takumi's default element styles (`defaultStyles` in @takumi-rs/helpers,
+ * used by `fromJsx`), reduced to font properties. They differ from Satori's:
+ * `<strong>` and `<b>` are `bolder`, and `<th>`, `<address>`, `<cite>`,
+ * `<dfn>`, and `<samp>` are styled too.
+ */
+const TAKUMI_PRESETS: Readonly<Record<string, FontPreset>> = {
+  h1: BOLD, h2: BOLD, h3: BOLD, h4: BOLD, h5: BOLD, h6: BOLD, th: BOLD,
+  strong: { fontWeight: "bolder" }, b: { fontWeight: "bolder" },
+  i: ITALIC, em: ITALIC, cite: ITALIC, dfn: ITALIC, address: ITALIC,
+  code: MONOSPACE, kbd: MONOSPACE, samp: MONOSPACE, pre: MONOSPACE,
+};
+
+const PRESETS: Readonly<Record<FontRenderer, Readonly<Record<string, FontPreset>>>> = {
+  satori: SATORI_PRESETS,
+  takumi: TAKUMI_PRESETS,
+};
 
 /** CSS generic families and keywords: Satori loads no font under these names. */
 const GENERIC_FAMILIES = new Set([
@@ -44,13 +90,23 @@ function familyStack(family: string): string[] {
   return family.split(",").map(familyKey).filter((name) => name !== "" && !GENERIC_FAMILIES.has(name));
 }
 
-function parseWeight(value: unknown, inherited: number | undefined): number | undefined {
+/** CSS's relative weights: `bolder` and `lighter` against the inherited weight. */
+function relativeWeight(keyword: "bolder" | "lighter", inherited: number | undefined): number | undefined {
+  if (inherited === undefined) return undefined;
+  if (keyword === "bolder") return inherited < 350 ? 400 : inherited < 550 ? 700 : 900;
+  return inherited < 550 ? 100 : inherited < 750 ? 400 : 700;
+}
+
+function parseWeight(value: unknown, inherited: number | undefined, renderer: FontRenderer): number | undefined {
   if (value === undefined || value === null || value === "inherit") return inherited;
   if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
   if (typeof value !== "string") return undefined;
-  if (value === "normal") return 400;
-  if (value === "bold") return 700;
-  return /^\d+$/.test(value.trim()) ? Number(value) : undefined;
+  const keyword = value.trim();
+  if (keyword === "normal") return 400;
+  if (keyword === "bold") return 700;
+  // Takumi resolves relative weights as CSS does; Satori has no rule for them.
+  if (keyword === "bolder" || keyword === "lighter") return renderer === "takumi" ? relativeWeight(keyword, inherited) : undefined;
+  return /^\d+$/.test(keyword) ? Number(keyword) : undefined;
 }
 
 function parseStyle(value: unknown, inherited: FontRequest["style"]): FontRequest["style"] {
@@ -61,16 +117,80 @@ function parseStyle(value: unknown, inherited: FontRequest["style"]): FontReques
   return keyword === "italic" || keyword === "oblique" ? "italic" : undefined;
 }
 
-function inherit(request: FontRequest, style: unknown): FontRequest {
-  if (typeof style !== "object" || style === null) return request;
-  const declared = style as Record<string, unknown>;
-  const family = declared.fontFamily;
+/** Keywords that leave a custom property as inherited, as Satori treats them. */
+const KEEP_INHERITED = new Set(["inherit", "unset", "revert", "revert-layer"]);
+
+function declareVars(vars: ReadonlyMap<string, string>, declared: Record<string, unknown>): ReadonlyMap<string, string> {
+  let next: Map<string, string> | undefined;
+  for (const [name, value] of Object.entries(declared)) {
+    if (!name.startsWith("--") || (typeof value !== "string" && typeof value !== "number")) continue;
+    const text = String(value);
+    if (KEEP_INHERITED.has(text.trim().toLowerCase())) continue;
+    next ??= new Map(vars);
+    next.set(name, text);
+  }
+  return next ?? vars;
+}
+
+/** Index of the parenthesis that closes the one opened just before `start`, or -1. */
+function closingParen(value: string, start: number): number {
+  let depth = 1;
+  for (let index = start; index < value.length; index++) {
+    if (value[index] === "(") depth++;
+    else if (value[index] === ")" && --depth === 0) return index;
+  }
+  return -1;
+}
+
+/**
+ * Substitutes every `var(--name, fallback)` in `value`, as Satori does: an
+ * undeclared or `initial` property takes the fallback, and one with neither
+ * leaves the whole value unresolved (`undefined`).
+ */
+function resolveVars(value: string, vars: ReadonlyMap<string, string>, seen: ReadonlySet<string> = new Set()): string | undefined {
+  let result = "";
+  let rest = value;
+  for (let at = rest.search(/var\(/i); at !== -1; at = rest.search(/var\(/i)) {
+    const end = closingParen(rest, at + 4);
+    if (end === -1) return undefined;
+    const inner = rest.slice(at + 4, end);
+    const comma = inner.indexOf(",");
+    const name = (comma === -1 ? inner : inner.slice(0, comma)).trim();
+    const fallback = comma === -1 ? undefined : inner.slice(comma + 1);
+    const declared = seen.has(name) ? undefined : vars.get(name);
+    let substituted: string | undefined;
+    if (declared !== undefined && declared.trim().toLowerCase() !== "initial") {
+      substituted = resolveVars(declared, vars, new Set(seen).add(name));
+    }
+    if (substituted === undefined && fallback !== undefined) substituted = resolveVars(fallback, vars, seen);
+    if (substituted === undefined) return undefined;
+    result += rest.slice(0, at) + substituted;
+    rest = rest.slice(end + 1);
+  }
+  return (result + rest).trim();
+}
+
+/** Marks a `var()` with no value and no fallback. */
+const UNRESOLVED = Symbol("unresolved");
+
+function inherit(request: FontRequest, preset: FontPreset | undefined, style: unknown, renderer: FontRenderer): FontRequest {
+  const own = typeof style === "object" && style !== null ? style as Record<string, unknown> : undefined;
+  if (own === undefined && preset === undefined) return request;
+  const vars = own === undefined ? request.vars : declareVars(request.vars, own);
+  // The tag's default style applies first; the inline style overrides it.
+  const declared: Record<string, unknown> = { ...preset, ...own };
+  const resolve = (value: unknown): unknown =>
+    typeof value === "string" && /var\(/i.test(value) ? resolveVars(value, vars) ?? UNRESOLVED : value;
+  const family = resolve(declared.fontFamily);
+  const weight = resolve(declared.fontWeight);
+  const fontStyle = resolve(declared.fontStyle);
+  const setsFamily = family === UNRESOLVED || (typeof family === "string" && family.trim() !== "" && family !== "inherit");
   return {
-    family: typeof family === "string" && family.trim() !== "" && family !== "inherit"
-      ? family.includes("var(") ? undefined : family
-      : request.family,
-    weight: parseWeight(declared.fontWeight, request.weight),
-    style: parseStyle(declared.fontStyle, request.style),
+    family: setsFamily ? (family === UNRESOLVED ? undefined : family as string) : request.family,
+    unresolved: setsFamily ? family === UNRESOLVED : request.unresolved,
+    weight: weight === UNRESOLVED ? undefined : parseWeight(weight, request.weight, renderer),
+    style: fontStyle === UNRESOLVED ? undefined : parseStyle(fontStyle, request.style),
+    vars,
   };
 }
 
@@ -101,7 +221,14 @@ export function renderComponent(type: (props: unknown) => unknown, props: unknow
  * Function components are called with their props, as Satori calls them; one
  * that throws or returns a promise is skipped, and Satori reports it.
  */
-function collectText(node: unknown, request: FontRequest, element: string, found: FoundText[], depth = 0): void {
+function collectText(
+  node: unknown,
+  request: FontRequest,
+  element: string,
+  found: FoundText[],
+  renderer: FontRenderer,
+  depth = 0,
+): void {
   if (depth > 256 || node === null || node === undefined || typeof node === "boolean") return;
   if (typeof node === "string" || typeof node === "number" || typeof node === "bigint") {
     const text = String(node);
@@ -109,18 +236,20 @@ function collectText(node: unknown, request: FontRequest, element: string, found
     return;
   }
   if (Array.isArray(node)) {
-    for (const child of node) collectText(child, request, element, found, depth + 1);
+    for (const child of node) collectText(child, request, element, found, renderer, depth + 1);
     return;
   }
   if (typeof node !== "object" || !("type" in node)) return;
   const { type, props } = node as { type: unknown; props?: Record<string, unknown> };
   if (typeof type === "function") {
-    collectText(renderComponent(type as (props: unknown) => unknown, props), request, element, found, depth + 1);
+    collectText(renderComponent(type as (props: unknown) => unknown, props), request, element, found, renderer, depth + 1);
     return;
   }
   if (typeof type === "string" && OPAQUE_ELEMENTS.has(type)) return;
-  const next = inherit(request, props?.style);
-  collectText(props?.children, next, typeof type === "string" ? type : element, found, depth + 1);
+  const presets = PRESETS[renderer];
+  const preset = typeof type === "string" && Object.hasOwn(presets, type) ? presets[type] : undefined;
+  const next = inherit(request, preset, props?.style, renderer);
+  collectText(props?.children, next, typeof type === "string" ? type : element, found, renderer, depth + 1);
 }
 
 function describeFace(face: LoadedFace): string {
@@ -155,22 +284,25 @@ export class FaceRegistry {
 
 /**
  * Reports each distinct font request in the tree that no loaded face
- * satisfies, with the first text drawn under it.
+ * satisfies, with the first text drawn under it. `renderer` picks whose tag
+ * defaults and weight keywords the walk follows.
  */
 export function checkFontFallback(
   element: unknown,
   faces: readonly LoadedFace[],
   report: GuardReport,
   target: GuardTarget,
+  renderer: FontRenderer = "satori",
 ): void {
   const [first] = faces;
   if (!first) return;
   const found: FoundText[] = [];
-  collectText(element, INITIAL, "div", found);
+  collectText(element, INITIAL, "div", found, renderer);
   const reported = new Set<string>();
   for (const { request, element: type, text } of found) {
     const signature = `${request.family ?? ""}\u0000${request.weight ?? ""}\u0000${request.style ?? ""}`;
-    if (reported.has(signature)) continue;
+    // A family no `var()` resolves has no static answer.
+    if (request.unresolved || reported.has(signature)) continue;
     reported.add(signature);
     const stack = request.family === undefined ? [] : familyStack(request.family);
     const resolved = stack.length === 0

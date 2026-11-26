@@ -116,6 +116,7 @@ Takumi lays out like a browser in a few places where Satori does not:
 | `<img>` in a flex row | Shrinks to fit | Keeps its size (`min-width: auto`) |
 | Emoji in a flex container | One text run | Text and emoji images become separate flex items, so spaces next to emoji collapse |
 | Invalid style value | The render fails | The declaration is dropped with a `takumi:` console warning |
+| Remote image `src` or CSS `url()` | Fetched by Satori if the host is public; a private, loopback, or `localhost` address or a relative URL fails the render; a failed download (such as a 404) is logged and drawn blank | Never fetched: any URL other than a `data:` URI fails the render, before a request ([Remote images](#remote-images)) |
 | Truncated or corrupt image | Draws what decodes | The render fails |
 | Arabic marks | Some dots are lost (ة, ق with Noto Sans Arabic) | Drawn |
 
@@ -140,11 +141,32 @@ const diff = compareImages(await nodePlate.render(copy), await takumiPlate.rende
   (`"ko-KR"`, `"ja-JP|zh-CN|zh-TW|zh-HK"` for Han, and so on), so the same
   `fontsourceLanguageFontLoader` or `languageFontLoader` works unchanged.
 - **`emoji`**: emoji are drawn from the plate's emoji loader. Takumi itself
-  would fetch them from a CDN; this entry never does. An emoji the loader has
+  would fetch them from a CDN; this entry never does. The loader receives each
+  grapheme as the copy spells it, as under Satori (`1️⃣` and `❤️` with their
+  U+FE0F, though Takumi's image names drop it). An emoji the loader has
   no image for is left blank (Satori would draw it from the fonts) and is
   reported by `missingGlyphs`. Without `emoji`, emoji are drawn from the fonts.
 
 ## Remote images
+
+**This entry fetches nothing over the network.** Takumi has its own image
+fetcher; `metaplate/takumi` switches it off. An `<img src>` or CSS `url()`
+(`backgroundImage`, `maskImage`, and so on) must be a `data:` URI or inline
+SVG. Any other URL, public or private, absolute or relative, fails the render
+before a request is made:
+
+```text
+Error: metaplate/takumi does not fetch images: https://example.com/avatar.png. Load remote images with fetchImageLoader from metaplate/image (or remoteImageLoader from metaplate/assets on Node.js) and pass the data URI it returns as src.
+```
+
+This is stricter than Satori. Under `metaplate/node` and `metaplate/edge`,
+Satori fetches a public `http(s)` URL itself, with no origin allowlist, byte
+cap, or cache, and refuses private, loopback, and `localhost` addresses and
+relative URLs. A Satori download that fails (a 404, say) is only logged and
+leaves the image blank; here nothing is downloaded, so a plate that relied on
+Satori fetching a public URL fails until its image goes through a loader.
+`@font-face` URLs in a stylesheet are not fetched either; pass fonts through
+`fonts` or `languageFonts`.
 
 `metaplate/assets` needs Node, so on Workers load per-page images such as
 avatars with [`fetchImageLoader`](rendering.md#edge-runtimes) from
@@ -174,7 +196,7 @@ Every guard except `avoid`, which fails at definition time:
 | --- | --- |
 | `missingGlyphs` | Characters Takumi's fallback hook receives that no language font covers, and emoji the emoji loader has no image for |
 | `overflow`, `safeArea`, `textOverlap` | Boxes from Takumi's `measure()`, through the same checks as Satori's. A transformed element is checked by its transformed box, where Satori uses the box before the transform |
-| `fontFallback` | The same element-tree check as Satori's |
+| `fontFallback` | The same element-tree check as Satori's, starting each element from Takumi's default style for its tag: `th` is bold and `cite`, `dfn`, and `address` italic as well, `strong` and `b` are `bolder`, and `bolder` and `lighter` resolve as in CSS |
 | `lineClamp` | The same element-tree check, with Satori's rules. Takumi also ignores `lineClamp` on a flex or grid element, but clamps an `inline-block` element and text in child elements, which Satori does not; the guard reports those too, so a plate that passes clamps on both renderers |
 | `blank` | The raw pixels. With `blank` on, `render` paints twice (pixels, then PNG) |
 | `avoid` | Not supported: Takumi's layout keeps no React `key` |

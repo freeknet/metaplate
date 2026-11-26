@@ -245,6 +245,38 @@ export default {
     expect(await read(cwd, "pages/rebrand.html")).toBe(html.replaceAll("?v=r1", "?v=r2"));
   });
 
+  it("writes a page saved with a byte order mark and CRLF, keeping both, and leaves it alone on a re-run", async () => {
+    const original = String.fromCharCode(0xfeff) + PAGE.replaceAll("\n", "\r\n");
+    const cwd = await project({
+      "public/index.html": original,
+      "og.render.mjs": fakeModule(`
+export default { plate: plate(), pages: [{ copy: { title: "Home" }, html: "public/index.html", page: { url: "https://example.com/" } }] };`),
+    });
+    const file = path.join(cwd, "public", "index.html");
+    const first = runCli(bundlePath, ["render", "og.render.mjs"], cwd);
+    expect(first.stderr).toBe("");
+    expect(first.status).toBe(0);
+    const bytes = await readFile(file);
+    expect([...bytes.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+    const html = bytes.toString("utf8");
+    expect(html.slice(1).startsWith("<!doctype html>\r\n")).toBe(true);
+    expect(html).toContain(`    ${START}\r\n    <meta property="og:image" content="https://example.com/og-image.png">\r\n`);
+    expect(html.replaceAll("\r\n", "")).not.toContain("\n");
+    expect(html.replace(/ {4}<!-- metaplate:social -->[\s\S]*<!-- \/metaplate:social -->\r\n/, "")).toBe(original);
+    const metadata = extractPageSocialMetadata(html.slice(1), "https://example.com/");
+    expect(metadata.openGraph.images.map((image) => image.url)).toEqual([
+      "https://example.com/og-image.png",
+      "https://example.com/og-image-square.png",
+    ]);
+
+    const before = await stat(file);
+    const second = runCli(bundlePath, ["render", "og.render.mjs"], cwd);
+    expect(second.status).toBe(0);
+    expect(second.stdout).toContain("social tags unchanged");
+    expect((await readFile(file)).equals(bytes)).toBe(true);
+    expect((await stat(file)).mtimeMs).toBe(before.mtimeMs);
+  });
+
   it("with --incremental, reuses the images and does not rewrite an unchanged page", async () => {
     const cwd = await project({
       "public/index.html": PAGE,

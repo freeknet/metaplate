@@ -65,7 +65,8 @@ export type FetchImageLoaderOptions = ImageAssetOptions & {
   /** Budget for the whole fetch, including every redirect. Default 10 s. */
   timeoutMs?: number;
   /**
-   * The `fetch` to call, such as a Cloudflare service binding's. Defaults to
+   * The `fetch` to call, such as a Cloudflare service binding's, wrapped so it
+   * keeps its binding: `(url, init) => env.IMAGES.fetch(url, init)`. Defaults to
    * the runtime's global `fetch`. It must honor `redirect: "manual"` by
    * returning the 3xx response with its `Location` header, as Workers, Deno,
    * Node.js, and Bun do.
@@ -102,8 +103,10 @@ function portSet(ports: readonly number[] | undefined): ReadonlySet<number> {
  */
 function checkHost(url: URL, label: string): void {
   const host = bareHostname(url).toLowerCase();
+  // `localhost.` is the same name as `localhost`, written fully qualified.
+  const name = host.endsWith(".") ? host.slice(0, -1) : host;
   const kind = ipFamily(host) === 0
-    ? host === "localhost" || host.endsWith(".localhost") ? "loopback name" : undefined
+    ? name === "localhost" || name.endsWith(".localhost") ? "loopback name" : undefined
     : nonPublicAddressKind(host);
   if (kind) {
     throw new RemoteImageError(
@@ -209,9 +212,20 @@ export function fetchImageLoader(options: FetchImageLoaderOptions): FetchImageLo
   async function load(input: string | URL): Promise<ImageAsset> {
     const requested = parseUrl(String(input), undefined, "URL");
     const controller = new AbortController();
-    const budget = setTimeout(() => controller.abort(), timeoutMs);
     let current = requested;
-    try {
+    const timedOut = () =>
+      new RemoteImageError("timeout", `Fetching ${current.href} exceeded the ${timeoutMs} ms total time budget`, current.href);
+    // The budget also settles the load itself, so an injected fetch that ignores
+    // its signal, or a body stream not tied to it, cannot hang the load (and,
+    // through the cache, every later load of the same URL).
+    let budget: ReturnType<typeof setTimeout> | undefined;
+    const expired = new Promise<never>((_, reject) => {
+      budget = setTimeout(() => {
+        controller.abort();
+        reject(timedOut());
+      }, timeoutMs);
+    });
+    const attempt = async (): Promise<ImageAsset> => {
       for (let redirects = 0; ; redirects += 1) {
         const label = redirects === 0 ? "URL" : "Redirect to";
         checkUrl(current, ports, label);
@@ -254,10 +268,14 @@ export function fetchImageLoader(options: FetchImageLoaderOptions): FetchImageLo
           throw error;
         }
       }
+    };
+    const running = attempt();
+    // After the budget wins the race, a late failure of the attempt is expected.
+    running.catch(() => {});
+    try {
+      return await Promise.race([running, expired]);
     } catch (error) {
-      if (controller.signal.aborted && !(error instanceof RemoteImageError)) {
-        throw new RemoteImageError("timeout", `Fetching ${current.href} exceeded the ${timeoutMs} ms total time budget`, current.href);
-      }
+      if (controller.signal.aborted && !(error instanceof RemoteImageError)) throw timedOut();
       throw error;
     } finally {
       clearTimeout(budget);

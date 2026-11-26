@@ -58,7 +58,7 @@ describe("fetchImageLoader", () => {
 
   it("refuses non-public IP literals and localhost names before any request", async () => {
     const fetchSpy = vi.fn<NonNullable<FetchImageLoaderOptions["fetch"]>>();
-    const origins = ["http://127.0.0.1", "http://10.1.2.3", "http://[::1]", "http://[::ffff:192.168.0.1]", "http://localhost", "http://img.localhost"];
+    const origins = ["http://127.0.0.1", "http://10.1.2.3", "http://[::1]", "http://[::ffff:192.168.0.1]", "http://localhost", "http://img.localhost", "http://localhost.", "http://img.localhost."];
     const load = fetchImageLoader({ origins, fetch: fetchSpy });
     for (const origin of origins) {
       const failure = load(`${origin}/a.png`);
@@ -122,6 +122,24 @@ describe("fetchImageLoader", () => {
     });
     const load = loaderFor(server, { timeoutMs: 150 });
     await expect(load(`${server.origin}/slow.png`)).rejects.toMatchObject({ code: "timeout" });
+  });
+
+  it("holds the time budget for an injected fetch that ignores its signal, and retries afterwards", async () => {
+    let calls = 0;
+    const hangs: FetchImageLoaderOptions["fetch"] = () => {
+      calls += 1;
+      return new Promise<Response>(() => {});
+    };
+    const load = fetchImageLoader({ origins: ["https://cdn.example.com"], fetch: hangs, timeoutMs: 50 });
+    await expect(load("https://cdn.example.com/a.png")).rejects.toMatchObject({ code: "timeout" });
+    // The failed load is not cached: the next call fetches again, and also settles.
+    await expect(load("https://cdn.example.com/a.png")).rejects.toMatchObject({ code: "timeout" });
+    expect(calls).toBe(2);
+
+    const stalls: FetchImageLoaderOptions["fetch"] = async () =>
+      new Response(new ReadableStream({ pull: () => new Promise(() => {}) }), { headers: { "Content-Type": "image/png" } });
+    const body = fetchImageLoader({ origins: ["https://cdn.example.com"], fetch: stalls, timeoutMs: 50 });
+    await expect(body("https://cdn.example.com/b.png")).rejects.toMatchObject({ code: "timeout" });
   });
 
   it("calls an injected fetch, and refuses a redirect whose target the runtime hides", async () => {
