@@ -8,6 +8,7 @@ and small helpers that no guide covers are described below the table. The
 | --- | --- | --- |
 | `metaplate` | `socialImage`, `socialImagePath`, `variantImagePath`, `socialImageMetadata`, `assertImageSize`, `OG_SIZE`, `OG_CONTENT_TYPE`, `MAX_IMAGE_DIMENSION` | [Metadata](metadata.md), [Variants](variants.md) |
 | | `socialMetaTags`, `socialMetaHtml` | [Metadata](metadata.md) |
+| | `definePlate` | [A contract without a renderer](plate.md#a-contract-without-a-renderer), [Next.js on Cloudflare Workers](cloudflare-next.md) |
 | | `socialImageVersion`, `IMAGE_VERSION_PARAMETER` | [Versioned image URLs](metadata.md#versioned-image-urls) |
 | | `signImagePath`, `verifyImageSignature`, `MIN_IMAGE_SIGNING_SECRET_BYTES` | [Signed image routes](signed-routes.md) |
 | | `X_APP_PLATFORMS` | [X player and app cards](x-cards.md) |

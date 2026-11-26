@@ -162,6 +162,7 @@ Nothing here is required, but older code often has a shorter form now.
 | A look at each card to see whether a `lineClamp` took | The [`lineClamp` guard](rendering.md#render-guards), which reports a clamp or ellipsis Satori ignores | Unreleased |
 | Hand-written `fetch` for per-page images on an edge runtime | [`fetchImageLoader`](rendering.md#edge-runtimes) from `metaplate/image`, with `remoteImageLoader`'s allowlist, redirect checks, and byte cap | Unreleased |
 | Build-time cards because `metaplate/edge` cannot start on Cloudflare Workers | [`metaplate/takumi`](takumi.md) (experimental), which renders there | Unreleased |
+| Page metadata rebuilt with `socialImageMetadata` and `socialImageVersion` to keep the renderer out of a server bundle, restating the plate's `imagePath`, `version`, and `revision` | [`definePlate`](plate.md#a-contract-without-a-renderer), spread into the plate, so pages and renderer share one contract ([Next.js on Cloudflare Workers](cloudflare-next.md)) | Unreleased |
 | A script that splices `socialMetaHtml` output into a static HTML page between markers | A render page's [`html` and `page`](render-cli.md#writing-tags-into-static-html), which `metaplate render` writes after the page's images succeed | Unreleased |
 
 ## Workarounds you can delete

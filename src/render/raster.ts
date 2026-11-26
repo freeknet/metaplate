@@ -10,7 +10,12 @@ import {
 } from "./guards.js";
 import { detectFormat, imageContentType, type ImageFormat, type OutputFormat } from "../image.js";
 import { isMediaType } from "../metadata/og-media.js";
-import { createPlateHandlers, createPlateSocial, type PlateUrlOptions } from "./plate.js";
+import {
+  assertContractContentType,
+  createPlateHandlers,
+  createPlateSocial,
+  type PlateUrlOptions,
+} from "./plate.js";
 import { createRenderCache, type RenderCacheOptions } from "./cache.js";
 import type { SvgOgDefinition } from "./svg.js";
 import { taggedSerialize } from "../core/stable-hash.js";
@@ -286,6 +291,7 @@ export function createRasterPlate<Copy, Variant extends string = string>(
   assertResponseHeaderConfiguration(definition.headers, Boolean(definition.etag));
   const contentType = outputContentType(definition.output);
   assertMediaType(contentType);
+  assertContractContentType(definition.contentType, contentType);
   const social = createPlateSocial(definition, contentType);
   // Every size the plate renders must survive Resvg unchanged, not only the
   // default: a `fitTo` width matching 1200 would rescale a 1080 square.
