@@ -160,6 +160,7 @@ Nothing here is required, but older code often has a shorter form now.
 | A look at each card after changing fonts | The [`fontFallback` guard](rendering.md#render-guards), which reports a family, weight, or style no loaded font provides | Unreleased |
 | Hand-written `fetch` for per-page images on an edge runtime | [`fetchImageLoader`](rendering.md#edge-runtimes) from `metaplate/image`, with `remoteImageLoader`'s allowlist, redirect checks, and byte cap | Unreleased |
 | Build-time cards because `metaplate/edge` cannot start on Cloudflare Workers | [`metaplate/takumi`](takumi.md) (experimental), which renders there | Unreleased |
+| `grep -v robots` on `metaplate verify-page` output for a staging site | [`--expect-robots-block`](verify-page.md#sites-that-block-crawlers-on-purpose), which reports the block as expected and fails when it is lifted | Unreleased |
 
 ## Workarounds you can delete
 

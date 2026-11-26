@@ -657,6 +657,110 @@ describe("verifyRemotePage robots.txt checks", () => {
     ]));
   });
 
+  it("names the crawler on every robots.txt finding", async () => {
+    const server = await site(() => ({
+      "/": serveHtml(page(CARD_HEAD)),
+      "/og.png": serveBytes(card, "image/png"),
+      "/robots.txt": serveText("user-agent: *\ndisallow: /\n"),
+    }));
+    const report = await verifyRemotePage(`${server.origin}/`, local(server, { targets: ["x"], crawlers: ["ExampleBot"] }));
+    expect(report.targets.x?.issues.filter(({ code }) => code === "robots-disallowed")).toEqual([
+      expect.objectContaining({ target: "x", crawler: "Twitterbot" }),
+    ]);
+    expect(report.globalIssues).toEqual([expect.objectContaining({ code: "robots-disallowed", crawler: "ExampleBot" })]);
+    expect(report.images[0]!.targets.x?.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "robots-disallowed", crawler: "Twitterbot" }),
+    ]));
+    expect(report.robots).not.toHaveProperty("expectBlock");
+    expect(report.robots?.crawlers[0]).not.toHaveProperty("expectation");
+  });
+
+  describe("expectRobotsBlock", () => {
+    async function expectBlock(robots: Handler | undefined, extra: RemotePageOptions = { targets: ["x", "linkedin"] }) {
+      const server = await site(() => ({
+        "/post": serveHtml(page(CARD_HEAD)),
+        "/og.png": serveBytes(card, "image/png"),
+        ...(robots ? { "/robots.txt": robots } : {}),
+      }));
+      return verifyRemotePage(`${server.origin}/post`, local(server, { ...extra, expectRobotsBlock: true }));
+    }
+    const robotsCodes = (issues: readonly { code: string }[] = []) => issues.map(({ code }) => code).filter((code) => code.startsWith("robots-"));
+
+    it("reports a blocked page as met and files no disallow finding, page or image", async () => {
+      const report = await expectBlock(serveText("user-agent: *\ndisallow: /\n"));
+      expect(report.robots?.expectBlock).toBe(true);
+      expect(report.robots?.crawlers.map(({ token, allowed, expectation }) => ({ token, allowed, expectation }))).toEqual([
+        { token: "Twitterbot", allowed: false, expectation: "met" },
+        { token: "LinkedInBot", allowed: false, expectation: "met" },
+      ]);
+      expect(robotsCodes(report.targets.x?.issues)).toEqual([]);
+      expect(robotsCodes(report.targets.linkedin?.issues)).toEqual([]);
+      expect(robotsCodes(report.images[0]!.targets.x?.issues)).toEqual([]);
+      expect(robotsCodes(report.images[0]!.targets.linkedin?.issues)).toEqual([]);
+    });
+
+    it("counts an unreachable robots.txt, which RFC 9309 treats as disallowing everything, as a block", async () => {
+      const report = await expectBlock(serveText("", 503), { targets: ["x"] });
+      expect(report.robots?.crawlers[0]).toMatchObject({ allowed: false, expectation: "met" });
+      expect(robotsCodes(report.targets.x?.issues)).toEqual([]);
+    });
+
+    it("files one robots-not-blocked error per target when the page is allowed", async () => {
+      const report = await expectBlock(undefined);
+      expect(report.robots?.crawlers.map(({ expectation }) => expectation)).toEqual(["unmet", "unmet"]);
+      expect(report.targets.linkedin).toEqual({
+        compatible: false,
+        issues: [expect.objectContaining({
+          severity: "error",
+          code: "robots-not-blocked",
+          target: "linkedin",
+          crawler: "LinkedInBot",
+          message: expect.stringContaining("allows"),
+        })],
+      });
+      expect(robotsCodes(report.targets.x?.issues)).toEqual(["robots-not-blocked"]);
+      // The page finding is the only one; images are not judged again.
+      expect(robotsCodes(report.images[0]!.targets.linkedin?.issues)).toEqual([]);
+    });
+
+    it("judges the page, not the images: an allowed page with a blocked image is unmet", async () => {
+      const report = await expectBlock(serveText("user-agent: *\ndisallow: /og.png\n"), { targets: ["linkedin"] });
+      expect(report.robots?.crawlers[0]).toMatchObject({ allowed: false, expectation: "unmet" });
+      expect(robotsCodes(report.targets.linkedin?.issues)).toEqual(["robots-not-blocked"]);
+      expect(robotsCodes(report.images[0]!.targets.linkedin?.issues)).toEqual([]);
+    });
+
+    it("judges the page, not the images: a blocked page with an allowed image is met", async () => {
+      const report = await expectBlock(serveText("user-agent: *\ndisallow: /post\n"), { targets: ["linkedin"] });
+      expect(report.robots?.crawlers[0]).toMatchObject({ allowed: false, expectation: "met" });
+      expect(robotsCodes(report.targets.linkedin?.issues)).toEqual([]);
+      expect(robotsCodes(report.images[0]!.targets.linkedin?.issues)).toEqual([]);
+    });
+
+    it("applies to each crawler separately, and files a requested crawler's error untargeted", async () => {
+      const report = await expectBlock(serveText("user-agent: twitterbot\ndisallow: /\n"), { targets: ["x"], crawlers: ["ExampleBot"] });
+      expect(report.robots?.crawlers.map(({ token, expectation }) => ({ token, expectation }))).toEqual([
+        { token: "Twitterbot", expectation: "met" },
+        { token: "ExampleBot", expectation: "unmet" },
+      ]);
+      expect(robotsCodes(report.targets.x?.issues)).toEqual([]);
+      expect(report.globalIssues).toEqual([expect.objectContaining({ code: "robots-not-blocked", crawler: "ExampleBot" })]);
+      expect(report.valid).toBe(false);
+    });
+
+    it("keeps an unknown result unknown", async () => {
+      const report = await expectBlock(redirectTo("http://127.0.0.1:1/robots.txt"), { targets: ["x"] });
+      expect(report.robots?.crawlers[0]).toMatchObject({ allowed: null, expectation: "unknown" });
+      expect(robotsCodes(report.targets.x?.issues)).toEqual(["robots-unknown"]);
+    });
+
+    it("needs a crawler to evaluate", async () => {
+      await expect(verifyRemotePage("https://example.com/", { expectRobotsBlock: true })).rejects.toThrow(TypeError);
+      await expect(verifyRemotePage("https://example.com/", { expectRobotsBlock: true, targets: ["slack"] })).rejects.toThrow(TypeError);
+      await expect(verifyRemotePage("https://example.com/", { expectRobotsBlock: "yes" as never, targets: ["x"] })).rejects.toThrow(TypeError);
+    });
+  });
+
   it("rejects crawler names that are not product tokens", async () => {
     await expect(verifyRemotePage("https://example.com/", { crawlers: ["Twitterbot/1.0"] })).rejects.toThrow(TypeError);
     await expect(verifyRemotePage("https://example.com/", { crawlers: [""] })).rejects.toThrow(TypeError);

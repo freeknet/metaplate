@@ -88,15 +88,28 @@ export type RemotePageCrawlerReport = Readonly<{
   requested: boolean;
   /** Every check allowed (`true`), any disallowed (`false`), or any unknown (`null`). */
   allowed: boolean | null;
+  /**
+   * With `expectRobotsBlock` only: whether robots.txt keeps this crawler
+   * from the page, as declared. `met` when a page URL (the requested URL or
+   * a redirect target) is disallowed, `unmet` when every page URL is
+   * allowed, and `unknown` when none is disallowed and one could not be
+   * evaluated.
+   */
+  expectation?: RobotsExpectation;
   checks: readonly RemotePageCrawlerCheck[];
 }>;
 
+/** Whether an expected robots.txt block holds for one crawler. */
+export type RobotsExpectation = "met" | "unmet" | "unknown";
+
 export type RemotePageRobotsReport = Readonly<{
+  /** `true` when the block was declared expected (`expectRobotsBlock`); absent otherwise. */
+  expectBlock?: true;
   files: readonly RemotePageRobotsFile[];
   crawlers: readonly RemotePageCrawlerReport[];
 }>;
 
-export type RobotsIssueCode = "robots-disallowed" | "robots-unreachable" | "robots-unknown";
+export type RobotsIssueCode = "robots-disallowed" | "robots-unreachable" | "robots-unknown" | "robots-not-blocked";
 
 export type RobotsFinding = Readonly<{
   severity: "error" | "warning" | "unknown";
@@ -104,6 +117,8 @@ export type RobotsFinding = Readonly<{
   message: string;
   /** Absent for a crawler requested without a target. */
   target?: SocialTarget;
+  /** The robots.txt product token of the crawler the finding is about. */
+  crawler: string;
   /** `undefined` for the page; otherwise the image URL. */
   image?: string;
 }>;
@@ -249,6 +264,7 @@ export async function checkCrawlers(
   urls: CrawlerUrls,
   options: RemoteFetchOptions,
   dial: RemoteDialer,
+  expectBlock = false,
 ): Promise<{ report: RemotePageRobotsReport; findings: RobotsFinding[] }> {
   const files = new Map<string, FileResult>();
   const allUrls = [...urls.page, ...[...urls.images.values()].flatMap(({ chain }) => chain)];
@@ -261,6 +277,10 @@ export async function checkCrawlers(
   const reports: RemotePageCrawlerReport[] = [];
   for (const crawler of crawlers) {
     const checks: RemotePageCrawlerCheck[] = [];
+    const push = (finding: Finding, targets: readonly SocialTarget[], place: { image?: string }) => {
+      if (targets.length === 0) findings.push(Object.freeze({ ...finding, crawler: crawler.token, ...place }));
+      for (const target of targets) findings.push(Object.freeze({ ...finding, target, crawler: crawler.token, ...place }));
+    };
     const judge = (resource: "page" | "image", chain: readonly string[], image?: { first: string; references: string[]; targets: Set<SocialTarget> }) => {
       for (const url of chain) {
         const origin = originOf(url);
@@ -275,36 +295,61 @@ export async function checkCrawlers(
         }
         checks.push(Object.freeze({ ...check, ...(image ? { references: Object.freeze([...image.references]) } : {}) }));
         const finding = findingFor(crawler, check, file);
-        if (!finding) continue;
+        // A declared block is no finding; only an unmet declaration is.
+        if (!finding || (expectBlock && finding.code !== "robots-unknown")) continue;
         // A targeted crawler's image finding matters only where that image is
         // the one the target reads; a requested crawler's applies to all.
         const targets = image && crawler.targets.length > 0
           ? crawler.targets.filter((target) => image.targets.has(target))
           : crawler.targets;
         if (crawler.targets.length > 0 && targets.length === 0) continue;
-        const place = image ? { image: image.first } : {};
-        if (targets.length === 0) findings.push(Object.freeze({ ...finding, ...place }));
-        for (const target of targets) findings.push(Object.freeze({ ...finding, target, ...place }));
+        push(finding, targets, image ? { image: image.first } : {});
       }
     };
     judge("page", urls.page);
     for (const [first, image] of urls.images) judge("image", image.chain, { first, ...image });
-    const allowed = checks.some((check) => check.allowed === false)
-      ? false
-      : checks.some((check) => check.allowed === null) ? null : true;
+    let expectation: RobotsExpectation | undefined;
+    if (expectBlock) {
+      const page = checks.filter(({ resource }) => resource === "page");
+      const pageAllowed = combined(page);
+      expectation = pageAllowed === false ? "met" : pageAllowed === null ? "unknown" : "unmet";
+      if (expectation === "unmet") push(notBlocked(crawler, page[0]!), crawler.targets, {});
+    }
     reports.push(Object.freeze({
       token: crawler.token,
       ...(crawler.documented ? { platform: crawler.documented.platform } : {}),
       robots: policyOf(crawler),
       targets: Object.freeze([...crawler.targets]),
       requested: crawler.requested,
-      allowed,
+      allowed: combined(checks),
+      ...(expectation ? { expectation } : {}),
       checks: Object.freeze(checks),
     }));
   }
   return {
-    report: Object.freeze({ files: Object.freeze([...files.values()].map(({ file }) => file)), crawlers: Object.freeze(reports) }),
+    report: Object.freeze({
+      ...(expectBlock ? { expectBlock: true as const } : {}),
+      files: Object.freeze([...files.values()].map(({ file }) => file)),
+      crawlers: Object.freeze(reports),
+    }),
     findings,
+  };
+}
+
+type Finding = Omit<RobotsFinding, "target" | "image" | "crawler">;
+
+/** Any check disallowed (`false`), else any unknown (`null`), else allowed (`true`). */
+function combined(checks: readonly RemotePageCrawlerCheck[]): boolean | null {
+  if (checks.some((check) => check.allowed === false)) return false;
+  return checks.some((check) => check.allowed === null) ? null : true;
+}
+
+/** The one finding for a crawler the declared block does not keep from the page. */
+function notBlocked(crawler: Crawler, check: RemotePageCrawlerCheck): Finding {
+  return {
+    severity: "error",
+    code: "robots-not-blocked",
+    message: `${check.robotsUrl} allows ${check.url} for ${name(crawler)}, but the robots.txt block was declared expected; the crawler can fetch the page and build a preview.`,
   };
 }
 
@@ -312,7 +357,7 @@ function findingFor(
   crawler: Crawler,
   check: RemotePageCrawlerCheck,
   file: RemotePageRobotsFile,
-): Omit<RobotsFinding, "target" | "image"> | undefined {
+): Finding | undefined {
   if (check.allowed === null) {
     if (policyOf(crawler) === "ignores") return undefined;
     return {
