@@ -48,6 +48,13 @@ All notable changes to Metaplate are documented in this file. The project uses
   0.29.0), and an undefined `var()` in a `background` fails its render. Tests now
   pin each behavior.
 
+### Tests
+
+- A Satori-vs-Takumi parity suite renders 16 plates through `metaplate/node`
+  and `metaplate/takumi` and holds each to a per-plate budget of changed
+  pixels, so a `takumi-js` or `satori` update that moves layout fails before
+  it merges. It also pins Takumi's refusal of a truncated PNG.
+
 ## [0.8.4] - 2026-11-09
 
 ### Added
