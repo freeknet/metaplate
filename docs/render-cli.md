@@ -65,12 +65,14 @@ The contract, in full:
 - **A job** is `{ plate, pages }`. `plate` is a plate from `createNodeOg`
   (`metaplate/node`) or `createEdgeOg` (`metaplate/edge`); `pages` is a
   non-empty array.
-- **A page** is `{ route?, copy, version? }`. `copy` is what the plate
+- **A page** is `{ route?, copy, version?, html?, page? }`. `copy` is what the plate
   renders, exactly as `plate.artifact(route, copy)` takes it. `route` is the
   page's route as you pass it to `plate.metadata(route, copy)`, and defaults
   to `/`. `version` is an optional cache-busting token for the page's image
   URLs (see [Versioned URLs](#versioned-urls)); an invalid token is refused
-  before anything renders.
+  before anything renders. `html` names a static HTML file to write the page's
+  `<meta>` tags into, and `page` holds its page-level tags (see
+  [Writing tags into static HTML](#writing-tags-into-static-html)).
 - **Sizes.** A default plate renders each page at its default size and then
   at every declared variant, in declaration order. A variant view,
   `og.variant("square")`, renders only that size, so one job can add a single
@@ -170,7 +172,126 @@ path:
 ```
 
 Render the module with the same plate your pages use for their metadata, so
-the manifest and the pages agree on every token.
+the manifest and the pages agree on every token. For a hand-written HTML page,
+let the command write the tags itself, as the next section shows.
+
+## Writing tags into static HTML
+
+A framework page gets its tags from the framework, but a hand-written page in
+`public/` (a landing page or a concept board served beside the app) needs them
+written into the file. Name the file in the page's `html` and its page-level tags
+in `page`:
+
+```js
+// og.render.mjs
+export default {
+  plate: og,
+  pages: [
+    {
+      route: "/rebrand/",
+      copy: { title: "Our new look" },
+      html: "public/rebrand/index.html",
+      page: {
+        title: "Our new look",
+        description: "What changed, and why.",
+        url: "https://example.com/rebrand/",
+        siteName: "Example",
+      },
+    },
+  ],
+};
+```
+
+```html
+<!-- public/rebrand/index.html, before -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Our new look</title>
+  </head>
+  <body>...</body>
+</html>
+```
+
+After `metaplate render og.render.mjs --out public`, with a plate whose `origin`
+is `https://example.com` and with `version: "copy"`:
+
+```html
+  <head>
+    <meta charset="utf-8">
+    <title>Our new look</title>
+    <!-- metaplate:social -->
+    <meta property="og:image" content="https://example.com/rebrand/og-image.png?v=1e52226d">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:alt" content="Our new look">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://example.com/rebrand/og-image.png?v=1e52226d">
+    <meta name="twitter:image:alt" content="Our new look">
+    <meta property="og:title" content="Our new look">
+    <meta property="og:description" content="What changed, and why.">
+    <meta property="og:url" content="https://example.com/rebrand/">
+    <meta property="og:site_name" content="Example">
+    <meta property="og:type" content="website">
+    <!-- /metaplate:social -->
+  </head>
+```
+
+The command prints `✓ public/rebrand/index.html social tags written`, or
+`social tags unchanged` when the file already holds exactly these tags.
+
+**Where the tags come from.** The image tags are the plate's own
+`metadata(route, copy)`, with the page's `version` token, so `og:image` is the
+URL in the manifest, `?v=` included; a plate with variants lists every size.
+The page-level tags are `socialMetaHtml`'s, so `page` takes the fields of
+`SocialMetaOptions`: `title`, `description`, `url`, `siteName`, `type`,
+`locale`, `alternateLocales`, `article`, `pubdate`, and `themeColor`, validated
+and escaped the same way (an unknown field is refused). `<title>` and
+`<link rel="canonical">` stay yours.
+
+**`og:url` is `page.url`, exactly as given.** Nothing is derived from the route
+or the plate's `origin`, and no slash is added or removed, because only you
+know whether the host serves `/rebrand/` or `/rebrand`: use the URL your
+canonical link names. Without `page.url` no `og:url` is written. `page.url` is
+also the base that relative image URLs resolve against, so a plate with no
+`origin` needs it (the run fails without it, since crawlers ignore relative
+`og:image` URLs).
+
+**The block.** The tags go between `<!-- metaplate:social -->` and
+`<!-- /metaplate:social -->`. On the first run the block is inserted on its
+own lines just before `</head>` (matched in any case), indented like the line
+above it; after that the block is replaced in place and nothing outside it
+changes, so a second run writes the same bytes and an unchanged page is not
+written at all. To put the tags somewhere else in `<head>`, add the two
+markers there yourself. CRLF files keep CRLF.
+
+**What fails.** These stop the run before anything renders or is written, with
+the earlier manifest kept, as a refused image path does:
+
+- an `html` path outside the directory the command runs in, not ending in
+  `.html` or `.htm`, missing, a symbolic link, or the same file as an image,
+  the manifest, or another page's `html` (case-insensitively);
+- a file that is not UTF-8;
+- no `</head>` and no markers (the command does not guess where `<head>`
+  ends), a start marker without an end marker or the reverse, more than one
+  of either, markers out of order, or a block after `</head>`;
+- a block a crawler would not read, such as one inside a comment or
+  `<script>`, and an `og:image` or `twitter:image` outside the block, which
+  would leave a crawler with two cards;
+- a `page` field `socialMetaHtml` refuses, such as the locale `en-US`.
+
+**When it writes.** `html` is resolved against the directory the command runs
+in, like `--manifest`, not against `--out`, so the page can live anywhere in
+the project. A page is written only after every image of that page has
+rendered and verified: if one fails, the file is left exactly as it was, the
+run exits `1`, and no manifest is written. The new text is staged beside the
+file, read back, and renamed over it, as images are. With `--incremental`, a
+reused image counts as rendered, and the page is rewritten only if its tags
+changed. `--json` adds an `html` array to the report, one
+`{ path, route, valid, changed, issues }` entry per page, only when the
+module names a page.
 
 ## Formats and verification
 
@@ -254,8 +375,8 @@ print as each one finishes.
 
 | Code | Meaning |
 | --- | --- |
-| `0` | Every image rendered, was written inside `--out`, matched its hash and dimensions on disk, and the manifest was written. |
-| `1` | Anything else: an argument error (printed with the usage line), a module that cannot be loaded or breaks the contract, a refused path or collision (nothing is rendered), or at least one image that failed to render, write, or verify. |
+| `0` | Every image rendered, was written inside `--out`, matched its hash and dimensions on disk, every `html` page holds its tags, and the manifest was written. |
+| `1` | Anything else: an argument error (printed with the usage line), a module that cannot be loaded or breaks the contract, a refused path, collision, or malformed `html` page (nothing is rendered), at least one image that failed to render, write, or verify, or one `html` page that could not be written. |
 
 These match `metaplate verify`, `verify-url`, and `verify-page`, which also
 exit `1` for every failure. When some images fail, the rest are still rendered
@@ -344,6 +465,10 @@ and its issues:
   "issues": [{ "severity": "error", "message": "Expected 1200x630, received 1080x1080" }]
 }
 ```
+
+When the module names `html` pages, the report also has an `html` array, one
+`{ "path", "route", "valid", "changed", "issues" }` entry per page; see
+[Writing tags into static HTML](#writing-tags-into-static-html).
 
 A module that cannot be loaded or breaks the contract prints its error to
 stderr instead of a report.

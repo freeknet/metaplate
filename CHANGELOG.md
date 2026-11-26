@@ -37,6 +37,19 @@ All notable changes to Metaplate are documented in this file. The project uses
   inline styles inherited down the tree and calls nested function components;
   faces a `languageFonts` loader returns count as loaded. Values set by `<style>`
   rules or `tw` are not seen. Off by default, like every guard.
+- `metaplate render` writes social `<meta>` tags into static HTML pages. A render
+  page may name an `html` file (resolved against the directory the command runs
+  in, never outside it) and its page-level tags in `page` (the `SocialMetaOptions`
+  fields). The tags are the plate's own `metadata` with the page's `version`, so
+  `og:image` carries the same `?v=` URL the manifest records, rendered through
+  `socialMetaHtml`. They go between `<!-- metaplate:social -->` and
+  `<!-- /metaplate:social -->`, or on their own lines before `</head>` the first
+  time; re-running writes the same bytes, and an unchanged page is not rewritten.
+  `og:url` is `page.url` exactly as given. A page without `</head>` or markers,
+  with unpaired or repeated markers, with a block a crawler would not read, or
+  with an `og:image` or `twitter:image` outside the block fails the run before
+  anything renders. A page is written atomically, and only after all of its
+  images succeed. `--json` reports each page in a new `html` array.
 
 ### Fixed
 
