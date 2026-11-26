@@ -37,6 +37,19 @@ All notable changes to Metaplate are documented in this file. The project uses
   inline styles inherited down the tree and calls nested function components;
   faces a `languageFonts` loader returns count as loaded. Values set by `<style>`
   rules or `tw` are not seen. Off by default, like every guard.
+- `definePlate` in the root `metaplate` entry: a plate's URL and metadata
+  contract with no renderer (#216). It takes `alt`, `size`, `imagePath`,
+  `basePath`, `origin`, `variants`, `version`, `revision`, and `contentType`, and
+  returns the plate's `image`, `metadata`, `signedMetadata`, `sitePath`, and
+  `variant`. Spread it into a factory, `createNodeOg({ ...card, fonts, component })`,
+  so pages import only the contract and only the build imports the renderer;
+  pages no longer restate `imagePath`, `version`, and `revision` to rebuild the
+  metadata from `socialImageMetadata`. The contract and every factory share one
+  implementation, and a test compares their metadata across every option
+  combination. Each factory now takes `contentType` and throws at definition when
+  it would serve a different type, so a contract cannot describe a PNG the plate
+  encodes as JPEG. A bundle test keeps Satori, Resvg, React, Next, Takumi, and
+  Node built-ins unreachable from the root entry.
 
 ### Fixed
 
@@ -47,6 +60,16 @@ All notable changes to Metaplate are documented in this file. The project uses
   0.51.0 or later. `createNextOg` ignores `<style>` (its `next/og` bundles Satori
   0.29.0), and an undefined `var()` in a `background` fails its render. Tests now
   pin each behavior.
+
+### Documentation
+
+- A guide for Next.js on Cloudflare Workers through `@opennextjs/cloudflare`
+  (#216): cards rendered into `public/` by `metaplate render` in `prebuild` and
+  served as Workers static assets, page metadata from a `definePlate` contract so
+  the renderer never reaches the Worker, no `serverExternalPackages`, and
+  `metaplate verify-page` after the deploy. It points to the experimental
+  `metaplate/takumi` for rendering on the Worker itself. The deployment matrix row
+  for Cloudflare Workers links to it.
 
 ## [0.8.4] - 2026-11-09
 
