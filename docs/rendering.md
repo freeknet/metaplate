@@ -654,9 +654,11 @@ Workers cannot reach private networks anyway. On Deno or a self-hosted runtime,
 an allowlisted name that resolves to an internal address would be fetched.
 
 `fetch` defaults to the global one. Pass another, such as a Cloudflare service
-binding's, as the `fetch` option; it must return 3xx responses with their
-`Location` header under `redirect: "manual"`, as Workers, Deno, Node.js, and Bun
-do. A browser's `fetch` hides redirect targets, so a redirect there rejects with
+binding's, as the `fetch` option, wrapped so it keeps its binding:
+`fetch: (url, init) => env.IMAGES.fetch(url, init)`. It must return 3xx
+responses with their `Location` header under `redirect: "manual"`, as Workers,
+Deno, Node.js, and Bun do. The time budget holds even for a `fetch` that ignores
+the abort signal: the load still fails with code `"timeout"`. A browser's `fetch` hides redirect targets, so a redirect there rejects with
 code `"redirect"` rather than being followed unchecked.
 
 ## Plate constraints

@@ -160,6 +160,9 @@ describe("definePlate", () => {
     expect(() => definePlate({ alt, revision: "" })).toThrow(/Invalid revision/);
     expect(() => definePlate({ alt, size: { width: 0, height: 10 } })).toThrow();
     expect(() => definePlate({ alt, contentType: "png" })).toThrow(/Invalid contentType/);
+    // Renderers compare the lowercase essence, so other spellings could never match one.
+    expect(() => definePlate({ alt, contentType: "IMAGE/PNG" })).toThrow('lowercase media type with no parameters, such as "image/png"');
+    expect(() => definePlate({ alt, contentType: "image/jpeg; q=1" })).toThrow('such as "image/jpeg"; got "image/jpeg; q=1"');
     expect(() => definePlate({} as PlateContractDefinition<Copy>)).toThrow(/alt/);
     expect(() =>
       definePlate({
