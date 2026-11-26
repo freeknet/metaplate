@@ -40,8 +40,10 @@ All notable changes to Metaplate are documented in this file. The project uses
   of its faces (an italic one, when only the weight matches), all without an error.
   The guard reports each distinct request no loaded face satisfies, as
   `missing: "family"` or `missing: "face"` with the `loaded` faces listed. It reads
-  inline styles inherited down the tree and calls nested function components;
-  faces a `languageFonts` loader returns count as loaded. Values set by `<style>`
+  inline styles inherited down the tree, starting each element from the
+  renderer's default style for its tag (`<h1>` and `<strong>` bold, `<em>`
+  italic), resolves `var()` from custom properties declared inline, and calls
+  nested function components; faces a `languageFonts` loader returns count as loaded. Values set by `<style>`
   rules or `tw` are not seen. Off by default, like every guard.
 - `metaplate verify-page --expect-robots-block` (`expectRobotsBlock` in
   `verifyRemotePage`) for a staging site that blocks crawlers on purpose. Each

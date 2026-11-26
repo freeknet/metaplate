@@ -232,6 +232,21 @@ describe("guards", () => {
     expect(warnings.map((issue) => issue.guard)).toEqual(["fontFallback"]);
   }, RENDER_TIMEOUT);
 
+  it("follows Takumi's default styles for tags in fontFallback", async () => {
+    const tagged = (type: string, children: string): Child => ({ type, props: { children } });
+    // Only Inter 700 is loaded: <h1> asks for bold, and <strong> for bolder than 400.
+    const strict = plate({
+      component: () => card([tagged("h1", "Heading"), tagged("strong", "Strong")], { fontWeight: 400 }),
+      guards: { fontFallback: "error" },
+    });
+    await expect(strict.render({ title: "x" })).resolves.toBeInstanceOf(Uint8Array);
+    // <em> asks for italic, which is not loaded.
+    const { warnings, onWarning } = collected();
+    await plate({ component: () => card([tagged("em", "Leaning")]), guards: { fontFallback: "warn", onWarning } }).render({ title: "x" });
+    expect(warnings.map((issue) => issue.guard === "fontFallback" && [issue.missing, issue.element, issue.fontWeight, issue.fontStyle]))
+      .toEqual([["face", "em", 700, "italic"]]);
+  }, RENDER_TIMEOUT);
+
   it("reports a lineClamp that Takumi ignores too, and passes one both engines honor", async () => {
     const long = "The quick brown fox jumps over the lazy dog again and again until the line wraps many times over";
     const clamped = (display: string) => ({
