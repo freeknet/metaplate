@@ -70,7 +70,9 @@ All notable changes to Metaplate are documented in this file. The project uses
   `og:image` carries the same `?v=` URL the manifest records, rendered through
   `socialMetaHtml`. They go between `<!-- metaplate:social -->` and
   `<!-- /metaplate:social -->`, or on their own lines before `</head>` the first
-  time; re-running writes the same bytes, and an unchanged page is not rewritten.
+  time (skipping a `</head>` in a comment or `<script>`); re-running writes the
+  same bytes, line endings and a UTF-8 byte order mark are kept, and an
+  unchanged page is not rewritten.
   `og:url` is `page.url` exactly as given. A page without `</head>` or markers,
   with unpaired or repeated markers, with a block a crawler would not read, or
   with an `og:image` or `twitter:image` outside the block fails the run before
